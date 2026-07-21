@@ -25,15 +25,19 @@ jobs:
 
       - run: flutter pub get
 
-      - name: Build unsigned IPA
+      - name: Build iOS archive (unsigned)
         run: flutter build ipa --no-codesign
 
-      - name: Rename IPA
+      - name: Package unsigned IPA from xcarchive
         run: |
           version=$(awk '/^version:/ {print $2}' pubspec.yaml | cut -d '+' -f 1)
+          archive=$(find build/ios/archive -maxdepth 1 -name '*.xcarchive' | head -1)
+          app_path=$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' | head -1)
+          mkdir -p build/ios/ipa/Payload
+          cp -R "$app_path" build/ios/ipa/Payload/
           cd build/ios/ipa
-          src=$(ls *.ipa | head -1)
-          mv "$src" "X300-v${version}-ios-unsigned.ipa"
+          zip -r -q "X300-v${version}-ios-unsigned.ipa" Payload
+          rm -rf Payload
           echo "::notice::Built $(ls)"
 
       - name: Upload IPA as workflow artifact
