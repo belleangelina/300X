@@ -1,0 +1,23 @@
+300X
+Copyright (C) 2026 belleangelina
+
+300X is free software licensed under GPL-3.0-only. See LICENSE for the
+complete license text.
+
+This project is a modified work based in part on flutter_dmzj:
+https://github.com/xiaoyaocz/flutter_dmzj
+
+The reference revision used during development was:
+6e27f949f2932708f9e2794a3b9e7a6e0e7909ef
+
+flutter_dmzj is licensed under GNU GPL version 3. 300X contains substantial
+changes made in 2026, including a different data source, authentication,
+catalogue and chapter parsing, caching, downloads, reader behavior, branding,
+and cross-platform adaptation. Copyright in upstream code remains with its
+respective authors and contributors.
+
+300X is an independent third-party project. It is not affiliated with,
+endorsed by, or an official client of Yamibo or DMZJ. Forum posts, images,
+novels, comics, translations, and other user content are not distributed under
+the 300X source-code license and remain the property of their respective
+rightsholders.
