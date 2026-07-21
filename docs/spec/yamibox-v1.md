@@ -706,6 +706,8 @@ lib/
 
 Release 统一使用项目根目录 `build_release.sh --platform <android|linux|ios>`。可重复平台选项，一次为 Android 和当前桌面平台构建同一版本。默认同时递增语义化补丁版本和构建号，所有平台构建与校验成功后才写回 `pubspec.yaml`。Android 每次同时产出压缩原生库的通用 APK（armv7/arm64/x64）和单 ABI `arm64-v8a` APK，并校验版本、ABI、压缩方式与签名；Linux 为包含完整 bundle 的 `tar.gz`，iOS 为签名 IPA。产物均输出到 `build/releases/` 并在文件名中包含版本、平台和 Release 标识。iOS 只能在 macOS/Xcode 环境执行。
 
+iOS 在没有本地 macOS 环境时，通过 `.github/workflows/build-ios.yml` 在 GitHub Actions 的 macOS runner 上构建未签名 IPA（`flutter build ipa --no-codesign`），产物附加到对应 GitHub Release。用户下载后用自有 Apple ID 通过 Sideloadly / AltStore 等工具自签安装；免费账号签名有效期 7 天，且 bundle ID 可能需要改为个人唯一标识以避免冲突。
+
 ## 25. 安全、隐私与论坛友好性
 
 - 无统计、广告或遥测。

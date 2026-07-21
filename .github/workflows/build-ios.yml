@@ -1,0 +1,67 @@
+name: Build iOS IPA (unsigned)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to attach IPA to (e.g. v1.0.0). Leave empty to only upload as workflow artifact.'
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build unsigned IPA
+        run: flutter build ipa --no-codesign
+
+      - name: Rename IPA
+        run: |
+          version=$(awk '/^version:/ {print $2}' pubspec.yaml | cut -d '+' -f 1)
+          cd build/ios/ipa
+          src=$(ls *.ipa | head -1)
+          mv "$src" "X300-v${version}-ios-unsigned.ipa"
+          echo "::notice::Built $(ls)"
+
+      - name: Upload IPA as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 300X-ios-unsigned-ipa
+          path: build/ios/ipa/*.ipa
+          if-no-files-found: error
+
+      - name: Attach IPA to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ]; then
+            tag="$REF_NAME"
+          else
+            tag="$INPUT_TAG"
+          fi
+          if [ -z "$tag" ]; then
+            echo "No tag specified; skipping release upload (IPA is available as workflow artifact)."
+            exit 0
+          fi
+          echo "Attaching IPA to release: $tag"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" build/ios/ipa/*.ipa --clobber
+          else
+            gh release create "$tag" build/ios/ipa/*.ipa --title "$tag" --notes "iOS unsigned IPA for $tag." --target "$GITHUB_SHA"
+          fi
