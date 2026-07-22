@@ -1206,8 +1206,10 @@ class WorkIndexCoordinator
                 for (final int tid in directory.sourceTids) tid: directory.id,
         };
         final List<Work> resolved = <Work>[];
+        final List<Work> shortDirectories = <Work>[];
         final List<List<Chapter>> unattributedVersions = <List<Chapter>>[];
         Work? shortFallback;
+        bool confirmedLong = _longFormClassifier.isExplicitLongComic(work);
         final int anchorTid = _anchorThread(work).tid;
         Object? firstError;
         for (int index = 0; index < directories.length; index++)
@@ -1246,12 +1248,16 @@ class WorkIndexCoordinator
             firstError ??= resolution.error;
             if (resolution.explicitShort)
             {
+                shortDirectories.add(directoryWork);
                 if (shortFallback == null || directory.sourceTids.contains(anchorTid))
                 {
                     shortFallback = resolution.work;
                 }
                 continue;
             }
+            confirmedLong = confirmedLong ||
+                    resolution.overrodeShort ||
+                    _longFormClassifier.isExplicitLongComic(resolution.work);
             final List<Chapter> matchingChapters = resolution.work.chapters
                     .where((Chapter chapter)
                     {
@@ -1295,6 +1301,10 @@ class WorkIndexCoordinator
                 ],
             );
             resolved.add(_mergeWorks(<Work>[directoryWork, filtered]));
+        }
+        if (confirmedLong)
+        {
+            resolved.addAll(shortDirectories);
         }
         if (unattributedVersions.any((List<Chapter> value) => value.isNotEmpty))
         {

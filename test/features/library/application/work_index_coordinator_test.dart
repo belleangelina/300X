@@ -1401,6 +1401,90 @@ void main()
         ).called(1);
     });
 
+    test('搜索聚合由其它来源确认长篇后保留误标短篇的跨楼主单章', () async
+    {
+        final Work work = aggregator.aggregate(<SourceThread>[
+            _thread(218, '误标短篇长篇作品 第3话', author: '楼主甲'),
+            _thread(217, '误标短篇长篇作品 第2话', author: '楼主甲'),
+            _thread(216, '误标短篇长篇作品 第1话', author: '楼主乙'),
+        ]).single;
+        when(
+            () => libraryRepository.loadThread(
+                any(),
+                includeAllOriginalPosterPosts: true,
+                forceReload: true,
+            ),
+        ).thenAnswer((Invocation invocation) async
+        {
+            final SourceThread thread =
+                    invocation.positionalArguments.first as SourceThread;
+            if (thread.tid == 216)
+            {
+                return ForumThreadPage(
+                    tid: thread.tid,
+                    board: thread.board,
+                    title: thread.title,
+                    typeName: '#短篇漫畫',
+                    uri: thread.uri,
+                    posts: const <SourcePost>[],
+                    currentPage: 1,
+                    totalPages: 1,
+                );
+            }
+            return ForumThreadPage(
+                tid: thread.tid,
+                board: thread.board,
+                title: thread.title,
+                typeName: '#長篇連載',
+                uri: thread.uri,
+                posts: <SourcePost>[
+                    SourcePost(
+                        pid: 2180,
+                        tid: thread.tid,
+                        page: 1,
+                        floor: 1,
+                        author: '楼主甲',
+                        timeLabel: '',
+                        isOriginalPoster: true,
+                        blocks: const <PostContentBlock>[
+                            PostTextBlock(text: '目录'),
+                        ],
+                        links: <ThreadLink>[
+                            _threadChapterLink('第1话', 216),
+                            _threadChapterLink('第2话', 217),
+                            _threadChapterLink('第3话', 218),
+                        ],
+                    ),
+                ],
+                currentPage: 1,
+                totalPages: 1,
+            );
+        });
+
+        final WorkIndexResult result = await coordinator.rebuildFromActiveSearch(work);
+
+        expect(
+            result.work.chapters.map((Chapter chapter) => chapter.order),
+            <double?>[1, 2, 3],
+        );
+        expect(
+            result.work.directories
+                    .firstWhere(
+                        (WorkDirectory directory) => directory.owner == '楼主乙',
+                    )
+                    .chapters
+                    .single
+                    .sourceTid,
+            216,
+        );
+        verifyNever(
+            () => searchRepository.search(
+                keyword: any(named: 'keyword'),
+                kind: any(named: 'kind'),
+            ),
+        );
+    });
+
     test('明确长篇即使命中 Tag 目录也先用一次搜索统一作品', () async
     {
         final SourceThread thread = _longComicThread(221, 'Tag 目录作品');
