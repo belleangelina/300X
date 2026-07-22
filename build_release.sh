@@ -37,10 +37,10 @@ usage()
         '' \
         '选项：' \
         '  -p, --platform PLATFORM  构建平台，可重复使用（默认 android）' \
-        '      --version X.Y.Z      指定新的版本名称，构建号仍默认递增' \
-        '      --build-number N     指定新构建号，必须大于当前值' \
-        '      --keep-version       保持版本名称，只递增构建号' \
-        '      --log FILE           同时将完整日志写入指定文件' \
+        '  -v, --version X.Y.Z      指定新的版本名称，构建号仍默认递增' \
+        '  -b, --build-number N     指定新构建号，必须大于当前值' \
+        '  -k, --keep-version       保持版本名称，只递增构建号' \
+        '  -l, --log FILE           同时将完整日志写入指定文件' \
         '  -h, --help               显示帮助' \
         '' \
         '示例：' \
@@ -301,21 +301,21 @@ do
             add_platform "$2"
             shift 2
             ;;
-        --version)
+        -v|--version)
             (($# >= 2)) || fail '--version 缺少参数'
             requested_version="$2"
             shift 2
             ;;
-        --build-number)
+        -b|--build-number)
             (($# >= 2)) || fail '--build-number 缺少参数'
             requested_build_number="$2"
             shift 2
             ;;
-        --keep-version)
+        -k|--keep-version)
             keep_version=true
             shift
             ;;
-        --log)
+        -l|--log)
             (($# >= 2)) || fail '--log 缺少参数'
             log_file="$2"
             shift 2
