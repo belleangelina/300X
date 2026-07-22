@@ -18,16 +18,57 @@ import 'package:x300/features/settings/application/app_settings_controller.dart'
 import 'package:x300/features/settings/domain/app_settings.dart';
 import 'package:x300/features/settings/presentation/settings_page.dart';
 
+enum ProfileDetailDestination
+{
+    novelFavorites,
+    novelHistory,
+    novelDownloads,
+    comicFavorites,
+    comicHistory,
+    comicDownloads,
+    settings,
+    about,
+}
+
+Widget buildProfileDetailPage(ProfileDetailDestination destination)
+{
+    return switch (destination)
+    {
+        ProfileDetailDestination.novelFavorites => const CloudFavoritesPage(
+            kind: LibraryKind.novel,
+        ),
+        ProfileDetailDestination.novelHistory => const ReadingHistoryPage(
+            kind: LibraryKind.novel,
+        ),
+        ProfileDetailDestination.novelDownloads => const DownloadsPage(
+            kind: LibraryKind.novel,
+        ),
+        ProfileDetailDestination.comicFavorites => const CloudFavoritesPage(
+            kind: LibraryKind.comic,
+        ),
+        ProfileDetailDestination.comicHistory => const ReadingHistoryPage(
+            kind: LibraryKind.comic,
+        ),
+        ProfileDetailDestination.comicDownloads => const DownloadsPage(
+            kind: LibraryKind.comic,
+        ),
+        ProfileDetailDestination.settings => const SettingsPage(),
+        ProfileDetailDestination.about => const AboutPage(),
+    };
+}
+
 class ProfilePage extends ConsumerWidget
 {
     const ProfilePage({
         required this.username,
         required this.onLogout,
+        this.onOpenDetail,
         super.key,
     });
 
     final String username;
     final VoidCallback onLogout;
+    final ValueChanged<ProfileDetailDestination>? onOpenDetail;
 
     @override
     Widget build(BuildContext context, WidgetRef ref)
@@ -61,37 +102,27 @@ class ProfilePage extends ConsumerWidget
                                     leading: const Icon(Remix.heart_line),
                                     title: const Text('小说收藏'),
                                     trailing: const Icon(Icons.chevron_right),
-                                    onTap: () => Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                            builder: (BuildContext context) =>
-                                                    const CloudFavoritesPage(
-                                                kind: LibraryKind.novel,
-                                            ),
-                                        ),
+                                    onTap: () => _openDetail(
+                                        context,
+                                        ProfileDetailDestination.novelFavorites,
                                     ),
                                 ),
                                 ListTile(
                                     leading: const Icon(Remix.file_history_line),
                                     title: const Text('小说记录'),
                                     trailing: const Icon(Icons.chevron_right),
-                                    onTap: () => Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                            builder: (BuildContext context) =>
-                                                    const ReadingHistoryPage(
-                                                kind: LibraryKind.novel,
-                                            ),
-                                        ),
+                                    onTap: () => _openDetail(
+                                        context,
+                                        ProfileDetailDestination.novelHistory,
                                     ),
                                 ),
                                 ListTile(
                                     leading: const Icon(Remix.download_line),
                                     title: const Text('小说下载'),
                                     trailing: const Icon(Icons.chevron_right),
-                                    onTap: () => Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                            builder: (BuildContext context) =>
-                                                    const DownloadsPage(kind: LibraryKind.novel),
-                                        ),
+                                    onTap: () => _openDetail(
+                                        context,
+                                        ProfileDetailDestination.novelDownloads,
                                     ),
                                 ),
                             ],
@@ -104,37 +135,27 @@ class ProfilePage extends ConsumerWidget
                                     leading: const Icon(Remix.heart_line),
                                     title: const Text('漫画收藏'),
                                     trailing: const Icon(Icons.chevron_right),
-                                    onTap: () => Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                            builder: (BuildContext context) =>
-                                                    const CloudFavoritesPage(
-                                                kind: LibraryKind.comic,
-                                            ),
-                                        ),
+                                    onTap: () => _openDetail(
+                                        context,
+                                        ProfileDetailDestination.comicFavorites,
                                     ),
                                 ),
                                 ListTile(
                                     leading: const Icon(Remix.file_history_line),
                                     title: const Text('漫画记录'),
                                     trailing: const Icon(Icons.chevron_right),
-                                    onTap: () => Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                            builder: (BuildContext context) =>
-                                                    const ReadingHistoryPage(
-                                                kind: LibraryKind.comic,
-                                            ),
-                                        ),
+                                    onTap: () => _openDetail(
+                                        context,
+                                        ProfileDetailDestination.comicHistory,
                                     ),
                                 ),
                                 ListTile(
                                     leading: const Icon(Remix.download_line),
                                     title: const Text('漫画下载'),
                                     trailing: const Icon(Icons.chevron_right),
-                                    onTap: () => Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                            builder: (BuildContext context) =>
-                                                    const DownloadsPage(kind: LibraryKind.comic),
-                                        ),
+                                    onTap: () => _openDetail(
+                                        context,
+                                        ProfileDetailDestination.comicDownloads,
                                     ),
                                 ),
                             ],
@@ -162,11 +183,9 @@ class ProfilePage extends ConsumerWidget
                                     leading: const Icon(Remix.settings_line),
                                     title: const Text('更多设置'),
                                     trailing: const Icon(Icons.chevron_right),
-                                    onTap: () => Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                            builder: (BuildContext context) =>
-                                                const SettingsPage(),
-                                        ),
+                                    onTap: () => _openDetail(
+                                        context,
+                                        ProfileDetailDestination.settings,
                                     ),
                                 ),
                                 ListTile(
@@ -181,17 +200,34 @@ class ProfilePage extends ConsumerWidget
                                     ),
                                     title: const Text('关于APP'),
                                     trailing: const Icon(Icons.chevron_right),
-                                    onTap: () => Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                            builder: (BuildContext context) =>
-                                                const AboutPage(),
-                                        ),
+                                    onTap: () => _openDetail(
+                                        context,
+                                        ProfileDetailDestination.about,
                                     ),
                                 ),
                             ],
                         ),
                     ],
                 ),
+            ),
+        );
+    }
+
+    void _openDetail(
+        BuildContext context,
+        ProfileDetailDestination destination,
+    )
+    {
+        final ValueChanged<ProfileDetailDestination>? callback = onOpenDetail;
+        if (callback != null)
+        {
+            callback(destination);
+            return;
+        }
+        Navigator.of(context).push(
+            MaterialPageRoute<void>(
+                builder: (BuildContext context) =>
+                    buildProfileDetailPage(destination),
             ),
         );
     }

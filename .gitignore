@@ -33,6 +33,7 @@ migrate_working_dir/
 /build/
 /coverage/
 /.artifacts/
+/docs/validation/
 
 # Local credentials and session material
 bbs

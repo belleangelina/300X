@@ -11,6 +11,7 @@ import 'package:x300/features/profile/presentation/about_page.dart';
 import 'package:x300/features/profile/presentation/profile_page.dart';
 import 'package:x300/features/reader/data/reader_media_repository.dart';
 import 'package:x300/features/settings/data/app_settings_repository.dart';
+import 'package:x300/features/settings/presentation/settings_page.dart';
 
 class _MockReaderMediaRepository extends Mock
     implements ReaderMediaRepository
@@ -127,6 +128,30 @@ void main()
         expect(find.text('免责声明'), findsNothing);
     });
 
+    testWidgets('个人页可将二级页面交给宽屏详情栏', (
+        WidgetTester tester,
+    ) async
+    {
+        ProfileDetailDestination? selected;
+        await tester.pumpWidget(
+            _profileApp(
+                settingsRepository,
+                AppTheme.light,
+                onOpenDetail: (ProfileDetailDestination value)
+                {
+                    selected = value;
+                },
+            ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('更多设置'));
+        await tester.pump();
+
+        expect(selected, ProfileDetailDestination.settings);
+        expect(find.byType(SettingsPage), findsNothing);
+    });
+
     testWidgets('账号头像使用当前登录账号地址并复用图片缓存', (
         WidgetTester tester,
     ) async
@@ -183,6 +208,7 @@ Widget _profileApp(
     ThemeData theme, {
     Uri? avatarUri,
     ReaderMediaRepository? mediaRepository,
+    ValueChanged<ProfileDetailDestination>? onOpenDetail,
 })
 {
     return ProviderScope(
@@ -201,6 +227,7 @@ Widget _profileApp(
             home: ProfilePage(
                 username: '测试账号',
                 onLogout: _noop,
+                onOpenDetail: onOpenDetail,
             ),
         ),
     );

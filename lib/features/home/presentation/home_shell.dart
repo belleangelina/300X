@@ -32,6 +32,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
     int _index = 0;
     Work? _selectedWork;
     int? _selectedSourceTid;
+    ProfileDetailDestination? _selectedProfileDetail;
     Timer? _automaticMaintenanceTimer;
 
     static const List<_Destination> _destinations = <_Destination>[
@@ -107,7 +108,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
                 ),
                 TickerMode(
                     enabled: _index == 2,
-                    child: ProfilePage(username: widget.username, onLogout: _logout),
+                    child: ProfilePage(
+                        username: widget.username,
+                        onLogout: _logout,
+                        onOpenDetail: _openProfileDetail,
+                    ),
                 ),
             ],
         );
@@ -116,7 +121,9 @@ class _HomeShellState extends ConsumerState<HomeShell>
             builder: (BuildContext context, BoxConstraints constraints)
             {
                 final Widget shell;
-                if (constraints.maxWidth >= 720)
+                if (usesWideHomeLayout(
+                    Size(constraints.maxWidth, constraints.maxHeight),
+                ))
                 {
                     shell = _buildWide(content);
                 }
@@ -175,23 +182,48 @@ class _HomeShellState extends ConsumerState<HomeShell>
                     SizedBox(width: 450, child: content),
                     const VerticalDivider(width: 1),
                     Expanded(
-                        child: _selectedWork == null
-                                ? const Center(
-                                        child: Text(
-                                            '选择作品后在这里显示详情',
-                                            style: TextStyle(color: Colors.grey),
-                                        ),
-                                    )
-                                : WorkDetailPage(
-                                        key: ValueKey<String>(_selectedWork!.id),
-                                        work: _selectedWork!,
-                                        embedded: true,
-                                        initialSourceTid: _selectedSourceTid,
-                                        resolveOnOpen: true,
-                                    ),
+                        child: _buildWideDetail(),
                     ),
                 ],
             ),
+        );
+    }
+
+    Widget _buildWideDetail()
+    {
+        if (_index == 2)
+        {
+            final ProfileDetailDestination? destination =
+                _selectedProfileDetail;
+            if (destination == null)
+            {
+                return const Center(
+                    child: Text(
+                        '选择功能后在这里显示详情',
+                        style: TextStyle(color: Colors.grey),
+                    ),
+                );
+            }
+            return KeyedSubtree(
+                key: ValueKey<String>('profile-detail-${destination.name}'),
+                child: buildProfileDetailPage(destination),
+            );
+        }
+        if (_selectedWork == null)
+        {
+            return const Center(
+                child: Text(
+                    '选择作品后在这里显示详情',
+                    style: TextStyle(color: Colors.grey),
+                ),
+            );
+        }
+        return WorkDetailPage(
+            key: ValueKey<String>(_selectedWork!.id),
+            work: _selectedWork!,
+            embedded: true,
+            initialSourceTid: _selectedSourceTid,
+            resolveOnOpen: true,
         );
     }
 
@@ -214,6 +246,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
             _index = value;
             _selectedWork = null;
             _selectedSourceTid = null;
+            _selectedProfileDetail = null;
         });
     }
 
@@ -225,7 +258,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
     void _showWork(Work work, {required int initialSourceTid})
     {
-        if (MediaQuery.sizeOf(context).width >= 720)
+        if (usesWideHomeLayout(MediaQuery.sizeOf(context)))
         {
             setState(()
             {
@@ -241,6 +274,24 @@ class _HomeShellState extends ConsumerState<HomeShell>
                     initialSourceTid: initialSourceTid,
                     resolveOnOpen: true,
                 ),
+            ),
+        );
+    }
+
+    void _openProfileDetail(ProfileDetailDestination destination)
+    {
+        if (usesWideHomeLayout(MediaQuery.sizeOf(context)))
+        {
+            setState(()
+            {
+                _selectedProfileDetail = destination;
+            });
+            return;
+        }
+        Navigator.of(context).push(
+            MaterialPageRoute<void>(
+                builder: (BuildContext context) =>
+                    buildProfileDetailPage(destination),
             ),
         );
     }
@@ -261,6 +312,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
         PaintingBinding.instance.imageCache.clearLiveImages();
         await ref.read(authControllerProvider.notifier).logout();
     }
+}
+
+bool usesWideHomeLayout(Size size)
+{
+    return size.width >= 720 && size.width > size.height;
 }
 
 class _Destination
