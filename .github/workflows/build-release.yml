@@ -133,6 +133,7 @@ jobs:
       - name: Attach artifacts to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           INPUT_TAG: ${{ github.event.inputs.tag }}
           REF_NAME: ${{ github.ref_name }}
