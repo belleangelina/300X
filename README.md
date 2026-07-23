@@ -12,6 +12,10 @@
 - 搜索 10 秒冷却、论坛云收藏、本机历史和阅读进度
 - 封面缓存、离线下载、暂停/继续和断网阅读
 
+## 工程实践
+
+项目的大部分代码实现、测试补充和问题排查由 AI Agent 完成。我通过规格、定向测试、目标平台运行和缺陷复验检查每轮产出。详见 [300X 的 AI Agent 开发与交付闭环](docs/engineering/agent-driven-development.md)。
+
 ## Release 构建
 
 可在 [Releases](https://github.com/belleangelina/300X/releases) 下载最新版本，也可自行构建。
