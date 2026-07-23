@@ -1,10 +1,10 @@
-name: Build iOS IPA (unsigned)
+name: Build iOS IPA and Android APKs
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to attach IPA to (e.g. v1.0.0). Leave empty to only upload as workflow artifact.'
+        description: 'Release tag to attach artifacts to (e.g. v1.0.0). Leave empty to only upload as workflow artifacts.'
         required: false
         default: ''
   push:
@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-ios:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +50,87 @@ jobs:
           path: build/ios/ipa/*.ipa
           if-no-files-found: error
 
-      - name: Attach IPA to GitHub Release
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+
+      - name: Configure Android release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEY_ALIAS" ] || \
+             [ -z "$ANDROID_KEY_PASSWORD" ] || [ -z "$ANDROID_STORE_PASSWORD" ]; then
+            echo "::error::Android release signing secrets are incomplete."
+            exit 1
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/x300-release.jks
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=x300-release.jks\n' \
+            "$ANDROID_STORE_PASSWORD" \
+            "$ANDROID_KEY_PASSWORD" \
+            "$ANDROID_KEY_ALIAS" > android/key.properties
+
+      - run: flutter pub get
+
+      - name: Build universal APK
+        run: |
+          version=$(awk '/^version:/ {print $2}' pubspec.yaml | cut -d '+' -f 1)
+          flutter build apk --release
+          mkdir -p build/android-apk
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "build/android-apk/X300-v${version}-android-universal-release.apk"
+
+      - name: Build arm64 APK
+        run: |
+          version=$(awk '/^version:/ {print $2}' pubspec.yaml | cut -d '+' -f 1)
+          flutter build apk --release \
+            --target-platform android-arm64 \
+            --android-project-arg x300TargetAbi=arm64-v8a \
+            --android-project-arg disable-abi-filtering=true
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "build/android-apk/X300-v${version}-android-arm64-v8a-release.apk"
+
+      - name: Upload APKs as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 300X-android-release-apks
+          path: build/android-apk/*.apk
+          if-no-files-found: error
+
+  publish:
+    needs:
+      - build-ios
+      - build-android
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: 300X-ios-unsigned-ipa
+          path: release-assets
+
+      - name: Download APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: 300X-android-release-apks
+          path: release-assets
+
+      - name: Attach artifacts to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_NAME: ${{ github.event_name }}
@@ -63,12 +143,15 @@ jobs:
             tag="$INPUT_TAG"
           fi
           if [ -z "$tag" ]; then
-            echo "No tag specified; skipping release upload (IPA is available as workflow artifact)."
+            echo "No tag specified; skipping release upload (artifacts are available as workflow artifacts)."
             exit 0
           fi
-          echo "Attaching IPA to release: $tag"
+          echo "Attaching IPA and APKs to release: $tag"
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" build/ios/ipa/*.ipa --clobber
+            gh release upload "$tag" release-assets/* --clobber
           else
-            gh release create "$tag" build/ios/ipa/*.ipa --title "$tag" --notes "iOS unsigned IPA for $tag." --target "$GITHUB_SHA"
+            gh release create "$tag" release-assets/* \
+              --title "$tag" \
+              --notes "Unsigned iOS IPA and signed Android APKs for $tag." \
+              --target "$GITHUB_SHA"
           fi
