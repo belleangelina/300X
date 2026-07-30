@@ -59,6 +59,60 @@ void main()
         expect(normalizer.detectNumericChapterRange(title.original), isNull);
     });
 
+    test('单数字连字符分段兼容紧贴、空格和带单位标题', ()
+    {
+        final StructuredTitle attached = normalizer.analyze(
+            '【萝卜子汉化组】[矢坂しゅう]向笨蛋告白5-2',
+        );
+        final StructuredTitle separated = normalizer.analyze('向笨蛋告白 2-1');
+        final StructuredTitle explicit = normalizer.analyze(
+            '向笨蛋告白 第10-2话',
+        );
+        final StructuredTitle directory = normalizer.analyze('2-1');
+
+        expect(attached.displayTitle, '向笨蛋告白');
+        expect(attached.chapterLabel, '5-2');
+        expect(attached.chapterOrder, 5.2);
+        expect(separated.displayTitle, '向笨蛋告白');
+        expect(separated.chapterLabel, '2-1');
+        expect(separated.chapterOrder, 2.1);
+        expect(explicit.displayTitle, '向笨蛋告白');
+        expect(explicit.chapterLabel, '第10-2话');
+        expect(explicit.chapterOrder, 10.2);
+        expect(directory.chapterLabel, '2-1');
+        expect(directory.chapterOrder, 2.1);
+        expect(directory.hasChapterMarker, isTrue);
+        expect(
+            attached.chapterOrder,
+            normalizer.analyze('向笨蛋告白 5.2').chapterOrder,
+        );
+        expect(
+            normalizer.detectNumericChapterRange('第10-2话'),
+            isNull,
+        );
+    });
+
+    test('年份连字符不作为章节分段', ()
+    {
+        expect(normalizer.analyze('2026-7').hasChapterMarker, isFalse);
+        expect(normalizer.analyze('作品 2026-7').hasChapterMarker, isFalse);
+    });
+
+    test('四格番外前缀保留在章节名但不进入作品名', ()
+    {
+        final StructuredTitle title = normalizer.analyze(
+            '【萝卜子汉化组】[矢坂しゅう]向笨蛋告白 四格番外篇1',
+        );
+        final StructuredTitle directory = normalizer.analyze('四格番外1');
+
+        expect(title.displayTitle, '向笨蛋告白');
+        expect(title.chapterLabel, '四格番外篇1');
+        expect(title.chapterOrder, 900001);
+        expect(directory.chapterLabel, '四格番外1');
+        expect(directory.chapterOrder, 900001);
+        expect(directory.hasChapterMarker, isTrue);
+    });
+
     test('页码型无单位整数范围仍不视为章节', ()
     {
         final StructuredTitle title = normalizer.analyze('画集 p.1-10');

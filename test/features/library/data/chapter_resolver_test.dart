@@ -347,6 +347,102 @@ void main()
         ]);
     });
 
+    test('连字符分段目录保留原标签并按小数等价顺序排列', ()
+    {
+        final Uri currentUri = Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1032',
+        );
+        final SourceThread source = SourceThread(
+            tid: 1032,
+            board: ForumBoard.comic,
+            title: '开花情结 第3-2话',
+            uri: currentUri,
+        );
+        final Work work = Work(
+            id: 'forum-thread:1032',
+            kind: LibraryKind.comic,
+            title: '开花情结',
+            sourceThreads: <SourceThread>[source],
+            chapters: <Chapter>[
+                Chapter(
+                    id: 'forum-thread:1032',
+                    title: '第3-2话',
+                    sourceUri: currentUri,
+                    sourceTid: 1032,
+                    order: 3.2,
+                ),
+            ],
+        );
+        final ForumThreadPage page = ForumThreadPage(
+            tid: 1032,
+            board: ForumBoard.comic,
+            title: source.title,
+            uri: currentUri,
+            posts: <SourcePost>[
+                SourcePost(
+                    pid: 100,
+                    tid: 1032,
+                    page: 1,
+                    floor: 1,
+                    author: '楼主',
+                    timeLabel: '',
+                    isOriginalPoster: true,
+                    blocks: const <PostContentBlock>[
+                        PostTextBlock(text: '转载说明'),
+                    ],
+                    links: <ThreadLink>[
+                        _relatedLink('01', 1001),
+                        _relatedLink('2-1', 1021),
+                        _relatedLink('2-2', 1022),
+                        _relatedLink('3-1', 1031),
+                    ],
+                ),
+            ],
+            currentPage: 1,
+            totalPages: 1,
+        );
+
+        final ChapterResolution result = resolver.resolveWithEvidence(work, page);
+
+        expect(result.evidence, ChapterResolutionEvidence.inlineDirectory);
+        expect(result.chapters.map((Chapter value) => value.title), <String>[
+            '01',
+            '2-1',
+            '2-2',
+            '3-1',
+            '第3-2话',
+        ]);
+        expect(result.chapters.map((Chapter value) => value.order), <double?>[
+            1,
+            2.1,
+            2.2,
+            3.1,
+            3.2,
+        ]);
+    });
+
+    test('四格番外手写目录标签保持原文', ()
+    {
+        final Work work = _work(kind: LibraryKind.comic);
+        final ChapterResolution result = resolver.resolveWithEvidence(
+            work,
+            _page(<ThreadLink>[
+                _relatedLink('第1话', 10),
+                _relatedLink('四格番外1', 11),
+            ]),
+        );
+
+        expect(result.evidence, ChapterResolutionEvidence.inlineDirectory);
+        expect(result.chapters.map((Chapter value) => value.title), <String>[
+            '第1话',
+            '四格番外1',
+        ]);
+        expect(result.chapters.map((Chapter value) => value.order), <double?>[
+            1,
+            900001,
+        ]);
+    });
+
     test('无单位小数范围目录保留多话合一标题和起始顺序', ()
     {
         final Work work = _work(kind: LibraryKind.comic);

@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:x300/core/storage/app_database.dart';
+import 'package:x300/core/storage/work_codec.dart';
+import 'package:x300/features/library/data/work_index_repository.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 import 'package:x300/features/search/data/search_cache_repository.dart';
 
@@ -83,6 +87,45 @@ void main()
             ),
             isNotNull,
         );
+    });
+
+    test('旧版聚合缓存不会命中当前解析规则', () async
+    {
+        final Work work = _work(
+            id: 'comic:101',
+            kind: LibraryKind.comic,
+            board: ForumBoard.comic,
+        );
+        final String encodedWork = const WorkCodec().encode(work);
+        final List<Object> stalePayloads = <Object>[
+            <String>[encodedWork],
+            <String, Object>{
+                'resolverVersion':
+                    WorkIndexRepository.currentResolverVersion - 1,
+                'works': <String>[encodedWork],
+            },
+        ];
+        for (int index = 0; index < stalePayloads.length; index++)
+        {
+            final String keyword = '旧缓存$index';
+            await database.into(database.searchCaches).insert(
+                SearchCachesCompanion.insert(
+                    cacheKey: '${LibraryKind.comic.name}:$keyword',
+                    libraryKind: LibraryKind.comic.name,
+                    keyword: keyword,
+                    worksJson: jsonEncode(stalePayloads[index]),
+                    updatedAt: DateTime(2026, 7, 10, 20),
+                ),
+            );
+
+            expect(
+                await repository.load(
+                    kind: LibraryKind.comic,
+                    keyword: keyword,
+                ),
+                isNull,
+            );
+        }
     });
 }
 

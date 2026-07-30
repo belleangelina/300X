@@ -935,9 +935,22 @@ class WorkAggregator
         {
             return _numberedChapterKey(order, chapter.title);
         }
-        final String title = normalizeForumText(
-            chapter.title,
-        ).toLowerCase().replaceAll(RegExp(r'[\s\-—–_:：·・,，。.!！?？()（）\[\]【】]+'), '');
+        final String normalizedTitle = normalizeForumText(chapter.title);
+        final Match? indexedExtra = RegExp(
+            r'^(四格\s*)?番外(?:篇)?\s*0*(\d+(?:\.\d+)?)$',
+        ).firstMatch(normalizedTitle);
+        final double? indexedExtraNumber = indexedExtra == null
+                ? null
+                : double.tryParse(indexedExtra.group(2)!);
+        if (indexedExtraNumber != null)
+        {
+            final String subtype =
+                    indexedExtra!.group(1) == null ? 'regular' : 'four-panel';
+            return 'indexed-extra:$subtype:${900000 + indexedExtraNumber}';
+        }
+        final String title = normalizedTitle
+                .toLowerCase()
+                .replaceAll(RegExp(r'[\s\-—–_:：·・,，。.!！?？()（）\[\]【】]+'), '');
         return title.isEmpty
                 ? 'source:${chapter.sourceTid}:${chapter.sourcePid ?? 0}'
                 : 'named:$title';

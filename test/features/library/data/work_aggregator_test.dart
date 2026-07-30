@@ -116,6 +116,53 @@ void main()
         expect(works.single.directories, hasLength(2));
     });
 
+    test('连字符和小数分段跨来源按相同逻辑话数聚合', ()
+    {
+        final Work work = aggregator.aggregate(<SourceThread>[
+            _thread(
+                100,
+                '【萝卜子汉化组】[矢坂しゅう]向笨蛋告白2-1',
+                author: '楼主甲',
+            ),
+            _thread(
+                101,
+                '【萝卜子汉化组】[矢坂しゅう]向笨蛋告白2-2',
+                author: '楼主甲',
+            ),
+            _thread(
+                200,
+                '【另一汉化组】[矢坂しゅう]向笨蛋告白 2.1',
+                author: '楼主乙',
+            ),
+            _thread(
+                201,
+                '【另一汉化组】[矢坂しゅう]向笨蛋告白 2.2',
+                author: '楼主乙',
+            ),
+        ]).single;
+
+        expect(work.title, '向笨蛋告白');
+        expect(work.directories, hasLength(2));
+        expect(
+            work.directories
+                    .firstWhere((WorkDirectory value) => value.owner == '楼主甲')
+                    .chapters
+                    .map((Chapter value) => value.title),
+            <String>['2-1', '2-2'],
+        );
+        expect(
+            work.directories
+                    .firstWhere((WorkDirectory value) => value.owner == '楼主乙')
+                    .chapters
+                    .map((Chapter value) => value.title),
+            <String>['2.1', '2.2'],
+        );
+        expect(work.chapters.map((Chapter value) => value.order), <double?>[
+            2.1,
+            2.2,
+        ]);
+    });
+
     test('英文作品的裸章节号和副标题可以聚合', ()
     {
         final List<Work> works = aggregator.aggregate(<SourceThread>[
@@ -202,6 +249,49 @@ void main()
                 '第1话 「我会狠狠推你们的」其之1',
                 '第1话 「我会狠狠推你们的」其之2',
             ],
+        );
+    });
+
+    test('智能目录按普通和四格子类型去重编号番外', ()
+    {
+        final Work work = aggregator.aggregate(<SourceThread>[
+            _thread(
+                210,
+                '[汉化][作者]测试作品 番外01',
+                author: '楼主甲',
+            ),
+            _thread(
+                211,
+                '[汉化][作者]测试作品 四格番外1',
+                author: '楼主甲',
+            ),
+            _thread(
+                220,
+                '[汉化][作者]测试作品 番外篇1',
+                author: '楼主乙',
+            ),
+            _thread(
+                221,
+                '[汉化][作者]测试作品 四格番外篇1',
+                author: '楼主乙',
+            ),
+        ]).single;
+
+        expect(work.directories, hasLength(2));
+        expect(
+            work.directories.map((WorkDirectory value) => value.chapters.length),
+            everyElement(2),
+        );
+        expect(work.chapters, hasLength(2));
+        expect(
+            work.chapters
+                    .where((Chapter value) => value.title.startsWith('四格番外')),
+            hasLength(1),
+        );
+        expect(
+            work.chapters
+                    .where((Chapter value) => value.title.startsWith('番外')),
+            hasLength(1),
         );
     });
 

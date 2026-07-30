@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:x300/core/storage/app_database.dart';
 import 'package:x300/core/storage/work_codec.dart';
+import 'package:x300/features/library/data/work_index_repository.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 
 final Provider<SearchCacheRepository> searchCacheRepositoryProvider =
@@ -27,6 +28,8 @@ class SearchCacheSnapshot
 class SearchCacheRepository
 {
     static const int maximumEntriesPerKind = 50;
+    static const int _currentResolverVersion =
+        WorkIndexRepository.currentResolverVersion;
 
     SearchCacheRepository(
         this._database, [
@@ -50,9 +53,12 @@ class SearchCacheRepository
                 libraryKind: kind.name,
                 keyword: normalizedKeyword,
                 worksJson: jsonEncode(
-                    works
-                        .map(_workCodec.encode)
-                        .toList(growable: false),
+                    <String, Object>{
+                        'resolverVersion': _currentResolverVersion,
+                        'works': works
+                            .map(_workCodec.encode)
+                            .toList(growable: false),
+                    },
                 ),
                 updatedAt: updatedAt ?? DateTime.now(),
             ),
@@ -114,12 +120,18 @@ class SearchCacheRepository
         try
         {
             final Object? value = jsonDecode(row.worksJson);
-            if (value is! List<dynamic>)
+            if (value is! Map<String, dynamic> ||
+                value['resolverVersion'] != _currentResolverVersion)
+            {
+                return null;
+            }
+            final Object? encodedWorks = value['works'];
+            if (encodedWorks is! List<dynamic>)
             {
                 return null;
             }
             return SearchCacheSnapshot(
-                works: value
+                works: encodedWorks
                     .whereType<String>()
                     .map(_workCodec.decode)
                     .toList(growable: false),

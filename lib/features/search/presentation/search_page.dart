@@ -693,6 +693,8 @@ class _SearchPageState extends ConsumerState<SearchPage>
     ) async
     {
         cancellation.throwIfCancelled();
+        await Future<void>.delayed(Duration.zero);
+        cancellation.throwIfCancelled();
         final WorkIndexCoordinator coordinator = ref.read(
             workIndexCoordinatorProvider,
         );

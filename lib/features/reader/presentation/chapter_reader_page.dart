@@ -58,11 +58,15 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
     );
 
     late Future<_LoadedChapter> _contentFuture;
-    late Future<void> _progressFuture;
+    late Future<void>? _progressFuture;
     late final ReadingHistoryRepository _historyRepository;
     late final ScrollController _scrollController;
     late final FocusNode _focusNode;
     late Chapter _chapter;
+    final Map<String, Future<_LoadedChapter>> _chapterContentFutures =
+        <String, Future<_LoadedChapter>>{};
+    final Map<String, _LoadedChapter> _loadedChapterContents =
+        <String, _LoadedChapter>{};
     PageController? _pageController;
     Future<List<NovelPageLayout>>? _novelPagesFuture;
     Timer? _saveTimer;
@@ -99,6 +103,9 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
     int? _sideTapOffset;
     double _sideTapSlop = kTouchSlop;
     bool _sideTapCancelled = false;
+    int? _pagePanZoomPointer;
+    Drag? _pagePanZoomDrag;
+    VelocityTracker? _pagePanZoomVelocityTracker;
     Timer? _comicSwipeDecisionTimer;
     int? _comicSwipePointer;
     int? _comicSwipeStartPage;
@@ -148,10 +155,11 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         _historyRepository = ref.read(readingHistoryRepositoryProvider);
         _scrollController = ScrollController()..addListener(_handleVerticalScroll);
         _focusNode = FocusNode(debugLabel: 'chapter-reader');
-        _contentFuture = _load();
+        _contentFuture = _chapterContentFuture(_chapter);
+        _prepareChapterWindow();
         _progressFuture = widget.restoreProgress
                 ? _restoreProgress()
-                : Future<void>.value();
+                : null;
     }
 
     @override
@@ -164,6 +172,7 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         }
         _saveTimer?.cancel();
         _comicPrefetchTimer?.cancel();
+        _cancelPagePanZoom();
         _cancelComicSwipe(resetPage: false);
         _comicPrefetchGeneration++;
         unawaited(_saveProgress());
@@ -253,6 +262,12 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
                 AsyncSnapshot<_LoadedChapter> snapshot,
             )
             {
+                final _LoadedChapter? loaded =
+                    _loadedChapterContents[_chapter.id];
+                if (loaded != null)
+                {
+                    return _buildLoadedContent(comic, loaded);
+                }
                 if (snapshot.connectionState != ConnectionState.done)
                 {
                     return const AppLoadingView(message: '正在加载章节');
@@ -264,33 +279,37 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
                         onRetry: _retry,
                     );
                 }
-                final _LoadedChapter content = snapshot.data!;
-                if (content.blocks.isEmpty)
+                return _buildLoadedContent(comic, snapshot.data!);
+            },
+        );
+    }
+
+    Widget _buildLoadedContent(bool comic, _LoadedChapter content)
+    {
+        if (content.blocks.isEmpty)
+        {
+            return AppErrorView(
+                message: '没有找到这一章节的正文，可能受论坛权限限制',
+                onRetry: () => _confirmOpenOriginal(_chapter.sourceUri),
+            );
+        }
+        return FutureBuilder<void>(
+            future: _progressFuture,
+            builder: (
+                BuildContext context,
+                AsyncSnapshot<void> progressSnapshot,
+            )
+            {
+                if (_progressFuture != null &&
+                        progressSnapshot.connectionState != ConnectionState.done)
                 {
-                    return AppErrorView(
-                        message: '没有找到这一章节的正文，可能受论坛权限限制',
-                        onRetry: () => _confirmOpenOriginal(_chapter.sourceUri),
+                    return const AppLoadingView(
+                        message: '正在恢复阅读位置',
                     );
                 }
-                return FutureBuilder<void>(
-                    future: _progressFuture,
-                    builder: (
-                        BuildContext context,
-                        AsyncSnapshot<void> progressSnapshot,
-                    )
-                    {
-                        if (progressSnapshot.connectionState !=
-                            ConnectionState.done)
-                        {
-                            return const AppLoadingView(
-                                message: '正在恢复阅读位置',
-                            );
-                        }
-                        return comic
-                            ? _buildComic(content.blocks, content.referer)
-                            : _buildNovel(content.blocks, content.referer);
-                    },
-                );
+                return comic
+                    ? _buildComic(content.blocks, content.referer)
+                    : _buildNovel(content.blocks, content.referer);
             },
         );
     }
@@ -316,6 +335,9 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
                     onPointerMove: _handleReaderPointerMove,
                     onPointerUp: _handleReaderPointerUp,
                     onPointerCancel: _handleReaderPointerCancel,
+                    onPointerPanZoomStart: _beginPagePanZoom,
+                    onPointerPanZoomUpdate: _updatePagePanZoom,
+                    onPointerPanZoomEnd: _endPagePanZoom,
                     child: Row(
                         children: <Widget>[
                             Expanded(
@@ -449,6 +471,114 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         _sideTapCancelled = false;
     }
 
+    void _beginPagePanZoom(PointerPanZoomStartEvent event)
+    {
+        final PageController? controller = _pageController;
+        if (widget.work.kind != LibraryKind.comic ||
+                _flow == ReaderDirection.vertical ||
+                controller == null ||
+                !controller.hasClients)
+        {
+            return;
+        }
+        _cancelPagePanZoom();
+        _pagePanZoomPointer = event.pointer;
+        _pagePanZoomVelocityTracker =
+            VelocityTracker.withKind(PointerDeviceKind.trackpad)
+                ..addPosition(event.timeStamp, event.position);
+        late final Drag drag;
+        drag = controller.position.drag(
+            DragStartDetails(
+                globalPosition: event.position,
+                localPosition: event.localPosition,
+                sourceTimeStamp: event.timeStamp,
+                kind: PointerDeviceKind.trackpad,
+            ),
+            ()
+            {
+                if (identical(_pagePanZoomDrag, drag))
+                {
+                    _pagePanZoomDrag = null;
+                }
+            },
+        );
+        _pagePanZoomDrag = drag;
+    }
+
+    void _updatePagePanZoom(PointerPanZoomUpdateEvent event)
+    {
+        final Drag? drag = _pagePanZoomDrag;
+        if (event.pointer != _pagePanZoomPointer || drag == null)
+        {
+            return;
+        }
+        if (event.scale != 1 || event.rotation != 0)
+        {
+            _cancelPagePanZoom();
+            return;
+        }
+        if (event.panDelta.dy.abs() > kPrecisePointerHitSlop &&
+                event.panDelta.dy.abs() > event.panDelta.dx.abs())
+        {
+            _cancelPagePanZoom();
+            return;
+        }
+        if (event.panDelta.dx == 0)
+        {
+            return;
+        }
+        _pagePanZoomVelocityTracker?.addPosition(
+            event.timeStamp,
+            event.position + event.pan,
+        );
+        drag.update(
+            DragUpdateDetails(
+                globalPosition: event.position,
+                localPosition: event.localPosition,
+                sourceTimeStamp: event.timeStamp,
+                delta: Offset(event.panDelta.dx, 0),
+                primaryDelta: event.panDelta.dx,
+                kind: PointerDeviceKind.trackpad,
+            ),
+        );
+    }
+
+    void _endPagePanZoom(PointerPanZoomEndEvent event)
+    {
+        if (event.pointer != _pagePanZoomPointer)
+        {
+            return;
+        }
+        final Drag? drag = _pagePanZoomDrag;
+        final double horizontal = _pagePanZoomVelocityTracker
+                ?.getVelocity()
+                .pixelsPerSecond
+                .dx ??
+            0;
+        _pagePanZoomPointer = null;
+        _pagePanZoomDrag = null;
+        _pagePanZoomVelocityTracker = null;
+        drag?.end(
+            DragEndDetails(
+                globalPosition: event.position,
+                localPosition: event.localPosition,
+                velocity: Velocity(
+                    pixelsPerSecond: Offset(horizontal, 0),
+                ),
+                primaryVelocity: horizontal,
+            ),
+        );
+    }
+
+    void _cancelPagePanZoom()
+    {
+        _pagePanZoomPointer = null;
+        final Drag? drag = _pagePanZoomDrag;
+        _pagePanZoomDrag = null;
+        _pagePanZoomVelocityTracker = null;
+        drag?.cancel();
+    }
+
     void _beginComicSwipe(PointerDownEvent event)
     {
         final PageController? controller = _pageController;
@@ -464,7 +594,8 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         }
         _cancelComicSwipe(resetPage: false);
         _comicSwipePointer = event.pointer;
-        _comicSwipeStartPage = _pageIndex;
+        _comicSwipeStartPage =
+            controller.page?.round() ?? _viewPageForContentPage(_pageIndex);
         _comicSwipeOrigin = event.position;
         _comicSwipeOriginLocalPosition = event.localPosition;
         _comicSwipeLastPosition = event.position;
@@ -962,30 +1093,307 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
 
     bool get _hasNextChapter => _chapterIndex + 1 < _chapters.length;
 
-    Future<_LoadedChapter> _load({bool forceReload = false}) async
+    int get _leadingBoundaryPageCount =>
+        _flow != ReaderDirection.vertical && _hasPreviousChapter ? 1 : 0;
+
+    int get _trailingBoundaryPageCount =>
+        _flow != ReaderDirection.vertical && _hasNextChapter ? 1 : 0;
+
+    int _viewPageForContentPage(int page)
     {
-        final OfflineChapterContent? offline = await ref
-                .read(downloadRepositoryProvider)
-                .loadOfflineContent(widget.work.id, _chapter.id);
+        return page + _leadingBoundaryPageCount;
+    }
+
+    int _pageViewItemCount(int pageCount)
+    {
+        return pageCount +
+            _leadingBoundaryPageCount +
+            _trailingBoundaryPageCount;
+    }
+
+    void _handleHorizontalPageChanged(
+        int viewPage,
+        int pageCount,
+        void Function(int page) onContentPage,
+    )
+    {
+        final int page = viewPage - _leadingBoundaryPageCount;
+        if (page < 0)
+        {
+            _waitForBoundaryCommit(pageCount);
+            return;
+        }
+        if (page >= pageCount)
+        {
+            _waitForBoundaryCommit(pageCount);
+            return;
+        }
+        onContentPage(page);
+    }
+
+    void _waitForBoundaryCommit(int pageCount)
+    {
+        final PageController? controller = _pageController;
+        if (controller == null || !controller.hasClients)
+        {
+            return;
+        }
+        final ValueNotifier<bool> scrolling =
+            controller.position.isScrollingNotifier;
+        late final VoidCallback listener;
+        listener = ()
+        {
+            if (scrolling.value)
+            {
+                return;
+            }
+            scrolling.removeListener(listener);
+            if (identical(controller, _pageController))
+            {
+                _commitBoundaryChapter(pageCount);
+            }
+        };
+        scrolling.addListener(listener);
+        WidgetsBinding.instance.addPostFrameCallback(
+            (Duration timeStamp) => listener(),
+        );
+    }
+
+    bool _handleHorizontalScrollEnd(
+        ScrollEndNotification notification,
+        int pageCount,
+    )
+    {
+        if (notification.depth == 0)
+        {
+            _waitForBoundaryCommit(pageCount);
+        }
+        return false;
+    }
+
+    void _commitBoundaryChapter(int pageCount)
+    {
+        final PageController? controller = _pageController;
+        if (!mounted ||
+                _flow == ReaderDirection.vertical ||
+                controller == null ||
+                !controller.hasClients ||
+                controller.position.isScrollingNotifier.value)
+        {
+            return;
+        }
+        final double? viewPage = controller.page;
+        if (viewPage == null)
+        {
+            return;
+        }
+        const double tolerance = 0.01;
+        final int previousBoundary = _leadingBoundaryPageCount - 1;
+        if (_hasPreviousChapter &&
+                (viewPage - previousBoundary).abs() <= tolerance)
+        {
+            unawaited(_changeChapter(-1, initialProgress: 1));
+            return;
+        }
+        final int nextBoundary =
+            _leadingBoundaryPageCount + pageCount;
+        if (_hasNextChapter &&
+                (viewPage - nextBoundary).abs() <= tolerance)
+        {
+            unawaited(_changeChapter(1, initialProgress: 0));
+        }
+    }
+
+    Widget _buildChapterBoundaryPage(int offset)
+    {
+        final int targetIndex = _chapterIndex + offset;
+        final String direction = offset < 0 ? 'previous' : 'next';
+        if (targetIndex < 0 || targetIndex >= _chapters.length)
+        {
+            return const SizedBox.shrink();
+        }
+        final Chapter chapter = _chapters[targetIndex];
+        final Future<_LoadedChapter>? future =
+            _chapterContentFutures[chapter.id];
+        final Widget loading = AppLoadingView(
+            message: offset < 0 ? '正在加载上一章' : '正在加载下一章',
+        );
+        return KeyedSubtree(
+            key: Key('reader-$direction-chapter-boundary'),
+            child: FutureBuilder<_LoadedChapter>(
+                future: future,
+                builder: (
+                    BuildContext context,
+                    AsyncSnapshot<_LoadedChapter> snapshot,
+                )
+                {
+                    if (widget.work.kind != LibraryKind.comic ||
+                            snapshot.connectionState != ConnectionState.done ||
+                            snapshot.hasError)
+                    {
+                        return loading;
+                    }
+                    final _LoadedChapter content = snapshot.data!;
+                    final List<Uri> images = content.blocks
+                        .whereType<PostImageBlock>()
+                        .map((PostImageBlock block) => block.uri)
+                        .toList(growable: false);
+                    if (images.isEmpty)
+                    {
+                        return loading;
+                    }
+                    final Uri image = offset < 0 ? images.last : images.first;
+                    return ColoredBox(
+                        color: Colors.black,
+                        child: Center(
+                            child: ForumImage(
+                                uri: image,
+                                referer: content.referer.toString(),
+                            ),
+                        ),
+                    );
+                },
+            ),
+        );
+    }
+
+    Future<_LoadedChapter> _chapterContentFuture(
+        Chapter chapter, {
+        bool replace = false,
+        bool forceReload = false,
+    })
+    {
+        if (replace)
+        {
+            _loadedChapterContents.remove(chapter.id);
+        }
+        if (!replace)
+        {
+            final Future<_LoadedChapter>? existing =
+                _chapterContentFutures[chapter.id];
+            if (existing != null)
+            {
+                return existing;
+            }
+        }
+        final Future<_LoadedChapter> future = _loadChapter(
+            chapter,
+            forceReload: forceReload,
+        );
+        _chapterContentFutures[chapter.id] = future;
+        unawaited(
+            future.then<void>(
+                (_LoadedChapter content)
+                {
+                    if (identical(_chapterContentFutures[chapter.id], future))
+                    {
+                        _loadedChapterContents[chapter.id] = content;
+                    }
+                },
+                onError: (Object error, StackTrace stackTrace)
+                {
+                },
+            ),
+        );
+        return future;
+    }
+
+    void _prepareChapterWindow()
+    {
+        final int center = _chapterIndex;
+        final int first = (center - 1).clamp(0, _chapters.length - 1);
+        final int last = (center + 1).clamp(0, _chapters.length - 1);
+        final Set<String> retained = _chapters
+            .sublist(first, last + 1)
+            .map((Chapter chapter) => chapter.id)
+            .toSet();
+        _chapterContentFutures.removeWhere(
+            (String chapterId, Future<_LoadedChapter> future) =>
+                !retained.contains(chapterId),
+        );
+        _loadedChapterContents.removeWhere(
+            (String chapterId, _LoadedChapter content) =>
+                !retained.contains(chapterId),
+        );
+    }
+
+    void _handleHorizontalPageScroll()
+    {
+        final PageController? controller = _pageController;
+        if (_flow == ReaderDirection.vertical ||
+                controller == null ||
+                !controller.hasClients)
+        {
+            return;
+        }
+        final double? page = controller.page;
+        if (page == null)
+        {
+            return;
+        }
+        final int firstContentPage = _leadingBoundaryPageCount;
+        final int lastContentPage =
+            firstContentPage + _activePageCount - 1;
+        if (_hasPreviousChapter && page < firstContentPage)
+        {
+            _prepareBoundaryChapter(-1);
+        }
+        if (_hasNextChapter && page > lastContentPage)
+        {
+            _prepareBoundaryChapter(1);
+        }
+    }
+
+    void _prepareBoundaryChapter(int offset)
+    {
+        final int targetIndex = _chapterIndex + offset;
+        if (targetIndex < 0 || targetIndex >= _chapters.length)
+        {
+            return;
+        }
+        final Chapter chapter = _chapters[targetIndex];
+        if (_chapterContentFutures.containsKey(chapter.id))
+        {
+            return;
+        }
+        _chapterContentFuture(chapter);
+        if (mounted)
+        {
+            setState(()
+            {
+            });
+        }
+    }
+
+    Future<_LoadedChapter> _loadChapter(
+        Chapter chapter, {
+        bool forceReload = false,
+    }) async
+    {
+        final DownloadRepository downloadRepository = ref.read(
+            downloadRepositoryProvider,
+        );
+        final ForumLibraryRepository repository = ref.read(
+            forumLibraryRepositoryProvider,
+        );
+        final OfflineChapterContent? offline = await downloadRepository
+                .loadOfflineContent(widget.work.id, chapter.id);
         if (offline != null)
         {
             return _LoadedChapter(blocks: offline.blocks, referer: offline.referer);
         }
-        final ForumLibraryRepository repository = ref.read(
-            forumLibraryRepositoryProvider,
-        );
         final ForumThreadPage page = forceReload
                 ? await repository.loadChapterPage(
-                    _chapter,
+                    chapter,
                     widget.work.primaryBoard,
                     forceReload: true,
                 )
                 : await repository.loadChapterPage(
-                    _chapter,
+                    chapter,
                     widget.work.primaryBoard,
                 );
         return _LoadedChapter(
-            blocks: _contentSelector.select(page, _chapter),
+            blocks: _contentSelector.select(page, chapter),
             referer: page.uri,
         );
     }
@@ -1069,43 +1477,77 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         }
         return Stack(
             children: <Widget>[
-                PageView.builder(
-                    controller: controller,
-                    physics: const NeverScrollableScrollPhysics(
-                        parent: PageScrollPhysics(),
-                    ),
-                    reverse: _flow == ReaderDirection.rightToLeft,
-                    itemCount: images.length,
-                    onPageChanged: (int value)
-                    {
-                        setState(()
+                NotificationListener<ScrollEndNotification>(
+                    onNotification: (ScrollEndNotification notification) =>
+                        _handleHorizontalScrollEnd(
+                            notification,
+                            images.length,
+                        ),
+                    child: PageView.builder(
+                        key: ValueKey<String>(
+                            'reader-horizontal-pages:${_chapter.id}',
+                        ),
+                        controller: controller,
+                        physics: const NeverScrollableScrollPhysics(
+                            parent: PageScrollPhysics(),
+                        ),
+                        reverse: _flow == ReaderDirection.rightToLeft,
+                        itemCount: _pageViewItemCount(images.length),
+                        onPageChanged: (int value)
                         {
-                            _pageIndex = value;
-                            _currentProgress = ReadingAnchor.progressForPage(
+                            _handleHorizontalPageChanged(
                                 value,
                                 images.length,
+                                (int page)
+                                {
+                                    setState(()
+                                    {
+                                        _pageIndex = page;
+                                        _currentProgress =
+                                            ReadingAnchor.progressForPage(
+                                                page,
+                                                images.length,
+                                            );
+                                    });
+                                    _scheduleSave();
+                                    if (!_progressDragging)
+                                    {
+                                        _scheduleComicPrefetch(
+                                            images,
+                                            referer,
+                                            page,
+                                        );
+                                    }
+                                },
                             );
-                        });
-                        _scheduleSave();
-                        if (!_progressDragging)
+                        },
+                        itemBuilder: (BuildContext context, int index)
                         {
-                            _scheduleComicPrefetch(images, referer, value);
-                        }
-                    },
-                    itemBuilder: (BuildContext context, int index) =>
-                        _ZoomableComicPage(
-                            key: ValueKey<String>(
-                                '${_chapter.id}:${images[index]}',
-                            ),
-                            pageKey: Key('reader-comic-page-$index'),
-                            centerChild: true,
-                            onZoomChanged: (bool zoomed) =>
-                                _handleComicZoomChanged(index, zoomed),
-                            child: ForumImage(
-                                uri: images[index],
-                                referer: referer.toString(),
-                            ),
-                        ),
+                            final int page =
+                                index - _leadingBoundaryPageCount;
+                            if (page < 0)
+                            {
+                                return _buildChapterBoundaryPage(-1);
+                            }
+                            if (page >= images.length)
+                            {
+                                return _buildChapterBoundaryPage(1);
+                            }
+                            return _ZoomableComicPage(
+                                key: ValueKey<String>(
+                                    '${_chapter.id}:${images[page]}',
+                                ),
+                                pageKey: Key('reader-comic-page-$page'),
+                                centerChild: true,
+                                onZoomChanged: (bool zoomed) =>
+                                    _handleComicZoomChanged(page, zoomed),
+                                child: ForumImage(
+                                    uri: images[page],
+                                    referer: referer.toString(),
+                                ),
+                            );
+                        },
+                    ),
                 ),
                 if (_showStatus)
                     Positioned(
@@ -1269,46 +1711,82 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         );
         return Stack(
             children: <Widget>[
-                PageView.builder(
-                    controller: _pageControllerFor(
-                        pages.length,
-                        layoutKey: layoutKey,
-                    ),
-                    reverse: _flow == ReaderDirection.rightToLeft,
-                    itemCount: pages.length,
-                    onPageChanged: (int value)
-                    {
-                        setState(()
-                        {
-                            _pageIndex = value;
-                            _currentProgress = anchors[value];
-                        });
-                        _scheduleSave();
-                    },
-                    itemBuilder: (BuildContext context, int index) => Padding(
-                        padding: NovelPaginator.contentPadding,
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: pages[index].blocks
-                                .asMap()
-                                .entries
-                                .map(
-                                    (MapEntry<int, PostContentBlock> entry) =>
-                                        KeyedSubtree(
-                                            key: Key(
-                                                'reader-novel-page-block-'
-                                                '${entry.key}',
-                                            ),
-                                            child: _buildNovelBlock(
-                                                entry.value,
-                                                referer,
-                                                imageMaxHeight:
-                                                    constraints.maxHeight * 0.65,
-                                            ),
-                                        ),
-                                )
-                                .toList(growable: false),
+                NotificationListener<ScrollEndNotification>(
+                    onNotification: (ScrollEndNotification notification) =>
+                        _handleHorizontalScrollEnd(
+                            notification,
+                            pages.length,
                         ),
+                    child: PageView.builder(
+                        key: ValueKey<String>(
+                            'reader-horizontal-pages:${_chapter.id}',
+                        ),
+                        controller: _pageControllerFor(
+                            pages.length,
+                            layoutKey: layoutKey,
+                        ),
+                        reverse: _flow == ReaderDirection.rightToLeft,
+                        itemCount: _pageViewItemCount(pages.length),
+                        onPageChanged: (int value)
+                        {
+                            _handleHorizontalPageChanged(
+                                value,
+                                pages.length,
+                                (int page)
+                                {
+                                    setState(()
+                                    {
+                                        _pageIndex = page;
+                                        _currentProgress = anchors[page];
+                                    });
+                                    _scheduleSave();
+                                },
+                            );
+                        },
+                        itemBuilder: (BuildContext context, int index)
+                        {
+                            final int page =
+                                index - _leadingBoundaryPageCount;
+                            if (page < 0)
+                            {
+                                return _buildChapterBoundaryPage(-1);
+                            }
+                            if (page >= pages.length)
+                            {
+                                return _buildChapterBoundaryPage(1);
+                            }
+                            return Padding(
+                                padding: NovelPaginator.contentPadding,
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: pages[page].blocks
+                                        .asMap()
+                                        .entries
+                                        .map(
+                                            (
+                                                MapEntry<
+                                                    int,
+                                                    PostContentBlock
+                                                > entry,
+                                            ) => KeyedSubtree(
+                                                key: Key(
+                                                    'reader-novel-page-block-'
+                                                    '${entry.key}',
+                                                ),
+                                                child: _buildNovelBlock(
+                                                    entry.value,
+                                                    referer,
+                                                    imageMaxHeight:
+                                                        constraints.maxHeight *
+                                                            0.65,
+                                                ),
+                                            ),
+                                        )
+                                        .toList(growable: false),
+                                ),
+                            );
+                        },
                     ),
                 ),
                 if (_showStatus)
@@ -1401,7 +1879,9 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         }
         _pageLayoutKey = layoutKey;
         _pageIndex = _pageForProgress(_currentProgress);
-        return _pageController = PageController(initialPage: _pageIndex);
+        return _pageController = PageController(
+            initialPage: _viewPageForContentPage(_pageIndex),
+        )..addListener(_handleHorizontalPageScroll);
     }
 
     int _pageForProgress(double progress)
@@ -1946,6 +2426,7 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
             return;
         }
         _cancelComicPrefetch(clearKey: true);
+        _cancelPagePanZoom();
         _cancelComicSwipe(resetPage: false);
         _zoomedComicPages.clear();
         final PageController? previous = _pageController;
@@ -2041,23 +2522,17 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         {
             return;
         }
-        final int target = _pageIndex + offset;
-        if (target < 0)
+        final int targetPage = _pageIndex + offset;
+        if (targetPage < 0 && !_hasPreviousChapter)
         {
-            if (_hasPreviousChapter)
-            {
-                unawaited(_changeChapter(-1));
-            }
             return;
         }
-        if (target >= _activePageCount)
+        if (targetPage >= _activePageCount && !_hasNextChapter)
         {
-            if (_hasNextChapter)
-            {
-                unawaited(_changeChapter(1));
-            }
             return;
         }
+        final int target =
+            _viewPageForContentPage(_pageIndex) + offset;
         if (_pageAnimation)
         {
             unawaited(
@@ -2095,7 +2570,7 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         {
             final int page = _pageForProgress(progress);
             _pageIndex = page;
-            _pageController?.jumpToPage(page);
+            _pageController?.jumpToPage(_viewPageForContentPage(page));
         }
         _scheduleSave();
     }
@@ -2270,42 +2745,53 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         }
     }
 
-    Future<void> _changeChapter(int offset) async
+    Future<void> _changeChapter(
+        int offset, {
+        double? initialProgress,
+    }) async
     {
         final int targetIndex = _chapterIndex + offset;
         if (targetIndex < 0 || targetIndex >= _chapters.length)
         {
             return;
         }
-        await _saveProgress();
+        final Chapter targetChapter = _chapters[targetIndex];
+        final Future<_LoadedChapter> targetContent =
+            _chapterContentFuture(targetChapter);
+        final Future<void> saveFuture = _saveProgress();
         _cancelComicPrefetch(clearKey: true);
+        _cancelPagePanZoom();
         _cancelComicSwipe(resetPage: false);
         _zoomedComicPages.clear();
         final PageController? previousController = _pageController;
         _invalidateNovelPagination();
         setState(()
         {
-            _chapter = _chapters[targetIndex];
+            _chapter = targetChapter;
             _pageController = null;
             _pageIndex = 0;
             _activeMaxPosition = -1;
             _activePageCount = 1;
             _activePageAnchors = const <double>[0];
             _pageLayoutKey = null;
-            _currentProgress = 0;
+            _currentProgress = initialProgress?.clamp(0.0, 1.0) ?? 0;
             _scrollRestored = false;
             _initialHistoryWritten = false;
-            _contentFuture = _load();
-            _progressFuture = _restoreProgress();
+            _contentFuture = targetContent;
+            _progressFuture = initialProgress == null
+                ? _restoreProgress()
+                : null;
         });
+        _prepareChapterWindow();
         WidgetsBinding.instance.addPostFrameCallback((Duration timeStamp)
         {
             previousController?.dispose();
-            if (_scrollController.hasClients)
+            if (mounted && _scrollController.hasClients)
             {
                 _scrollController.jumpTo(0);
             }
         });
+        await saveFuture;
     }
 
     Future<void> _showChapterDirectory() async
@@ -2356,8 +2842,13 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         _invalidateNovelPagination();
         setState(()
         {
-            _contentFuture = _load(forceReload: forceReload);
+            _contentFuture = _chapterContentFuture(
+                _chapter,
+                replace: true,
+                forceReload: forceReload,
+            );
         });
+        _prepareChapterWindow();
     }
 
     Future<void> _confirmOpenOriginal([Uri? target]) async

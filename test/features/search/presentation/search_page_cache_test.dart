@@ -291,6 +291,92 @@ void main()
         await database.close();
     });
 
+    testWidgets('单页搜索结果进入详情时不会在构建期间回写搜索页', (
+        WidgetTester tester,
+    ) async
+    {
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final AppSettingsRepository settings = AppSettingsRepository(
+            await SharedPreferences.getInstance(),
+        );
+        final AppDatabase database = AppDatabase(NativeDatabase.memory());
+        final _MockForumSearchRepository forum =
+                _MockForumSearchRepository();
+        final _MockForumLibraryRepository library =
+                _MockForumLibraryRepository();
+        final _MockCoverRepository cover = _MockCoverRepository();
+        final _MockForumFavoriteRepository favorite =
+                _MockForumFavoriteRepository();
+        final _MockReadingHistoryRepository history =
+                _MockReadingHistoryRepository();
+        final SourceThread thread = _searchThread(
+            204,
+            '单页作品 01-开始',
+        );
+        final ForumSearchPage page = ForumSearchPage(
+            kind: LibraryKind.comic,
+            keyword: '单页作品',
+            searchId: 'single-page',
+            sourceThreads: <SourceThread>[thread],
+            currentPage: 1,
+            totalPages: 1,
+        );
+        when(
+            () => forum.search(
+                keyword: '单页作品',
+                kind: LibraryKind.comic,
+            ),
+        ).thenAnswer((_) async => page);
+        when(() => forum.aggregateThreads(any())).thenAnswer(
+            (Invocation invocation) => const WorkAggregator().aggregate(
+                invocation.positionalArguments.first as List<SourceThread>,
+            ),
+        );
+        when(
+            () => library.loadThread(
+                any(),
+                includeAllOriginalPosterPosts: true,
+            ),
+        ).thenAnswer((_) async => _threadPage());
+        when(() => cover.resolve(any())).thenAnswer((_) async => null);
+        when(() => favorite.findForWork(any()))
+            .thenAnswer((_) async => const []);
+        when(() => history.get(any())).thenAnswer((_) async => null);
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appDatabaseProvider.overrideWithValue(database),
+                    forumSearchRepositoryProvider.overrideWithValue(forum),
+                    searchCooldownProvider.overrideWithValue(SearchCooldown()),
+                    forumLibraryRepositoryProvider.overrideWithValue(library),
+                    coverRepositoryProvider.overrideWithValue(cover),
+                    forumFavoriteRepositoryProvider.overrideWithValue(favorite),
+                    readingHistoryRepositoryProvider.overrideWithValue(history),
+                    appSettingsRepositoryProvider.overrideWithValue(settings),
+                ],
+                child: const MaterialApp(
+                    home: SearchPage(kind: LibraryKind.comic),
+                ),
+            ),
+        );
+        await tester.enterText(find.byType(TextField), '单页作品');
+        await tester.testTextInput.receiveAction(TextInputAction.search);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        await tester.tap(find.byType(WorkListTile));
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byType(WorkDetailPage), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        await database.close();
+    });
+
     testWidgets('详情页搜索入口优先显示精确缓存并默认原始结果', (
         WidgetTester tester,
     ) async

@@ -151,7 +151,7 @@ class TitleNormalizer
         double? chapterOrder;
         bool hasChapterMarker = false;
         final Match? indexedExtra = RegExp(
-            r'(番外(?:篇)?\s*(\d+(?:\.\d+)?))\s*$',
+            r'((?:四格\s*)?番外(?:篇)?\s*(\d+(?:\.\d+)?))\s*$',
             caseSensitive: false,
         ).firstMatch(working);
         if (indexedExtra != null)
@@ -182,6 +182,11 @@ class TitleNormalizer
             final double? start = double.tryParse(startLabel);
             final double? end = double.tryParse(endLabel);
             final String base = normalizeForumText(decimalRangeChapter.group(1)!);
+            final double? hyphenPartOrder =
+                    decimalRangeChapter.group(3) == '-' &&
+                            _isBareChapter(base, startLabel)
+                    ? _hyphenPartOrder(startLabel, endLabel)
+                    : null;
             final bool decimalRange =
                     startLabel.contains('.') || endLabel.contains('.');
             final bool integerRange =
@@ -194,7 +199,14 @@ class TitleNormalizer
                         r'(?:^|\s)p\.?\s*$',
                         caseSensitive: false,
                     ).hasMatch(base);
-            if ((decimalRange || integerRange) &&
+            if (hyphenPartOrder != null)
+            {
+                chapterLabel =
+                        '$startLabel${decimalRangeChapter.group(3)}$endLabel';
+                chapterOrder = hyphenPartOrder;
+                hasChapterMarker = true;
+                working = base;
+            } else if ((decimalRange || integerRange) &&
                     start != null &&
                     end != null &&
                     end > start &&
@@ -202,6 +214,26 @@ class TitleNormalizer
             {
                 chapterLabel = '$startLabel${decimalRangeChapter.group(3)}$endLabel';
                 chapterOrder = start;
+                hasChapterMarker = true;
+                working = base;
+            }
+        }
+
+        final Match? attachedHyphenPart = hasChapterMarker
+                ? null
+                : RegExp(
+                    r'^(.{2,}?)(\d{1,4})-([1-9])\s*$',
+                ).firstMatch(working);
+        if (attachedHyphenPart != null)
+        {
+            final String base = normalizeForumText(attachedHyphenPart.group(1)!);
+            final String main = attachedHyphenPart.group(2)!;
+            final String part = attachedHyphenPart.group(3)!;
+            final double? order = _hyphenPartOrder(main, part);
+            if (order != null && _isAttachedChapter(base, main, authorMarker))
+            {
+                chapterLabel = '$main-$part';
+                chapterOrder = order;
                 hasChapterMarker = true;
                 working = base;
             }
@@ -219,9 +251,11 @@ class TitleNormalizer
                 numericChapter.group(1)!,
                 numericChapter.group(5),
             );
-            chapterOrder = double.tryParse(
-                numericChapter.group(2) ?? numericChapter.group(4) ?? '',
-            );
+            chapterOrder =
+                    _hyphenPartOrderFromMarker(numericChapter.group(1)!) ??
+                    double.tryParse(
+                        numericChapter.group(2) ?? numericChapter.group(4) ?? '',
+                    );
             if (_isEventOrdinal(
                 numericChapter.group(1)!,
                 numericChapter.group(5) ?? '',
@@ -688,12 +722,43 @@ class TitleNormalizer
         );
     }
 
+    double? _hyphenPartOrderFromMarker(String value)
+    {
+        final Match? match = RegExp(
+            r'^(?:第\s*)?(\d{1,4})\s*-\s*(?:第\s*)?([1-9])\s*'
+            r'(?:话|話|章|回|节|節)$',
+            caseSensitive: false,
+        ).firstMatch(value);
+        return match == null
+                ? null
+                : _hyphenPartOrder(match.group(1)!, match.group(2)!);
+    }
+
+    double? _hyphenPartOrder(String main, String part)
+    {
+        final int? mainNumber = int.tryParse(main);
+        final int? partNumber = int.tryParse(part);
+        if (mainNumber == null ||
+                mainNumber <= 0 ||
+                partNumber == null ||
+                partNumber <= 0 ||
+                part.length != 1 ||
+                partNumber > mainNumber ||
+                !_isBareChapter('', main))
+        {
+            return null;
+        }
+        return double.tryParse('$mainNumber.$part');
+    }
+
     bool _isBareChapter(String base, String number)
     {
+        final String normalizedBase = normalizeForumText(base);
         if (RegExp(
             r'(?:^|\s)p\.?\s*\d+\s*$',
             caseSensitive: false,
-        ).hasMatch(base))
+        ).hasMatch(normalizedBase) ||
+                RegExp(r'^(?:19|20)\d{2}$').hasMatch(normalizedBase))
         {
             return false;
         }
@@ -706,7 +771,10 @@ class TitleNormalizer
         {
             return false;
         }
-        return !RegExp(r'vol(?:ume)?\.?\s*$', caseSensitive: false).hasMatch(base);
+        return !RegExp(
+            r'vol(?:ume)?\.?\s*$',
+            caseSensitive: false,
+        ).hasMatch(normalizedBase);
     }
 
     bool _isAttachedChapter(String base, String number, String authorMarker)

@@ -30,6 +30,32 @@ class _MockDownloadRepository extends Mock implements DownloadRepository
 {
 }
 
+class _ControlledReadingHistoryRepository extends ReadingHistoryRepository
+{
+    _ControlledReadingHistoryRepository(super.database);
+
+    Completer<void>? saveBlocker;
+
+    @override
+    Future<void> save({
+        required Work work,
+        required Chapter chapter,
+        required int position,
+        required double progress,
+        DateTime? updatedAt,
+    })
+    {
+        final Completer<void>? blocker = saveBlocker;
+        return blocker?.future ?? super.save(
+            work: work,
+            chapter: chapter,
+            position: position,
+            progress: progress,
+            updatedAt: updatedAt,
+        );
+    }
+}
+
 class _RecordingReaderMediaRepository extends Fake
     implements ReaderMediaRepository
 {
@@ -761,6 +787,209 @@ void main()
         );
     });
 
+    testWidgets('小说分页可从末页滑到下一章并从首页滑回上一章', (
+        WidgetTester tester,
+    ) async
+    {
+        await settingsRepository.save(
+            const AppSettings(
+                novelDirection: ReaderDirection.leftToRight,
+                novelPageAnimation: false,
+            ),
+        );
+        final Work work = _work();
+        for (final Chapter chapter in work.chapters)
+        {
+            await downloadRepository.enqueue(
+                work: work,
+                chapter: chapter,
+                directoryPath: '',
+            );
+            await downloadRepository.complete(
+                downloadRepository.taskId(work.id, chapter.id),
+                blocks: <PostContentBlock>[
+                    PostTextBlock(
+                        text: chapter.id == work.chapters.first.id
+                            ? List<String>.filled(2400, '甲').join()
+                            : '第二章边界正文',
+                    ),
+                ],
+                referer: chapter.sourceUri,
+            );
+        }
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appDatabaseProvider.overrideWithValue(database),
+                    forumLibraryRepositoryProvider.overrideWithValue(
+                        forumRepository,
+                    ),
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                ],
+                child: MaterialApp(
+                    home: ChapterReaderPage(
+                        work: work,
+                        chapter: work.chapters.first,
+                        chapters: work.chapters,
+                    ),
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+        final int lastPage = int.parse(
+            _pageBadgeText(tester).split(' / ').last,
+        ) - 1;
+        expect(lastPage, greaterThan(0));
+        tester.widget<PageView>(find.byType(PageView))
+            .controller!
+            .jumpToPage(lastPage);
+        await tester.pumpAndSettle();
+
+        final PageController controller =
+            tester.widget<PageView>(find.byType(PageView)).controller!;
+        final Rect reader = tester.getRect(find.byType(Scaffold));
+        final TestGesture gesture = await tester.startGesture(reader.center);
+        await gesture.moveBy(const Offset(-20, 0));
+        await tester.pump();
+        await gesture.moveBy(Offset(-reader.width * 0.6, 0));
+        await tester.pump();
+        expect(controller.page, greaterThan(lastPage + 0.5));
+        expect(controller.page, lessThan(lastPage + 1));
+        expect(
+            find.byKey(const Key('reader-next-chapter-boundary')),
+            findsOneWidget,
+        );
+        expect(find.text('第一章'), findsOneWidget);
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(find.text('第二章'), findsOneWidget);
+        expect(find.text('第二章边界正文'), findsOneWidget);
+
+        await tester.fling(
+            find.byType(PageView),
+            const Offset(500, 0),
+            1200,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('第一章'), findsOneWidget);
+        expect(
+            _pageBadgeText(tester),
+            contains('${lastPage + 1} / ${lastPage + 1}'),
+        );
+        verifyNever(
+            () => forumRepository.loadChapterPage(any(), any()),
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+    });
+
+    testWidgets('相邻章未完成加载时边界页保持跟手并在吸附后原位加载', (
+        WidgetTester tester,
+    ) async
+    {
+        await settingsRepository.save(
+            const AppSettings(
+                novelDirection: ReaderDirection.leftToRight,
+            ),
+        );
+        final Work work = _work();
+        final _MockDownloadRepository downloads = _MockDownloadRepository();
+        final Completer<OfflineChapterContent?> nextChapter =
+            Completer<OfflineChapterContent?>();
+        when(
+            () => downloads.loadOfflineContent(
+                work.id,
+                work.chapters.first.id,
+            ),
+        ).thenAnswer(
+            (_) async => OfflineChapterContent(
+                blocks: const <PostContentBlock>[
+                    PostTextBlock(text: '第一章单页正文'),
+                ],
+                referer: work.chapters.first.sourceUri,
+            ),
+        );
+        when(
+            () => downloads.loadOfflineContent(
+                work.id,
+                work.chapters.last.id,
+            ),
+        ).thenAnswer((_) => nextChapter.future);
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appDatabaseProvider.overrideWithValue(database),
+                    downloadRepositoryProvider.overrideWithValue(downloads),
+                    forumLibraryRepositoryProvider.overrideWithValue(
+                        forumRepository,
+                    ),
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                ],
+                child: MaterialApp(
+                    home: ChapterReaderPage(
+                        work: work,
+                        chapter: work.chapters.first,
+                        chapters: work.chapters,
+                    ),
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+        final PageController controller =
+            tester.widget<PageView>(find.byType(PageView)).controller!;
+        final Rect reader = tester.getRect(find.byType(Scaffold));
+        final TestGesture gesture = await tester.startGesture(reader.center);
+        await gesture.moveBy(const Offset(-20, 0));
+        await tester.pump();
+        await gesture.moveBy(Offset(-reader.width * 0.6, 0));
+        await tester.pump();
+
+        expect(controller.page, greaterThan(0.5));
+        expect(controller.page, lessThan(1));
+        expect(
+            find.byKey(const Key('reader-next-chapter-boundary')),
+            findsOneWidget,
+        );
+        expect(find.text('正在加载下一章'), findsOneWidget);
+        expect(find.text('第一章'), findsOneWidget);
+
+        await gesture.up();
+        for (int frame = 0; frame < 10; frame++)
+        {
+            await tester.pump(const Duration(milliseconds: 100));
+            if (find.text('第二章').evaluate().isNotEmpty)
+            {
+                break;
+            }
+        }
+        expect(find.text('第二章'), findsOneWidget);
+        expect(find.text('正在加载章节'), findsOneWidget);
+
+        nextChapter.complete(
+            OfflineChapterContent(
+                blocks: const <PostContentBlock>[
+                    PostTextBlock(text: '第二章加载完成正文'),
+                ],
+                referer: work.chapters.last.sourceUri,
+            ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('第二章加载完成正文'), findsOneWidget);
+        verifyNever(
+            () => forumRepository.loadChapterPage(any(), any()),
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+    });
+
     testWidgets('漫画左右方向从侧边点击区起手滑动仍可分页', (
         WidgetTester tester,
     ) async
@@ -899,6 +1128,276 @@ void main()
         verifyNever(
             () => forumRepository.loadChapterPage(any(), any()),
         );
+    });
+
+    testWidgets('漫画右到左分页可从末页滑到下一章并从首页滑回上一章', (
+        WidgetTester tester,
+    ) async
+    {
+        await settingsRepository.save(
+            const AppSettings(
+                comicDirection: ReaderDirection.rightToLeft,
+                comicPageAnimation: false,
+            ),
+        );
+        final Work work = _chapteredComicWork();
+        final _MockDownloadRepository comicDownloads =
+                _MockDownloadRepository();
+        when(
+            () => comicDownloads.loadOfflineContent(
+                work.id,
+                work.chapters.first.id,
+            ),
+        ).thenAnswer(
+            (_) async => OfflineChapterContent(
+                blocks: <PostContentBlock>[
+                    PostImageBlock(uri: Uri.file('/missing/page-1.png')),
+                    PostImageBlock(uri: Uri.file('/missing/page-2.png')),
+                    PostImageBlock(uri: Uri.file('/missing/page-3.png')),
+                ],
+                referer: work.chapters.first.sourceUri,
+            ),
+        );
+        when(
+            () => comicDownloads.loadOfflineContent(
+                work.id,
+                work.chapters.last.id,
+            ),
+        ).thenAnswer(
+            (_) async => OfflineChapterContent(
+                blocks: <PostContentBlock>[
+                    PostImageBlock(uri: Uri.file('/missing/next-page.png')),
+                ],
+                referer: work.chapters.last.sourceUri,
+            ),
+        );
+        when(
+            () => comicDownloads.loadOfflineContent(
+                work.id,
+                work.chapters[1].id,
+            ),
+        ).thenAnswer(
+            (_) async => OfflineChapterContent(
+                blocks: <PostContentBlock>[
+                    PostImageBlock(uri: Uri.file('/missing/middle-page.png')),
+                ],
+                referer: work.chapters[1].sourceUri,
+            ),
+        );
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appDatabaseProvider.overrideWithValue(database),
+                    downloadRepositoryProvider.overrideWithValue(
+                        comicDownloads,
+                    ),
+                    forumLibraryRepositoryProvider.overrideWithValue(
+                        forumRepository,
+                    ),
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                ],
+                child: MaterialApp(
+                    home: ChapterReaderPage(
+                        work: work,
+                        chapter: work.chapters.first,
+                        chapters: work.chapters,
+                    ),
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+        tester.widget<PageView>(find.byType(PageView))
+            .controller!
+            .jumpToPage(2);
+        await tester.pumpAndSettle();
+        final Rect reader = tester.getRect(find.byType(Scaffold));
+
+        final PageController controller =
+            tester.widget<PageView>(find.byType(PageView)).controller!;
+        final TestGesture chapterGesture = await tester.startGesture(
+            Offset(
+                reader.left + reader.width * 0.15,
+                reader.top + reader.height * 0.5,
+            ),
+        );
+        await chapterGesture.moveBy(Offset(reader.width * 0.6, 0));
+        await tester.pump(const Duration(milliseconds: 120));
+        expect(controller.page, greaterThan(2.5));
+        expect(controller.page, lessThan(3));
+        expect(
+            find.byKey(const Key('reader-next-chapter-boundary')),
+            findsOneWidget,
+        );
+        expect(find.text('第一话'), findsOneWidget);
+        await chapterGesture.up();
+        bool showedTransitionLoading = false;
+        bool showedPageGap = false;
+        for (int frame = 0; frame < 60; frame++)
+        {
+            await tester.pump(const Duration(milliseconds: 16));
+            final bool changedChapter =
+                find.text('第二话').evaluate().isNotEmpty;
+            if (changedChapter &&
+                    (find.text('正在加载章节').evaluate().isNotEmpty ||
+                        find.text('正在恢复阅读位置').evaluate().isNotEmpty))
+            {
+                showedTransitionLoading = true;
+            }
+            if (changedChapter && find.byType(PageView).evaluate().isEmpty)
+            {
+                showedPageGap = true;
+            }
+            if (changedChapter && find.byType(PageView).evaluate().isNotEmpty)
+            {
+                break;
+            }
+        }
+        expect(find.text('第二话'), findsOneWidget);
+        expect(showedTransitionLoading, isFalse);
+        expect(showedPageGap, isFalse);
+        for (int frame = 0; frame < 5; frame++)
+        {
+            await tester.pump(const Duration(milliseconds: 16));
+        }
+        final PageController secondController =
+            tester.widget<PageView>(find.byType(PageView)).controller!;
+        expect(secondController.page, 1);
+
+        await tester.flingFrom(
+            Offset(
+                reader.left + reader.width * 0.85,
+                reader.top + reader.height * 0.5,
+            ),
+            Offset(-reader.width * 0.65, 0),
+            1200,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('第一话'), findsOneWidget);
+        expect(_pageBadgeText(tester), contains('3 / 3'));
+
+        await tester.flingFrom(
+            Offset(
+                reader.left + reader.width * 0.15,
+                reader.top + reader.height * 0.5,
+            ),
+            Offset(reader.width * 0.65, 0),
+            1200,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('第二话'), findsOneWidget);
+
+        await tester.flingFrom(
+            Offset(
+                reader.left + reader.width * 0.15,
+                reader.top + reader.height * 0.5,
+            ),
+            Offset(reader.width * 0.65, 0),
+            1200,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('第三话'), findsOneWidget);
+
+        final TestGesture trackpad = await tester.createGesture(
+            kind: PointerDeviceKind.trackpad,
+        );
+        final Offset center = reader.center;
+        await trackpad.panZoomStart(center);
+        await trackpad.panZoomUpdate(
+            center,
+            pan: Offset(-reader.width * 0.65, 0),
+        );
+        await trackpad.panZoomEnd();
+        await tester.pumpAndSettle();
+        expect(find.text('第二话'), findsOneWidget);
+        verifyNever(
+            () => forumRepository.loadChapterPage(any(), any()),
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+    });
+
+    testWidgets('吸附边界页后不等待进度保存即可立即切换章节', (
+        WidgetTester tester,
+    ) async
+    {
+        await settingsRepository.save(
+            const AppSettings(
+                comicDirection: ReaderDirection.rightToLeft,
+                comicPageAnimation: false,
+            ),
+        );
+        final Work work = _chapteredComicWork();
+        final _MockDownloadRepository comicDownloads =
+                _MockDownloadRepository();
+        for (final Chapter chapter in work.chapters)
+        {
+            when(
+                () => comicDownloads.loadOfflineContent(work.id, chapter.id),
+            ).thenAnswer(
+                (_) async => OfflineChapterContent(
+                    blocks: <PostContentBlock>[
+                        PostImageBlock(
+                            uri: Uri.file('/missing/${chapter.id}.png'),
+                        ),
+                    ],
+                    referer: chapter.sourceUri,
+                ),
+            );
+        }
+        final _ControlledReadingHistoryRepository history =
+                _ControlledReadingHistoryRepository(database);
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appDatabaseProvider.overrideWithValue(database),
+                    readingHistoryRepositoryProvider.overrideWithValue(history),
+                    downloadRepositoryProvider.overrideWithValue(
+                        comicDownloads,
+                    ),
+                    forumLibraryRepositoryProvider.overrideWithValue(
+                        forumRepository,
+                    ),
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                ],
+                child: MaterialApp(
+                    home: ChapterReaderPage(
+                        work: work,
+                        chapter: work.chapters[1],
+                        chapters: work.chapters,
+                    ),
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+        final Rect reader = tester.getRect(find.byType(Scaffold));
+        final Completer<void> blocker = Completer<void>();
+        history.saveBlocker = blocker;
+
+        await tester.flingFrom(
+            Offset(
+                reader.left + reader.width * 0.15,
+                reader.top + reader.height * 0.5,
+            ),
+            Offset(reader.width * 0.65, 0),
+            1200,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('第三话'), findsOneWidget);
+
+        blocker.complete();
+        await tester.pumpAndSettle();
+        expect(find.text('第三话'), findsOneWidget);
+
+        history.saveBlocker = null;
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
     });
 
     testWidgets('漫画判断窗口内出现第二指时优先缩放且不翻页', (
@@ -1611,6 +2110,52 @@ Work _comicWork()
                 sourceUri: uri,
                 sourceTid: 303,
                 order: 1,
+            ),
+        ],
+    );
+}
+
+Work _chapteredComicWork()
+{
+    final Uri uri = Uri.parse(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=304&mobile=2',
+    );
+    return Work(
+        id: 'comic:304',
+        kind: LibraryKind.comic,
+        title: '测试章节漫画',
+        sourceThreads: <SourceThread>[
+            SourceThread(
+                tid: 304,
+                board: ForumBoard.comic,
+                title: '测试章节漫画',
+                uri: uri,
+            ),
+        ],
+        chapters: <Chapter>[
+            Chapter(
+                id: 'comic:304:1',
+                title: '第一话',
+                sourceUri: uri,
+                sourceTid: 304,
+                sourcePid: 3001,
+                order: 1,
+            ),
+            Chapter(
+                id: 'comic:304:2',
+                title: '第二话',
+                sourceUri: uri,
+                sourceTid: 304,
+                sourcePid: 3002,
+                order: 2,
+            ),
+            Chapter(
+                id: 'comic:304:3',
+                title: '第三话',
+                sourceUri: uri,
+                sourceTid: 304,
+                sourcePid: 3003,
+                order: 3,
             ),
         ],
     );
