@@ -181,6 +181,46 @@ void main()
         expect(page.originalPost!.links.single.kind, ThreadLinkKind.chapter);
     });
 
+    test('目录括号内的裸分段链接继承外层话数', ()
+    {
+        const String html = '''
+                        <html>
+                        <body id="forum" class="pg_viewthread">
+                                <div class="view_tit">测试漫画 第7话其2</div>
+                                <div class="plc cl" id="pid100">
+                                        <ul class="authi">
+                                                <li class="mtit"><span class="y">1楼</span><span class="z"><a>楼主</a></span></li>
+                                        </ul>
+                                        <div class="message">
+                                                本作目录<br />
+                                                <a href="thread-201-1-1.html">1话</a>
+                                                5话（
+                                                <font><font><a href="thread-205-1-1.html">1</a></font></font>
+                                                <font><font><a href="thread-206-1-1.html">2</a></font></font>
+                                                ）
+                                                6话（
+                                                <a href="thread-207-1-1.html">1</a>
+                                                <a href="thread-208-1-1.html">2</a>
+                                                ）
+                                        </div>
+                                </div>
+                        </body>
+                        </html>
+                ''';
+
+        final ForumThreadPage page = parser.parse(html, pageUri, ForumBoard.comic);
+        final List<ThreadLink> links = page.originalPost!.links;
+
+        expect(
+            links.map((ThreadLink link) => link.label),
+            <String>['1话', '5话其1', '5话其2', '6话其1', '6话其2'],
+        );
+        expect(
+            links.map((ThreadLink link) => link.kind),
+            everyElement(ThreadLinkKind.chapter),
+        );
+    });
+
     test('忽略论坛错误包裹的数据图片占位符', ()
     {
         const String html = '''

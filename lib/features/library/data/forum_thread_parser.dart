@@ -271,7 +271,78 @@ class ForumThreadParser
                 ),
             );
         }
-        return result;
+        return _restoreGroupedChapterLabels(
+            result,
+            normalizeForumText(message.text),
+        );
+    }
+
+    List<ThreadLink> _restoreGroupedChapterLabels(
+        List<ThreadLink> links,
+        String messageText,
+    )
+    {
+        final List<int> bareLinkIndexes = <int>[
+            for (int index = 0; index < links.length; index++)
+                if (links[index].kind == ThreadLinkKind.related &&
+                        RegExp(r'^\d{1,4}$').hasMatch(links[index].label))
+                    index,
+        ];
+        if (bareLinkIndexes.isEmpty)
+        {
+            return links;
+        }
+
+        final List<({String part, String label})> groupedLabels =
+                <({String part, String label})>[];
+        final RegExp groupPattern = RegExp(
+            r'(\d+(?:\.\d+)?)\s*(话|話|章|回|节|節)\s*[（(]\s*'
+            r'([\d\s、,，/／]+)\s*[）)]',
+        );
+        for (final Match group in groupPattern.allMatches(messageText))
+        {
+            final List<String> parts = RegExp(r'\d+')
+                    .allMatches(group.group(3)!)
+                    .map((Match match) => match.group(0)!)
+                    .toList(growable: false);
+            if (parts.length < 2)
+            {
+                continue;
+            }
+            for (final String part in parts)
+            {
+                groupedLabels.add((
+                    part: part,
+                    label: '${group.group(1)}${group.group(2)}其$part',
+                ));
+            }
+        }
+        if (groupedLabels.length != bareLinkIndexes.length)
+        {
+            return links;
+        }
+        for (int index = 0; index < bareLinkIndexes.length; index++)
+        {
+            if (links[bareLinkIndexes[index]].label != groupedLabels[index].part)
+            {
+                return links;
+            }
+        }
+
+        final List<ThreadLink> restored = List<ThreadLink>.of(links);
+        for (int index = 0; index < bareLinkIndexes.length; index++)
+        {
+            final int linkIndex = bareLinkIndexes[index];
+            final ThreadLink link = links[linkIndex];
+            restored[linkIndex] = ThreadLink(
+                label: groupedLabels[index].label,
+                uri: link.uri,
+                kind: ThreadLinkKind.chapter,
+                tid: link.tid,
+                pid: link.pid,
+            );
+        }
+        return restored;
     }
 
     bool _isExcludedLink(dom.Element anchor, dom.Element message)
