@@ -207,6 +207,37 @@ void main()
         expect(find.byTooltip('切换为正序'), findsOneWidget);
     });
 
+    testWidgets('平板详情栏按可用空间自动展开目录', (WidgetTester tester) async
+    {
+        tester.view.physicalSize = const Size(750, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        work = _workWithChapterCount(20);
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                    forumLibraryRepositoryProvider.overrideWithValue(libraryRepository),
+                    coverRepositoryProvider.overrideWithValue(coverRepository),
+                    forumFavoriteRepositoryProvider.overrideWithValue(favoriteRepository),
+                    readingHistoryRepositoryProvider.overrideWithValue(historyRepository),
+                    workIndexCoordinatorProvider.overrideWithValue(indexCoordinator),
+                ],
+                child: MaterialApp(
+                    home: WorkDetailPage(work: work, embedded: true),
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('第20话'), findsOneWidget);
+        expect(find.text('展开全部 20 话'), findsNothing);
+    });
+
     testWidgets('从目录点具体章节从头阅读而续读入口恢复进度', (
         WidgetTester tester,
     ) async
@@ -869,6 +900,36 @@ Work _work()
                 sourceTid: 11,
             ),
         ],
+    );
+}
+
+Work _workWithChapterCount(int count)
+{
+    final Uri uri = Uri.parse(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=10&mobile=2',
+    );
+    final SourceThread thread = SourceThread(
+        tid: 10,
+        board: ForumBoard.comic,
+        title: '测试漫画',
+        uri: uri,
+    );
+    return Work(
+        id: 'forum-work:many-chapters',
+        kind: LibraryKind.comic,
+        title: '测试漫画',
+        sourceThreads: <SourceThread>[thread],
+        chapters: List<Chapter>.generate(
+            count,
+            (int index) => Chapter(
+                id: 'forum-post:10:${index + 1}',
+                title: '第${index + 1}话',
+                sourceUri: uri,
+                sourceTid: 10,
+                sourcePid: index + 1,
+                order: index + 1,
+            ),
+        ),
     );
 }
 

@@ -1049,9 +1049,32 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
         final List<Chapter> ordered = _chaptersAscending
                 ? chapters
                 : chapters.reversed.toList(growable: false);
-        final int visibleCount = _showAllChapters || ordered.length <= 15
-                ? ordered.length
-                : 15;
+        return LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints)
+            {
+                final int defaultVisibleCount = _defaultVisibleChapterCount(
+                    constraints.maxWidth,
+                    MediaQuery.sizeOf(context).height,
+                );
+                final int visibleCount = _showAllChapters ||
+                                ordered.length <= defaultVisibleCount
+                        ? ordered.length
+                        : defaultVisibleCount;
+                return _buildVisibleChapterDirectory(
+                    chapters,
+                    ordered,
+                    visibleCount,
+                );
+            },
+        );
+    }
+
+    Widget _buildVisibleChapterDirectory(
+        List<Chapter> chapters,
+        List<Chapter> ordered,
+        int visibleCount,
+    )
+    {
         return FutureBuilder<ReadingHistoryEntry?>(
             future: _historyFuture,
             builder:
@@ -1090,6 +1113,21 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
                         );
                     },
         );
+    }
+
+    int _defaultVisibleChapterCount(double width, double height)
+    {
+        const int compactVisibleCount = 15;
+        if (!widget.embedded || _directoryView != _ChapterDirectoryView.grid)
+        {
+            return compactVisibleCount;
+        }
+        final int columnCount = ((width - 24) ~/ 150).clamp(3, 6);
+        final int rowCount = ((height - 360) ~/ 50).clamp(5, 12);
+        final int adaptiveVisibleCount = columnCount * rowCount;
+        return adaptiveVisibleCount > compactVisibleCount
+                ? adaptiveVisibleCount
+                : compactVisibleCount;
     }
 
     Widget _buildBookVolumeDirectory(
