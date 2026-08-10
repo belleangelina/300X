@@ -74,6 +74,84 @@ void main()
         ]);
     });
 
+    test('方括号中的作品前缀可将缺省标题章节并入完整作品', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            _thread(
+                569113,
+                '【狸米狸粮食组】［波多ヒロ/HISADAKE(墨利恩航空）］'
+                '水星的魔女 青春frontier 第5-4话',
+                typeId: null,
+            ),
+            _thread(
+                559888,
+                '[水星的魔女]【狸米狸粮食组】'
+                '［波多ヒロ/HISADAKE(墨利恩航空） 青春frontier 第3-1话',
+                typeId: null,
+            ),
+            _thread(
+                570280,
+                '[水星的魔女] 【狸米狸粮食组】[官漫]'
+                '［波多ヒロ/HISADAKE(墨利恩航空）］'
+                '青春frontier 第6-1话',
+                typeId: null,
+            ),
+            _thread(
+                571728,
+                '[水星的魔女] 【狸米狸粮食组】[官漫]'
+                '［波多ヒロ/HISADAKE(墨利恩航空）］'
+                '青春frontier 第6-2话',
+                typeId: null,
+            ),
+        ]);
+
+        expect(works, hasLength(1));
+        expect(works.single.title, '水星的魔女 青春frontier');
+        expect(
+            works.single.chapters.map((Chapter chapter) => chapter.title),
+            <String>['第3-1话', '第5-4话', '第6-1话', '第6-2话'],
+        );
+        expect(
+            aggregator.canonicalKeyForWork(works.single),
+            contains('水星的魔女青春frontier'),
+        );
+    });
+
+    test('缺少括号前缀证据、创作者不同或分类冲突时不执行兼容合并', ()
+    {
+        final List<Work> missingEvidence = aggregator.aggregate(<SourceThread>[
+            _thread(301, '[汉化][作者]系列名 测试作品 第1话', typeId: null),
+            _thread(302, '[汉化][作者]测试作品 第2话', typeId: null),
+        ]);
+        final List<Work> differentCreators = aggregator.aggregate(<SourceThread>[
+            _thread(303, '[汉化][作者甲]系列名 测试作品 第1话', typeId: null),
+            _thread(304, '[系列名][汉化][作者乙]测试作品 第2话', typeId: null),
+        ]);
+        final List<Work> conflictingTypes = aggregator.aggregate(<SourceThread>[
+            _thread(305, '[汉化][作者]系列名 测试作品 第1话', typeId: 65),
+            _thread(306, '[系列名][汉化][作者]测试作品 第2话', typeId: 66),
+        ]);
+        final List<Work> mismatchedBrokenContext = aggregator.aggregate(
+            <SourceThread>[
+                _thread(
+                    307,
+                    '【汉化组】［作者甲］系列甲 测试作品 第1话',
+                    typeId: null,
+                ),
+                _thread(
+                    308,
+                    '[系列乙]【汉化组】［作者甲 测试作品 第2话',
+                    typeId: null,
+                ),
+            ],
+        );
+
+        expect(missingEvidence, hasLength(2));
+        expect(differentCreators, hasLength(2));
+        expect(conflictingTypes, hasLength(2));
+        expect(mismatchedBrokenContext, hasLength(2));
+    });
+
     test('章节号后的副标题保留在章节名但不进入作品键', ()
     {
         final List<Work> works = aggregator.aggregate(<SourceThread>[

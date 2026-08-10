@@ -452,6 +452,101 @@ class TitleNormalizer
         );
     }
 
+    Set<String> leadingContextKeys(String original)
+    {
+        final String normalized = _stripTrailingReleaseMetadata(
+            normalizeForumText(_toHalfWidth(original)),
+        );
+        final RegExp bracket = RegExp(
+            r'^\s*(?:\[([^\]]{1,40})\]|【([^】]{1,40})】|[（(]([^（）()]{1,40})[）)])\s*',
+        );
+        final Match? first = bracket.firstMatch(normalized);
+        if (first == null)
+        {
+            return <String>{};
+        }
+        final String firstRemainder = normalized.substring(first.end).trim();
+        final String firstMarker = _metadataMarker(first);
+        if (!_isReleaseTag(firstMarker) &&
+                !_isCreatorMarker(firstMarker) &&
+                !bracket.hasMatch(firstRemainder) &&
+                !_isWrappedWorkTitle(firstMarker, firstRemainder) &&
+                !_hasOwnTitleBeforeChapter(firstRemainder))
+        {
+            return <String>{};
+        }
+
+        final Set<String> result = <String>{};
+        String working = normalized;
+        while (true)
+        {
+            final Match? match = bracket.firstMatch(working);
+            if (match == null)
+            {
+                break;
+            }
+            final String marker = _metadataMarker(match);
+            final String remainder = working.substring(match.end).trim();
+            if (_isWrappedWorkTitle(marker, remainder))
+            {
+                break;
+            }
+            if (!_isCreatorMarker(marker) &&
+                    !_isReleaseTag(marker) &&
+                    bracket.hasMatch(remainder))
+            {
+                final Match next = bracket.firstMatch(remainder)!;
+                if (!_isWrappedWorkTitle(
+                    _metadataMarker(next),
+                    remainder.substring(next.end).trim(),
+                ))
+                {
+                    final String key = _keyText(marker);
+                    if (key.isNotEmpty)
+                    {
+                        result.add(key);
+                    }
+                }
+            }
+            working = remainder;
+        }
+        return result;
+    }
+
+    String? titleKeyAfterUnclosedCreator(
+        String original,
+        String creatorKey,
+    )
+    {
+        if (creatorKey.length < 2)
+        {
+            return null;
+        }
+        final String normalized = _stripTrailingReleaseMetadata(
+            normalizeForumText(_toHalfWidth(original)),
+        );
+        final ({String title, String authorMarker}) metadata =
+                _stripLeadingMetadata(normalized);
+        if (!metadata.title.startsWith('[') || metadata.title.contains(']'))
+        {
+            return null;
+        }
+        final Match? malformed = RegExp(
+            r'^\[([^\]\s]{2,80})\s+(.+)$',
+        ).firstMatch(metadata.title);
+        if (malformed == null || _keyText(malformed.group(1)!) != creatorKey)
+        {
+            return null;
+        }
+        final StructuredTitle title = analyze(original);
+        if (!title.hasChapterMarker || !title.titleKey.startsWith(creatorKey))
+        {
+            return null;
+        }
+        final String recovered = title.titleKey.substring(creatorKey.length);
+        return recovered.length < 2 ? null : recovered;
+    }
+
     NovelEdition? _explicitNovelEdition(String value)
     {
         if (RegExp(

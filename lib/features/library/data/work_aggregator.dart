@@ -38,13 +38,20 @@ class WorkAggregator
                     ? null
                     : canonicalKeyForThread(work.sourceThreads.first);
         }
-        final List<_Candidate> candidates = work.sourceThreads
-                .map(
-                    (SourceThread thread) =>
-                            _Candidate(thread, _normalizer.analyze(thread.title)),
-                )
-                .where((_Candidate value) => _candidateTitleKey(value).isNotEmpty)
-                .toList(growable: false);
+        final List<_Candidate> candidates = _withBracketPrefixAliases(
+            work.sourceThreads
+                    .map(
+                        (SourceThread thread) => _Candidate(
+                            thread,
+                            _normalizer.analyze(thread.title),
+                        ),
+                    )
+                    .where(
+                        (_Candidate value) =>
+                                _candidateTitleKey(value).isNotEmpty,
+                    )
+                    .toList(growable: false),
+        );
         if (candidates.isEmpty)
         {
             return null;
@@ -507,6 +514,7 @@ class WorkAggregator
                 sourceThreads[index].tid: index,
         };
         final List<_Candidate> standalone = <_Candidate>[];
+        final List<_Candidate> grouped = <_Candidate>[];
         final Map<String, List<_Candidate>> coarseGroups =
                 <String, List<_Candidate>>{};
 
@@ -527,6 +535,11 @@ class WorkAggregator
                 standalone.add(candidate);
                 continue;
             }
+            grouped.add(candidate);
+        }
+
+        for (final _Candidate candidate in _withBracketPrefixAliases(grouped))
+        {
             final String groupKey = _coarseKey(candidate);
             coarseGroups.putIfAbsent(groupKey, () => <_Candidate>[]).add(candidate);
         }
@@ -799,7 +812,7 @@ class WorkAggregator
         final List<_Candidate> unknown = <_Candidate>[];
         for (final _Candidate candidate in candidates)
         {
-            final String creatorKey = candidate.title.creatorKey;
+            final String creatorKey = _candidateCreatorKey(candidate);
             if (creatorKey.isEmpty)
             {
                 unknown.add(candidate);
@@ -820,6 +833,175 @@ class WorkAggregator
             ...creators.values,
             if (unknown.isNotEmpty) unknown,
         ];
+    }
+
+    List<_Candidate> _withBracketPrefixAliases(List<_Candidate> candidates)
+    {
+        final Map<String, List<_Candidate>> groups =
+                <String, List<_Candidate>>{};
+        for (final _Candidate candidate in candidates)
+        {
+            groups
+                    .putIfAbsent(_coarseKey(candidate), () => <_Candidate>[])
+                    .add(candidate);
+        }
+        final Map<String, _Candidate> aliases = <String, _Candidate>{};
+        final List<List<_Candidate>> values = groups.values.toList(
+            growable: false,
+        );
+        for (final List<_Candidate> source in values)
+        {
+            final String sourceKey = _candidateTitleKey(source.first);
+            for (final List<_Candidate> target in values)
+            {
+                if (identical(source, target))
+                {
+                    continue;
+                }
+                final String targetKey = _candidateTitleKey(target.first);
+                final bool bracketPrefixAlias =
+                        sourceKey.length < targetKey.length &&
+                        _isBracketPrefixAlias(source, target);
+                if (!bracketPrefixAlias &&
+                        !_isUnclosedCreatorBracketAlias(source, target))
+                {
+                    continue;
+                }
+                aliases[_coarseKey(source.first)] = target.first;
+                break;
+            }
+        }
+        if (aliases.isEmpty)
+        {
+            return candidates;
+        }
+        return candidates.map((_Candidate candidate)
+        {
+            final _Candidate? alias = aliases[_coarseKey(candidate)];
+            if (alias == null)
+            {
+                return candidate;
+            }
+            return _Candidate(
+                candidate.thread,
+                candidate.title,
+                titleKeyOverride: _candidateTitleKey(alias),
+                displayTitleOverride: _candidateDisplayTitle(alias),
+                creatorKeyOverride: _candidateCreatorKey(alias),
+            );
+        }).toList(growable: false);
+    }
+
+    bool _isBracketPrefixAlias(
+        List<_Candidate> shorter,
+        List<_Candidate> longer,
+    )
+    {
+        if (shorter.any(
+                    (_Candidate candidate) =>
+                            candidate.thread.board.kind != LibraryKind.comic ||
+                            !candidate.title.hasChapterMarker,
+                ) ||
+                longer.any(
+                    (_Candidate candidate) =>
+                            candidate.thread.board.kind != LibraryKind.comic ||
+                            !candidate.title.hasChapterMarker,
+                ))
+        {
+            return false;
+        }
+        final Set<String> shorterCreators = _creatorKeys(shorter);
+        final Set<String> longerCreators = _creatorKeys(longer);
+        if (shorterCreators.length != 1 ||
+                longerCreators.length != 1 ||
+                shorterCreators.single != longerCreators.single)
+        {
+            return false;
+        }
+        if (!_hasCompatibleTypeIds(shorter, longer))
+        {
+            return false;
+        }
+
+        final String shorterKey = _candidateTitleKey(shorter.first);
+        final String longerKey = _candidateTitleKey(longer.first);
+        return shorter.any(
+            (_Candidate candidate) => _normalizer
+                    .leadingContextKeys(candidate.thread.title)
+                    .any(
+                        (String contextKey) =>
+                                contextKey.length >= 2 &&
+                                '$contextKey$shorterKey' == longerKey,
+                    ),
+        );
+    }
+
+    bool _isUnclosedCreatorBracketAlias(
+        List<_Candidate> source,
+        List<_Candidate> target,
+    )
+    {
+        if (source.length != 1 ||
+                source.single.thread.board.kind != LibraryKind.comic ||
+                !source.single.title.hasChapterMarker ||
+                target.any(
+                    (_Candidate candidate) =>
+                            candidate.thread.board.kind != LibraryKind.comic ||
+                            !candidate.title.hasChapterMarker,
+                ) ||
+                !_hasCompatibleTypeIds(source, target))
+        {
+            return false;
+        }
+        final Set<String> targetCreators = _creatorKeys(target);
+        if (targetCreators.length != 1)
+        {
+            return false;
+        }
+        final String targetCreator = targetCreators.single;
+        if (_candidateCreatorKey(source.single) == targetCreator)
+        {
+            return false;
+        }
+        final String? recoveredKey = _normalizer.titleKeyAfterUnclosedCreator(
+            source.single.thread.title,
+            targetCreator,
+        );
+        if (recoveredKey == null)
+        {
+            return false;
+        }
+        final String targetKey = _candidateTitleKey(target.first);
+        return _normalizer
+                .leadingContextKeys(source.single.thread.title)
+                .any(
+                    (String contextKey) =>
+                            contextKey.length >= 2 &&
+                            '$contextKey$recoveredKey' == targetKey,
+                );
+    }
+
+    bool _hasCompatibleTypeIds(
+        List<_Candidate> left,
+        List<_Candidate> right,
+    )
+    {
+        return <int>{
+            ...left
+                    .map((_Candidate candidate) => candidate.thread.typeId)
+                    .whereType<int>(),
+            ...right
+                    .map((_Candidate candidate) => candidate.thread.typeId)
+                    .whereType<int>(),
+        }.length <= 1;
+    }
+
+    Set<String> _creatorKeys(List<_Candidate> candidates)
+    {
+        return candidates
+                .map(_candidateCreatorKey)
+                .where((String value) => value.isNotEmpty)
+                .toSet();
     }
 
     String _coarseKey(_Candidate candidate)
@@ -849,13 +1031,20 @@ class WorkAggregator
 
     _WorkIdentity? _identityForWork(Work work)
     {
-        final List<_Candidate> candidates = work.sourceThreads
-                .map(
-                    (SourceThread thread) =>
-                            _Candidate(thread, _normalizer.analyze(thread.title)),
-                )
-                .where((_Candidate value) => _candidateTitleKey(value).isNotEmpty)
-                .toList(growable: false);
+        final List<_Candidate> candidates = _withBracketPrefixAliases(
+            work.sourceThreads
+                    .map(
+                        (SourceThread thread) => _Candidate(
+                            thread,
+                            _normalizer.analyze(thread.title),
+                        ),
+                    )
+                    .where(
+                        (_Candidate value) =>
+                                _candidateTitleKey(value).isNotEmpty,
+                    )
+                    .toList(growable: false),
+        );
         if (candidates.isEmpty)
         {
             return null;
@@ -897,7 +1086,7 @@ class WorkAggregator
             kind: candidates.first.thread.board.kind,
             titleKey: _candidateTitleKey(candidates.first),
             creatorKeys: candidates
-                    .map((_Candidate value) => value.title.creatorKey)
+                    .map(_candidateCreatorKey)
                     .where((String value) => value.isNotEmpty)
                     .toSet(),
             typeIds: candidates
@@ -1052,23 +1241,39 @@ class WorkAggregator
 
     String _candidateTitleKey(_Candidate candidate)
     {
-        return _titleKey(candidate.thread, candidate.title);
+        return candidate.titleKeyOverride ??
+                _titleKey(candidate.thread, candidate.title);
+    }
+
+    String _candidateCreatorKey(_Candidate candidate)
+    {
+        return candidate.creatorKeyOverride ?? candidate.title.creatorKey;
     }
 
     String _candidateDisplayTitle(_Candidate candidate)
     {
-        return candidate.thread.board.kind == LibraryKind.novel
+        return candidate.displayTitleOverride ??
+                (candidate.thread.board.kind == LibraryKind.novel
                 ? candidate.title.novelDisplayTitle
-                : candidate.title.displayTitle;
+                : candidate.title.displayTitle);
     }
 }
 
 class _Candidate
 {
-    const _Candidate(this.thread, this.title);
+    const _Candidate(
+        this.thread,
+        this.title, {
+        this.titleKeyOverride,
+        this.displayTitleOverride,
+        this.creatorKeyOverride,
+    });
 
     final SourceThread thread;
     final StructuredTitle title;
+    final String? titleKeyOverride;
+    final String? displayTitleOverride;
+    final String? creatorKeyOverride;
 }
 
 class _NovelSerialVersion

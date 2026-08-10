@@ -1099,6 +1099,67 @@ void main()
         verify(() => searchRepository.loadNext(firstPage)).called(1);
     });
 
+    test('主页分类与方括号上下文一致的章节漫画会搜索完整作品', () async
+    {
+        final SourceThread entry = _thread(
+            571728,
+            '[水星的魔女] 【狸米狸粮食组】[官漫]'
+            '［波多ヒロ/HISADAKE(墨利恩航空）］'
+            '青春frontier 第6-2话',
+            typeName: '#水星的魔女',
+            author: '狸米狸粮食组',
+        );
+        final SourceThread older = _thread(
+            569113,
+            '【狸米狸粮食组】'
+            '［波多ヒロ/HISADAKE(墨利恩航空）］'
+            '水星的魔女 青春frontier 第5-4话',
+            typeName: '#水星的魔女',
+            author: '狸米狸粮食组',
+        );
+        final Work work = _standalone(entry);
+        final ForumSearchPage page = ForumSearchPage(
+            kind: LibraryKind.comic,
+            keyword: '青春frontier',
+            searchId: '571728',
+            sourceThreads: <SourceThread>[entry, older],
+            currentPage: 1,
+            totalPages: 1,
+        );
+        when(
+            () => libraryRepository.loadThread(
+                any(),
+                includeAllOriginalPosterPosts: true,
+                forceReload: false,
+            ),
+        ).thenAnswer((Invocation invocation) async
+        {
+            final SourceThread thread =
+                    invocation.positionalArguments.first as SourceThread;
+            return _emptyPage(_standalone(thread));
+        });
+        when(
+            () => searchRepository.search(
+                keyword: '青春frontier',
+                kind: LibraryKind.comic,
+            ),
+        ).thenAnswer((_) async => page);
+
+        final WorkIndexResult result = await coordinator.ensure(work);
+
+        expect(result.work.chapters, hasLength(2));
+        expect(
+            result.work.chapters.map((Chapter chapter) => chapter.sourceTid),
+            <int>[569113, 571728],
+        );
+        verify(
+            () => searchRepository.search(
+                keyword: '青春frontier',
+                kind: LibraryKind.comic,
+            ),
+        ).called(1);
+    });
+
     test('带空格副标题的长篇从不同章节入口复用完整持久索引', () async
     {
         final SourceThread chapter14 = _longComicThread(

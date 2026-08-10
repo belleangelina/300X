@@ -483,7 +483,8 @@ class WorkIndexCoordinator
             }
             if (searchCandidate != null &&
                     (_longFormClassifier.isExplicitLongComic(current) ||
-                            threadResolution.overrodeShort))
+                            threadResolution.overrodeShort ||
+                            _hasContextualComicSeriesEvidence(current)))
             {
                 final Work completeWork = _mergeWorks(<Work>[searchCandidate, current]);
                 final _LongComicResolution resolution =
@@ -1170,6 +1171,7 @@ class WorkIndexCoordinator
             return false;
         }
         return _longFormClassifier.isExplicitLongComic(work) ||
+                _hasContextualComicSeriesEvidence(work) ||
                 trustSeedUpdate &&
                         work.sourceThreads.length >= 2 &&
                         _workAggregator.hasStrongChapterMarker(work);
@@ -1183,13 +1185,46 @@ class WorkIndexCoordinator
     {
         if (work.kind == LibraryKind.comic)
         {
-            return overrodeShort || _longFormClassifier.isExplicitLongComic(work);
+            return overrodeShort ||
+                    _longFormClassifier.isExplicitLongComic(work) ||
+                    _hasContextualComicSeriesEvidence(work);
         }
         return work.sourceThreads.any(
             (SourceThread thread) =>
                     _titleNormalizer.analyze(thread.title).novelEdition ==
                     NovelEdition.book,
         );
+    }
+
+    bool _hasContextualComicSeriesEvidence(Work work)
+    {
+        if (work.kind != LibraryKind.comic ||
+                _longFormClassifier.isExplicitShortComic(work))
+        {
+            return false;
+        }
+        for (final SourceThread thread in work.sourceThreads)
+        {
+            if (!_titleNormalizer.analyze(thread.title).hasChapterMarker)
+            {
+                continue;
+            }
+            final Set<String> contexts = _titleNormalizer.leadingContextKeys(
+                thread.title,
+            );
+            for (final String typeName in <String>{
+                thread.typeName,
+                work.typeName,
+            })
+            {
+                final String typeKey = _titleNormalizer.analyze(typeName).titleKey;
+                if (typeKey.length >= 2 && contexts.contains(typeKey))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     Future<_LongComicResolution> _resolveLongComicDirectories(
