@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:x300/core/network/forum_client.dart';
+import 'package:x300/core/network/waf_challenge_solver.dart';
 import 'package:x300/core/storage/credential_store.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/data/auth_repository.dart';
@@ -38,7 +39,9 @@ class AppDependencies
 
     static Future<AppDependencies> create() async
     {
-        final ForumClient client = await ForumClient.create();
+        final ForumClient client = await ForumClient.create(
+            wafChallengeSolver: createPlatformWafChallengeSolver(),
+        );
         const CredentialStore credentialStore = SecureCredentialStore();
         final AuthRepository authRepository = AuthRepository(
             client,

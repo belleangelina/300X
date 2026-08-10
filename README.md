@@ -28,6 +28,10 @@
 
 产物统一位于 `build/releases/`。
 
+Linux 版使用系统 WebKitGTK 完成论坛要求的 JavaScript 安全验证。Ubuntu
+22.04 构建环境需要安装 `libwebkit2gtk-4.0-dev`，运行 Release bundle 需要
+系统提供 `libwebkit2gtk-4.0-37`。
+
 ## 声明
 
 - 本项目与百合会无官方关系。应用只读取登录用户本身有权访问的论坛内容。

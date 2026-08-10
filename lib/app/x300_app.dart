@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:x300/app/app_theme.dart';
+import 'package:x300/core/network/waf_challenge_solver.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/auth/presentation/login_page.dart';
@@ -52,13 +53,15 @@ class X300App extends ConsumerWidget
                 );
                 if (settings.useSystemTextScale)
                 {
-                    return content;
+                    return WafChallengeHost(child: content);
                 }
-                return MediaQuery(
-                    data: MediaQuery.of(context).copyWith(
-                        textScaler: TextScaler.noScaling,
+                return WafChallengeHost(
+                    child: MediaQuery(
+                        data: MediaQuery.of(context).copyWith(
+                            textScaler: TextScaler.noScaling,
+                        ),
+                        child: content,
                     ),
-                    child: content,
                 );
             },
             home: const AuthGate(),

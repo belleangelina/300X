@@ -4,10 +4,12 @@ import 'dart:typed_data';
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:x300/core/network/forum_exceptions.dart';
+import 'package:x300/core/network/waf_challenge_solver.dart';
 
 final Provider<ForumClient> forumClientProvider = Provider<ForumClient>(
     (Ref ref)
@@ -18,14 +20,23 @@ final Provider<ForumClient> forumClientProvider = Provider<ForumClient>(
 
 class ForumClient
 {
-    ForumClient._(this._dio, this.cookieJar);
+    ForumClient._(
+        this._dio,
+        this.cookieJar,
+        this._wafChallengeSolver,
+    );
 
     static final Uri baseUri = Uri.parse('https://bbs.yamibo.com/');
 
     final Dio _dio;
-    final PersistCookieJar cookieJar;
+    final CookieJar cookieJar;
+    final WafChallengeSolver? _wafChallengeSolver;
+    Future<void>? _pendingWafChallenge;
+    int _wafCookieGeneration = 0;
 
-    static Future<ForumClient> create() async
+    static Future<ForumClient> create({
+        WafChallengeSolver? wafChallengeSolver,
+    }) async
     {
         final Directory supportDirectory =
             await getApplicationSupportDirectory();
@@ -49,10 +60,7 @@ class ForumClient
                 maxRedirects: 8,
                 responseType: ResponseType.plain,
                 headers: const <String, String>{
-                    HttpHeaders.userAgentHeader:
-                        'Mozilla/5.0 (Linux; Android 13) '
-                        'AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36 '
-                        '300X/1.0',
+                    HttpHeaders.userAgentHeader: forumUserAgent,
                     HttpHeaders.acceptLanguageHeader:
                         'zh-CN,zh;q=0.9,zh-TW;q=0.8',
                 },
@@ -77,7 +85,18 @@ class ForumClient
         }
         dio.interceptors.add(CookieManager(cookieJar));
 
-        return ForumClient._(dio, cookieJar);
+        return ForumClient._(dio, cookieJar, wafChallengeSolver);
+    }
+
+    @visibleForTesting
+    factory ForumClient.forTesting(
+        Dio dio,
+        CookieJar cookieJar, {
+        WafChallengeSolver? wafChallengeSolver,
+    })
+    {
+        dio.interceptors.add(CookieManager(cookieJar));
+        return ForumClient._(dio, cookieJar, wafChallengeSolver);
     }
 
     Uri resolve(String location)
@@ -97,8 +116,10 @@ class ForumClient
             queryParameters,
         );
         DioException? lastError;
+        bool wafRecoveryAttempted = false;
+        final int wafCookieGeneration = _wafCookieGeneration;
 
-        for (int attempt = 0; attempt <= retryCount; attempt++)
+        for (int attempt = 0; attempt <= retryCount;)
         {
             try
             {
@@ -117,12 +138,22 @@ class ForumClient
             on DioException catch (error)
             {
                 lastError = error;
+                if (!wafRecoveryAttempted && _isWafChallenge(error))
+                {
+                    wafRecoveryAttempted = true;
+                    if (wafCookieGeneration == _wafCookieGeneration)
+                    {
+                        await _refreshWafCookie();
+                    }
+                    continue;
+                }
                 if (!_canRetry(error) || attempt == retryCount)
                 {
                     break;
                 }
+                attempt++;
                 await Future<void>.delayed(
-                    Duration(milliseconds: 350 * (attempt + 1)),
+                    Duration(milliseconds: 350 * attempt),
                 );
             }
         }
@@ -140,6 +171,7 @@ class ForumClient
     }) async
     {
         final Uri uri = _toUri(location);
+        final int wafCookieGeneration = _wafCookieGeneration;
         try
         {
             final Response<String> response = await _dio.postUri<String>(
@@ -186,6 +218,16 @@ class ForumClient
         }
         on DioException catch (error)
         {
+            if (_isWafChallenge(error))
+            {
+                if (wafCookieGeneration == _wafCookieGeneration)
+                {
+                    await _refreshWafCookie();
+                }
+                throw const ForumConnectionException(
+                    '论坛安全验证已更新，请重新提交',
+                );
+            }
             final int? statusCode = error.response?.statusCode;
             throw ForumConnectionException(
                 statusCode == null
@@ -200,27 +242,41 @@ class ForumClient
         String? referer,
     }) async
     {
-        try
+        bool wafRecoveryAttempted = false;
+        final int wafCookieGeneration = _wafCookieGeneration;
+        while (true)
         {
-            final Response<List<int>> response =
-                await _dio.getUri<List<int>>(
-                    _toUri(location),
-                    options: Options(
-                        responseType: ResponseType.bytes,
-                        headers: referer == null
-                            ? null
-                            : <String, String>{
-                                HttpHeaders.refererHeader: referer,
-                            },
-                    ),
+            try
+            {
+                final Response<List<int>> response =
+                    await _dio.getUri<List<int>>(
+                        _toUri(location),
+                        options: Options(
+                            responseType: ResponseType.bytes,
+                            headers: referer == null
+                                ? null
+                                : <String, String>{
+                                    HttpHeaders.refererHeader: referer,
+                                },
+                        ),
+                    );
+                return Uint8List.fromList(response.data ?? const <int>[]);
+            }
+            on DioException catch (error)
+            {
+                if (!wafRecoveryAttempted && _isWafChallenge(error))
+                {
+                    wafRecoveryAttempted = true;
+                    if (wafCookieGeneration == _wafCookieGeneration)
+                    {
+                        await _refreshWafCookie();
+                    }
+                    continue;
+                }
+                throw ForumConnectionException(
+                    error.message ?? '加载论坛图片失败',
                 );
-            return Uint8List.fromList(response.data ?? const <int>[]);
-        }
-        on DioException catch (error)
-        {
-            throw ForumConnectionException(
-                error.message ?? '加载论坛图片失败',
-            );
+            }
         }
     }
 
@@ -234,9 +290,108 @@ class ForumClient
         return cookieJar.loadForRequest(baseUri);
     }
 
-    Future<void> importCookies(List<Cookie> cookies)
+    Future<void> importCookies(List<Cookie> cookies) async
     {
-        return cookieJar.saveFromResponse(baseUri, cookies);
+        final List<Cookie> regularCookies = <Cookie>[];
+        Cookie? wafCookie;
+        for (final Cookie cookie in cookies)
+        {
+            if (cookie.name == 'nox_jst_v1')
+            {
+                wafCookie = cookie;
+            }
+            else
+            {
+                regularCookies.add(cookie);
+            }
+        }
+        await cookieJar.saveFromResponse(baseUri, regularCookies);
+        if (wafCookie != null)
+        {
+            await _replaceWafCookie(
+                value: wafCookie.value,
+                path: wafCookie.path ?? '/',
+                expires: wafCookie.expires ?? DateTime.now().toUtc().add(
+                    const Duration(minutes: 30),
+                ),
+            );
+        }
+    }
+
+    Future<void> _refreshWafCookie()
+    {
+        final Future<void>? pending = _pendingWafChallenge;
+        if (pending != null)
+        {
+            return pending;
+        }
+        final Future<void> challenge = _solveAndImportWafCookie();
+        _pendingWafChallenge = challenge;
+        return challenge.whenComplete(()
+        {
+            if (identical(_pendingWafChallenge, challenge))
+            {
+                _pendingWafChallenge = null;
+            }
+        });
+    }
+
+    Future<void> _solveAndImportWafCookie() async
+    {
+        final WafChallengeSolver? solver = _wafChallengeSolver;
+        if (solver == null)
+        {
+            throw const ForumConnectionException('当前平台不支持论坛安全验证');
+        }
+        try
+        {
+            final WafChallengeCookie result = await solver.solve(baseUri);
+            await _replaceWafCookie(
+                value: result.value,
+                path: result.path,
+                expires: result.expires,
+            );
+            _wafCookieGeneration++;
+        }
+        on WafChallengeException catch (error)
+        {
+            throw ForumConnectionException(error.message);
+        }
+    }
+
+    Future<void> _replaceWafCookie({
+        required String value,
+        required String path,
+        required DateTime expires,
+    }) async
+    {
+        final String cookiePath = path.isEmpty ? '/' : path;
+        final DateTime expired = DateTime.fromMillisecondsSinceEpoch(
+            0,
+            isUtc: true,
+        );
+        final Cookie expiredHostCookie = Cookie('nox_jst_v1', '')
+            ..path = cookiePath
+            ..expires = expired
+            ..secure = true;
+        await cookieJar.saveFromResponse(
+            baseUri,
+            <Cookie>[expiredHostCookie],
+        );
+        final Cookie expiredDomainCookie = Cookie('nox_jst_v1', '')
+            ..domain = baseUri.host
+            ..path = cookiePath
+            ..expires = expired
+            ..secure = true;
+        await cookieJar.saveFromResponse(
+            baseUri,
+            <Cookie>[expiredDomainCookie],
+        );
+        final Cookie cookie = Cookie('nox_jst_v1', value)
+            ..path = cookiePath
+            ..expires = expires
+            ..secure = true;
+        await cookieJar.saveFromResponse(baseUri, <Cookie>[cookie]);
     }
 
     Uri _toUri(Object location)
@@ -271,5 +426,22 @@ class ForumClient
             error.type == DioExceptionType.connectionTimeout ||
             error.type == DioExceptionType.receiveTimeout ||
             error.type == DioExceptionType.unknown;
+    }
+
+    bool _isWafChallenge(DioException error)
+    {
+        if (error.response?.statusCode != HttpStatus.methodNotAllowed)
+        {
+            return false;
+        }
+        final String server = error.response?.headers.value('server') ?? '';
+        if (server.toUpperCase().contains('BAIDU_WAF'))
+        {
+            return true;
+        }
+        final Object? data = error.response?.data;
+        return data is String &&
+            data.contains('__noxExpire') &&
+            data.contains('nox_');
     }
 }

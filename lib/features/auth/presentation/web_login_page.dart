@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:x300/core/network/forum_client.dart';
+import 'package:x300/core/network/waf_challenge_solver.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/data/auth_repository.dart';
 import 'package:x300/shared/presentation/app_snack_bar.dart';
@@ -124,6 +125,7 @@ class _WebLoginPageState extends ConsumerState<WebLoginPage>
     Future<void> _prepare() async
     {
         final ForumClient client = ref.read(forumClientProvider);
+        await _controller.setUserAgent(forumUserAgent);
         await _cookieManager.clearCookies();
         final List<Cookie> cookies = await client.exportCookies();
         for (final Cookie cookie in cookies)

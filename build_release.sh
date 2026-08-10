@@ -261,6 +261,8 @@ configure_linux()
     fi
     pkg-config --exists 'libsecret-1 >= 0.18.4' ||
         fail 'Linux Release 构建需要 libsecret-1 开发文件'
+    pkg-config --exists 'webkit2gtk-4.0 >= 2.20' ||
+        fail 'Linux Release 构建需要 webkit2gtk-4.0 开发文件'
 }
 
 configure_ios()
@@ -474,6 +476,8 @@ do
             linux_bundle="$PROJECT_DIR/build/linux/$linux_arch/release/bundle"
             [[ -x "$linux_bundle/$LINUX_BINARY_NAME" ]] ||
                 fail "找不到 Linux Release bundle：$linux_bundle"
+            [[ -x "$linux_bundle/${LINUX_BINARY_NAME}_waf_challenge" ]] ||
+                fail "Linux Release 缺少论坛安全验证组件：$linux_bundle"
             ;;
         ios)
             if ! (
