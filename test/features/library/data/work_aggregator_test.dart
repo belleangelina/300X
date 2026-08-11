@@ -162,6 +162,33 @@ void main()
         );
     });
 
+    test('四段方括号互证按分类分区且不受离群帖影响', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            _thread(150, '[发布组][作者甲][互证作品][第1话]', typeId: 69),
+            _thread(151, '[发布组][作者甲][互证作品][第2话]', typeId: 69),
+            _thread(152, '[发布组][作者甲][互证作品][第3话]', typeId: 69),
+            _thread(153, '[发布组][作者甲][互证作品][第4话]', typeId: 398),
+        ]);
+
+        expect(works, hasLength(2));
+        final Work grouped = works.singleWhere(
+            (Work work) => work.sourceThreads.length == 3,
+        );
+        expect(grouped.title, '互证作品');
+        expect(
+            grouped.chapters.map((Chapter chapter) => chapter.sourceTid),
+            <int>[150, 151, 152],
+        );
+        expect(
+            works.singleWhere((Work work) => work.sourceThreads.length == 1)
+                    .sourceThreads
+                    .single
+                    .tid,
+            153,
+        );
+    });
+
     test('四段方括号候选缺少多帖或分类互证时不生效', ()
     {
         final List<Work> works = aggregator.aggregate(<SourceThread>[

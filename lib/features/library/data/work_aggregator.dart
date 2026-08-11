@@ -818,21 +818,20 @@ class WorkAggregator
         final Map<int, _Candidate> confirmed = <int, _Candidate>{};
         for (final List<_Candidate> group in groups.values)
         {
-            final Set<int> typeIds = group
-                    .map((_Candidate candidate) => candidate.thread.typeId)
-                    .whereType<int>()
-                    .toSet();
-            final Set<double> chapterOrders = group
-                    .map((_Candidate candidate) => candidate.title.chapterOrder)
-                    .whereType<double>()
-                    .toSet();
-            if (group.length < 2 || typeIds.length > 1 || chapterOrders.length < 2)
+            for (final List<_Candidate> typeGroup in _partitionByType(group))
             {
-                continue;
-            }
-            for (final _Candidate candidate in group)
-            {
-                confirmed[candidate.thread.tid] = candidate;
+                final Set<double> chapterOrders = typeGroup
+                        .map((_Candidate candidate) => candidate.title.chapterOrder)
+                        .whereType<double>()
+                        .toSet();
+                if (typeGroup.length < 2 || chapterOrders.length < 2)
+                {
+                    continue;
+                }
+                for (final _Candidate candidate in typeGroup)
+                {
+                    confirmed[candidate.thread.tid] = candidate;
+                }
             }
         }
         if (confirmed.isEmpty)
