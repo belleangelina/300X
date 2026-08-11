@@ -209,6 +209,7 @@ class ForumThreadParser
     )
     {
         final List<ThreadLink> result = <ThreadLink>[];
+        final Map<dom.Element, int> linkIndexes = <dom.Element, int>{};
         final Set<String> seen = <String>{};
         for (final dom.Element anchor in message.querySelectorAll('a[href]'))
         {
@@ -236,6 +237,7 @@ class ForumThreadParser
                     result.add(
                         ThreadLink(label: label, uri: uri, kind: ThreadLinkKind.directory),
                     );
+                    linkIndexes[anchor] = result.length - 1;
                 }
                 continue;
             }
@@ -270,11 +272,55 @@ class ForumThreadParser
                     pid: pid,
                 ),
             );
+            linkIndexes[anchor] = result.length - 1;
         }
         return _restoreGroupedChapterLabels(
             result,
-            normalizeForumText(message.text),
+            _groupedChapterText(message, linkIndexes),
         );
+    }
+
+    String _groupedChapterText(
+        dom.Element message,
+        Map<dom.Element, int> linkIndexes,
+    )
+    {
+        final StringBuffer result = StringBuffer();
+
+        void visit(dom.Node node)
+        {
+            if (node is dom.Text)
+            {
+                result.write(node.data);
+                return;
+            }
+            if (node is! dom.Element || _isExcludedLink(node, message))
+            {
+                return;
+            }
+            final String label = normalizeForumText(node.text);
+            final int? linkIndex = linkIndexes[node];
+            if (linkIndex != null && RegExp(r'^\d{1,4}$').hasMatch(label))
+            {
+                result.write(' \ue000$linkIndex:$label\ue001 ');
+                return;
+            }
+            if (node.localName == 'br' || node.localName == 'hr')
+            {
+                result.write(' ');
+                return;
+            }
+            for (final dom.Node child in node.nodes)
+            {
+                visit(child);
+            }
+        }
+
+        for (final dom.Node node in message.nodes)
+        {
+            visit(node);
+        }
+        return normalizeForumText(result.toString());
     }
 
     List<ThreadLink> _restoreGroupedChapterLabels(
@@ -282,67 +328,36 @@ class ForumThreadParser
         String messageText,
     )
     {
-        final List<int> bareLinkIndexes = <int>[
-            for (int index = 0; index < links.length; index++)
-                if (links[index].kind == ThreadLinkKind.related &&
-                        RegExp(r'^\d{1,4}$').hasMatch(links[index].label))
-                    index,
-        ];
-        if (bareLinkIndexes.isEmpty)
-        {
-            return links;
-        }
-
-        final List<({String part, String label})> groupedLabels =
-                <({String part, String label})>[];
         final RegExp groupPattern = RegExp(
             r'(\d+(?:\.\d+)?)\s*(话|話|章|回|节|節)\s*[（(]\s*'
-            r'([\d\s、,，/／]+)\s*[）)]',
+            r'([^）)]*)\s*[）)]',
         );
+        final RegExp linkPattern = RegExp(
+            '\ue000(\\d+):(\\d{1,4})\ue001',
+        );
+        List<ThreadLink>? restored;
         for (final Match group in groupPattern.allMatches(messageText))
         {
-            final List<String> parts = RegExp(r'\d+')
-                    .allMatches(group.group(3)!)
-                    .map((Match match) => match.group(0)!)
-                    .toList(growable: false);
-            if (parts.length < 2)
+            for (final Match marker in linkPattern.allMatches(group.group(3)!))
             {
-                continue;
-            }
-            for (final String part in parts)
-            {
-                groupedLabels.add((
-                    part: part,
+                final int linkIndex = int.parse(marker.group(1)!);
+                final String part = marker.group(2)!;
+                if (linkIndex >= links.length || links[linkIndex].label != part)
+                {
+                    continue;
+                }
+                restored ??= List<ThreadLink>.of(links);
+                final ThreadLink link = links[linkIndex];
+                restored[linkIndex] = ThreadLink(
                     label: '${group.group(1)}${group.group(2)}其$part',
-                ));
+                    uri: link.uri,
+                    kind: ThreadLinkKind.chapter,
+                    tid: link.tid,
+                    pid: link.pid,
+                );
             }
         }
-        if (groupedLabels.length != bareLinkIndexes.length)
-        {
-            return links;
-        }
-        for (int index = 0; index < bareLinkIndexes.length; index++)
-        {
-            if (links[bareLinkIndexes[index]].label != groupedLabels[index].part)
-            {
-                return links;
-            }
-        }
-
-        final List<ThreadLink> restored = List<ThreadLink>.of(links);
-        for (int index = 0; index < bareLinkIndexes.length; index++)
-        {
-            final int linkIndex = bareLinkIndexes[index];
-            final ThreadLink link = links[linkIndex];
-            restored[linkIndex] = ThreadLink(
-                label: groupedLabels[index].label,
-                uri: link.uri,
-                kind: ThreadLinkKind.chapter,
-                tid: link.tid,
-                pid: link.pid,
-            );
-        }
-        return restored;
+        return restored ?? links;
     }
 
     bool _isExcludedLink(dom.Element anchor, dom.Element message)

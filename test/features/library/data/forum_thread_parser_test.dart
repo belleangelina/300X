@@ -221,6 +221,43 @@ void main()
         );
     });
 
+    test('目录紧邻的 pid 裸分段链接继承外层话数', ()
+    {
+        const String html = '''
+                        <html>
+                        <body id="forum" class="pg_viewthread">
+                                <div class="view_tit">测试漫画 第10话其2</div>
+                                <div class="plc cl" id="pid100">
+                                        <ul class="authi">
+                                                <li class="mtit"><span class="y">1楼</span><span class="z"><a>楼主</a></span></li>
+                                        </ul>
+                                        <div class="message">
+                                                本作目录<br />
+                                                9话（<a href="forum.php?mod=redirect&amp;goto=findpost&amp;ptid=203&amp;pid=1003">1</a><a href="forum.php?mod=redirect&amp;goto=findpost&amp;ptid=204&amp;pid=1004">2</a>）
+                                                10话（<a href="forum.php?mod=redirect&amp;goto=findpost&amp;ptid=205&amp;pid=1005">1</a>2）
+                                        </div>
+                                </div>
+                        </body>
+                        </html>
+                ''';
+
+        final ForumThreadPage page = parser.parse(html, pageUri, ForumBoard.comic);
+        final List<ThreadLink> links = page.originalPost!.links;
+
+        expect(
+            links.map((ThreadLink link) => link.label),
+            <String>['9话其1', '9话其2', '10话其1'],
+        );
+        expect(
+            links.map((ThreadLink link) => link.kind),
+            everyElement(ThreadLinkKind.chapter),
+        );
+        expect(
+            links.map((ThreadLink link) => link.pid),
+            <int>[1003, 1004, 1005],
+        );
+    });
+
     test('忽略论坛错误包裹的数据图片占位符', ()
     {
         const String html = '''
