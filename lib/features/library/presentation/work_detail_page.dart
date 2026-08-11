@@ -1123,7 +1123,7 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
             return compactVisibleCount;
         }
         final int columnCount = ((width - 24) ~/ 150).clamp(3, 6);
-        final int rowCount = ((height - 360) ~/ 50).clamp(5, 12);
+        final int rowCount = ((height - 360) ~/ 50).clamp(5, 24);
         final int adaptiveVisibleCount = columnCount * rowCount;
         return adaptiveVisibleCount > compactVisibleCount
                 ? adaptiveVisibleCount

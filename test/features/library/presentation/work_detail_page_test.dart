@@ -238,6 +238,37 @@ void main()
         expect(find.text('展开全部 20 话'), findsNothing);
     });
 
+    testWidgets('高竖屏平板目录在有界范围内继续利用高度', (
+        WidgetTester tester,
+    ) async
+    {
+        tester.view.physicalSize = const Size(834, 1194);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        work = _workWithChapterCount(80);
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                    forumLibraryRepositoryProvider.overrideWithValue(libraryRepository),
+                    coverRepositoryProvider.overrideWithValue(coverRepository),
+                    forumFavoriteRepositoryProvider.overrideWithValue(favoriteRepository),
+                    readingHistoryRepositoryProvider.overrideWithValue(historyRepository),
+                    workIndexCoordinatorProvider.overrideWithValue(indexCoordinator),
+                ],
+                child: MaterialApp(home: WorkDetailPage(work: work)),
+            ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('第80话'), findsOneWidget);
+        expect(find.text('展开全部 80 话'), findsNothing);
+    });
+
     testWidgets('从目录点具体章节从头阅读而续读入口恢复进度', (
         WidgetTester tester,
     ) async
