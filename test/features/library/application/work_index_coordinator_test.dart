@@ -659,6 +659,34 @@ void main()
         );
     });
 
+    test('合并同一来源时保留互补的分类编号和名称', ()
+    {
+        final Work selected = _standalone(
+            _thread(
+                607,
+                '[轻小说] 分类互补 第一卷',
+                board: ForumBoard.lightNovel,
+                typeName: '#轻小说',
+            ),
+        );
+        final Work next = _standalone(
+            _thread(
+                607,
+                '[轻小说] 分类互补 第一卷',
+                board: ForumBoard.lightNovel,
+                typeId: 700,
+            ),
+        );
+
+        final Work matched = coordinator.findMatchingWork(
+            selected,
+            <Work>[next],
+        )!;
+
+        expect(matched.sourceThreads.single.typeId, 700);
+        expect(matched.sourceThreads.single.typeName, '#轻小说');
+    });
+
     test('主动搜索中的相邻卷号主题与显式卷号一起展开', () async
     {
         final List<Work> candidates = <SourceThread>[
@@ -1983,6 +2011,39 @@ void main()
                 keyword: any(named: 'keyword'),
                 kind: any(named: 'kind'),
             ),
+        );
+    });
+
+    test('主动搜索刷新同话一个分段时保留其它分段', () async
+    {
+        final Work oldWork = aggregator.aggregate(<SourceThread>[
+            _thread(521, '分段刷新 第1话其之1'),
+            _thread(522, '分段刷新 第1话其之2'),
+            _thread(523, '分段刷新 第2话'),
+        ]).single;
+        final Work newWork = aggregator.aggregate(<SourceThread>[
+            _thread(531, '分段刷新 第1话其之1'),
+            _thread(533, '分段刷新 第2话'),
+        ]).single;
+        final String canonicalKey = aggregator.canonicalKeyForWork(oldWork)!;
+        await indexRepository.save(canonicalKey: canonicalKey, work: oldWork);
+        when(
+            () => libraryRepository.loadThread(
+                any(),
+                includeAllOriginalPosterPosts: true,
+                forceReload: true,
+            ),
+        ).thenAnswer((_) async => _emptyPage(newWork));
+
+        final WorkIndexResult result = await coordinator.rebuildFromActiveSearch(
+            newWork,
+        );
+
+        expect(
+            result.work.chapters
+                    .map((Chapter chapter) => chapter.sourceTid)
+                    .toSet(),
+            <int>{531, 522, 533},
         );
     });
 }

@@ -239,6 +239,26 @@ class TitleNormalizer
             }
         }
 
+        final Match? actChapter = hasChapterMarker
+                ? null
+                : RegExp(
+                    r'(第\s*([零〇一二三四五六七八九十百两兩\d]+)\s*幕)'
+                    r'(?:\s*[-—:：#]?\s*(.{1,48}))?\s*$',
+                ).firstMatch(working);
+        final double? actOrder = actChapter == null
+                ? null
+                : _numberOrder(actChapter.group(2)!);
+        if (actChapter != null && actOrder != null)
+        {
+            chapterLabel = _chapterLabel(
+                actChapter.group(1)!,
+                actChapter.group(3),
+            );
+            chapterOrder = actOrder;
+            hasChapterMarker = true;
+            working = working.substring(0, actChapter.start).trim();
+        }
+
         final Match? numericChapter = hasChapterMarker
                 ? null
                 : RegExp(
@@ -679,6 +699,9 @@ class TitleNormalizer
             if (_isCreatorMarker(marker))
             {
                 authorMarker = _creatorKey(marker);
+            } else if (_isLeadingCompletionMetadata(marker, remainder))
+            {
+                // 作品名前的完结状态不是作者信息。
             } else if (!_isReleaseTag(marker) && !bracket.hasMatch(remainder))
             {
                 authorMarker = _keyText(marker);
@@ -687,6 +710,13 @@ class TitleNormalizer
                 final Match? next = bracket.firstMatch(remainder);
                 if (next != null &&
                         _isWrappedWorkTitle(
+                            _metadataMarker(next),
+                            remainder.substring(next.end).trim(),
+                        ))
+                {
+                    authorMarker = _keyText(marker);
+                } else if (next != null &&
+                        _isLeadingCompletionMetadata(
                             _metadataMarker(next),
                             remainder.substring(next.end).trim(),
                         ))
@@ -715,10 +745,20 @@ class TitleNormalizer
             r'(?:第\s*)?[零〇一二三四五六七八九十百两兩\d]+(?:\.\d+)?'
             r'(?:\s*(?:-|~|～|—|–|至)\s*(?:第\s*)?\d+(?:\.\d+)?)?'
             r'\s*(?:话|話|章|回|节|節)(?:\s*[-—:：#]?\s*.{1,48})?|'
+            r'第\s*[零〇一二三四五六七八九十百两兩\d]+\s*幕'
+            r'(?:\s*[-—:：#]?\s*.{1,48})?|'
             r'(?:第\s*)?[零〇一二三四五六七八九十百两兩\d]+\s*卷|'
             r'vol(?:ume)?\.?\s*\d+)\s*$',
             caseSensitive: false,
         ).hasMatch(suffix);
+    }
+
+    bool _isLeadingCompletionMetadata(String marker, String remainder)
+    {
+        return RegExp(
+                    r'^(?:最终话|最終話|终话|終話|终章|終章|最终回|最終回)$',
+                ).hasMatch(normalizeForumText(marker)) &&
+                _hasOwnTitleBeforeChapter(remainder);
     }
 
     bool _hasOwnTitleBeforeChapter(String value)

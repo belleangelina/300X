@@ -117,6 +117,106 @@ void main()
         );
     });
 
+    test('四段方括号数字章节经多帖互证后聚合', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            _thread(
+                238988,
+                '[天轻漫画组]【鍵空とみやき】[Happy Sugar Life][001]',
+            ),
+            _thread(
+                240222,
+                '[天轻漫画组][鍵空とみやき][Happy Sugar Life][第5话]',
+            ),
+            _thread(
+                508873,
+                '[天轻X片羽][鍵空とみやき][Happy Sugar Life][第47话]',
+            ),
+            _thread(
+                509659,
+                '[天轻X片羽][鍵空とみやき][Happy Sugar Life][第48话]完',
+            ),
+            _thread(
+                477413,
+                '[天轻X片羽][鍵空とみやき][Happy Sugar Life][插曲A]',
+            ),
+        ]);
+
+        expect(works, hasLength(2));
+        final Work main = works.firstWhere(
+            (Work work) => work.sourceThreads.length == 4,
+        );
+        expect(main.title, 'Happy Sugar Life');
+        expect(
+            main.chapters.map((Chapter chapter) => chapter.title),
+            <String>['001', '第5话', '第47话', '第48话'],
+        );
+        expect(
+            aggregator.canonicalKeyForWork(main),
+            contains('author=鍵空とみやき'),
+        );
+        expect(aggregator.hasStrongChapterMarker(main), isTrue);
+        expect(
+            works.singleWhere((Work work) => work.sourceThreads.length == 1).title,
+            '[天轻X片羽][鍵空とみやき][Happy Sugar Life][插曲A]',
+        );
+    });
+
+    test('四段方括号互证按分类分区且不受离群帖影响', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            _thread(150, '[发布组][作者甲][互证作品][第1话]', typeId: 69),
+            _thread(151, '[发布组][作者甲][互证作品][第2话]', typeId: 69),
+            _thread(152, '[发布组][作者甲][互证作品][第3话]', typeId: 69),
+            _thread(153, '[发布组][作者甲][互证作品][第4话]', typeId: 398),
+        ]);
+
+        expect(works, hasLength(2));
+        final Work grouped = works.singleWhere(
+            (Work work) => work.sourceThreads.length == 3,
+        );
+        expect(grouped.title, '互证作品');
+        expect(
+            grouped.chapters.map((Chapter chapter) => chapter.sourceTid),
+            <int>[150, 151, 152],
+        );
+        expect(
+            works.singleWhere((Work work) => work.sourceThreads.length == 1)
+                    .sourceThreads
+                    .single
+                    .tid,
+            153,
+        );
+    });
+
+    test('四段方括号候选缺少多帖或分类互证时不生效', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            _thread(100, '[发布组][作者甲][孤立作品][第1话]'),
+            _thread(101, '[发布组][作者乙][分类冲突][第1话]', typeId: 65),
+            _thread(102, '[发布组][作者乙][分类冲突][第2话]', typeId: 66),
+            _thread(105, '[发布组][作者丁][重复话作品][第1话]'),
+            _thread(106, '[发布组][作者丁][重复话作品][第1话]'),
+            _thread(103, '[汉化][作者丙]正常作品 第1话'),
+            _thread(104, '[汉化][作者丙]正常作品 第2话'),
+        ]);
+
+        expect(works, hasLength(6));
+        final Work existing = works.singleWhere(
+            (Work work) => work.title == '正常作品',
+        );
+        expect(
+            existing.chapters.map((Chapter chapter) => chapter.title),
+            <String>['第1话', '第2话'],
+        );
+        final Work isolated = works.singleWhere(
+            (Work work) => work.sourceThreads.length == 1 &&
+                    work.sourceThreads.single.tid == 100,
+        );
+        expect(isolated.title, '[发布组][作者甲][孤立作品][第1话]');
+        expect(isolated.chapters.single.title, '正文');
+    });
+
     test('缺少括号前缀证据、创作者不同或分类冲突时不执行兼容合并', ()
     {
         final List<Work> missingEvidence = aggregator.aggregate(<SourceThread>[
@@ -192,6 +292,83 @@ void main()
             <double?>[1, 6, 12],
         );
         expect(works.single.directories, hasLength(2));
+    });
+
+    test('括号内旧标题经多帖互证并入后续标题', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            _thread(
+                239999,
+                '[百合會挖坑組][江島絵理]'
+                '少女決戦オルギア（少女決戰Orgia） 第1話',
+            ),
+            _thread(
+                241927,
+                '[百合會挖坑組][江島絵理]'
+                '少女決戦オルギア（少女決戰Orgia） 第2話',
+            ),
+            for (int chapter = 3; chapter <= 11; chapter++)
+                _thread(
+                    508700 + chapter,
+                    '[祐希堂][江島絵理]少女決戰Orgia 第$chapter話',
+                ),
+            for (int chapter = 12; chapter <= 13; chapter++)
+                _thread(
+                    549400 + chapter,
+                    '[祐希堂百合组][一清二白汉化组][江島絵理]'
+                    '少女決戰Orgia 第$chapter話',
+                ),
+            for (int chapter = 14; chapter <= 18; chapter++)
+                _thread(
+                    552000 + chapter,
+                    '[祐希堂百合组][一青二白汉化组][江島絵理]'
+                    '少女決戰Orgia 第$chapter話',
+                ),
+            _thread(
+                555870,
+                '[祐希堂百合组][一青二白汉化组][江島絵理]'
+                '[最终话]少女決戰Orgia 第19話',
+            ),
+        ]);
+
+        expect(works, hasLength(1));
+        expect(works.single.title, '少女決戰Orgia');
+        expect(works.single.chapters, hasLength(19));
+        expect(
+            works.single.chapters.map((Chapter chapter) => chapter.order),
+            <double>[
+                for (int chapter = 1; chapter <= 19; chapter++) chapter.toDouble(),
+            ],
+        );
+
+        final List<Work> insufficientEvidence = aggregator.aggregate(<SourceThread>[
+            _thread(600, '[作者甲]旧标题（新标题） 第1话'),
+            _thread(601, '[作者甲]新标题 第2话'),
+            _thread(602, '[作者甲]新标题 第3话'),
+        ]);
+        expect(insufficientEvidence, hasLength(2));
+    });
+
+    test('话和明确的第N幕聚合为同一作品', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            for (int chapter = 1; chapter <= 13; chapter++)
+                _thread(
+                    561600 + chapter,
+                    '【茅森月歌吧汉化委员会】[中村汚濁]'
+                    '圣少女默示录 DEATHPAIR 第$chapter话 标题',
+                ),
+            for (int chapter = 14; chapter <= 16; chapter++)
+                _thread(
+                    574700 + chapter,
+                    '【受祝福的因果律协会汉化组】[中村汚濁]'
+                    '圣少女默示录 DEATHPAIR 第$chapter幕 标题',
+                ),
+        ]);
+
+        expect(works, hasLength(1));
+        expect(works.single.title, '圣少女默示录 DEATHPAIR');
+        expect(works.single.chapters, hasLength(16));
     });
 
     test('连字符和小数分段跨来源按相同逻辑话数聚合', ()

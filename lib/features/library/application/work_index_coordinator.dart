@@ -4,6 +4,7 @@ import 'dart:isolate';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:x300/features/library/data/chapter_resolver.dart';
 import 'package:x300/features/library/data/forum_library_repository.dart';
+import 'package:x300/features/library/data/forum_parse_utils.dart';
 import 'package:x300/features/library/data/long_form_classifier.dart';
 import 'package:x300/features/library/data/title_normalizer.dart';
 import 'package:x300/features/library/data/work_aggregator.dart';
@@ -1975,29 +1976,54 @@ class WorkIndexCoordinator
     List<Chapter> _mergeChapterVersions(List<List<Chapter>> versions)
     {
         final Map<String, Chapter> chapters = <String, Chapter>{};
-        final Map<double, Set<String>> numericChapterKeys = <double, Set<String>>{};
+        final Map<double, Map<String, Set<String>>> numericChapterKeys =
+                <double, Map<String, Set<String>>>{};
         for (final List<Chapter> version in versions)
         {
-            final Set<double> currentOrders = version
-                    .where(
-                        (Chapter chapter) =>
-                                chapter.sourcePid == null &&
-                                chapter.order != null &&
-                                chapter.order! < 800000,
-                    )
-                    .map((Chapter chapter) => chapter.order!)
-                    .toSet();
-            for (final double order in currentOrders)
+            final Map<double, Set<String>> currentVariants =
+                    <double, Set<String>>{};
+            for (final Chapter chapter in version.where(
+                (Chapter chapter) =>
+                        chapter.sourcePid == null &&
+                        chapter.order != null &&
+                        chapter.order! < 800000,
+            ))
             {
-                final Set<String>? previousKeys = numericChapterKeys[order];
-                if (previousKeys != null)
+                currentVariants
+                        .putIfAbsent(chapter.order!, () => <String>{})
+                        .add(_numericChapterVariant(chapter));
+            }
+            for (final MapEntry<double, Set<String>> current
+                    in currentVariants.entries)
+            {
+                final Map<String, Set<String>> previous = numericChapterKeys
+                        .putIfAbsent(current.key, () => <String, Set<String>>{});
+                final Iterable<Set<String>> replaced = current.value.contains('main')
+                        ? previous.values
+                        : <Set<String>>[
+                            if (previous['main'] != null) previous['main']!,
+                            ...current.value
+                                    .map((String variant) => previous[variant])
+                                    .whereType<Set<String>>(),
+                        ];
+                for (final Set<String> previousKeys in replaced)
                 {
                     for (final String key in previousKeys)
                     {
                         chapters.remove(key);
                     }
                 }
-                numericChapterKeys[order] = <String>{};
+                if (current.value.contains('main'))
+                {
+                    previous.clear();
+                } else
+                {
+                    previous.remove('main');
+                    for (final String variant in current.value)
+                    {
+                        previous.remove(variant);
+                    }
+                }
             }
             for (final Chapter chapter in version)
             {
@@ -2005,7 +2031,12 @@ class WorkIndexCoordinator
                 final double? order = chapter.order;
                 if (chapter.sourcePid == null && order != null && order < 800000)
                 {
-                    numericChapterKeys[order]!.add(key);
+                    numericChapterKeys[order]!
+                            .putIfAbsent(
+                                _numericChapterVariant(chapter),
+                                () => <String>{},
+                            )
+                            .add(key);
                 }
                 chapters[key] = chapter;
             }
@@ -2092,15 +2123,36 @@ class WorkIndexCoordinator
 
     SourceThread _preferSourceThread(SourceThread current, SourceThread next)
     {
-        if (current.typeId != null && next.typeId == null)
+        final bool preferCurrent =
+                current.typeId != null && next.typeId == null ||
+                current.typeName.isNotEmpty && next.typeName.isEmpty;
+        final SourceThread preferred = preferCurrent ? current : next;
+        final SourceThread alternate = preferCurrent ? next : current;
+        final int? typeId = preferred.typeId ?? alternate.typeId;
+        final String typeName = preferred.typeName.isEmpty
+                ? alternate.typeName
+                : preferred.typeName;
+        if (typeId == preferred.typeId && typeName == preferred.typeName)
         {
-            return current;
+            return preferred;
         }
-        if (current.typeName.isNotEmpty && next.typeName.isEmpty)
-        {
-            return current;
-        }
-        return next;
+        return SourceThread(
+            tid: preferred.tid,
+            board: preferred.board,
+            typeId: typeId,
+            typeName: typeName,
+            title: preferred.title,
+            summary: preferred.summary,
+            author: preferred.author,
+            avatarUri: preferred.avatarUri,
+            timeLabel: preferred.timeLabel,
+            postedAt: preferred.postedAt,
+            views: preferred.views,
+            replies: preferred.replies,
+            pinned: preferred.pinned,
+            administrative: preferred.administrative,
+            uri: preferred.uri,
+        );
     }
 
     int _compareChapters(Chapter left, Chapter right)
@@ -2196,6 +2248,16 @@ class WorkIndexCoordinator
                 : ':${chapter.sourceStartBlock ?? 0}:'
                         '${chapter.sourceEndBlock ?? -1}';
         return '${chapter.sourceTid}:${chapter.sourcePid ?? 0}$blockRange';
+    }
+
+    String _numericChapterVariant(Chapter chapter)
+    {
+        final Match? part = RegExp(
+            r'(?:其(?:之|の)|part|pt\.?)\s*'
+            r'([零〇一二三四五六七八九十百两兩\d]+)\s*$',
+            caseSensitive: false,
+        ).firstMatch(normalizeForumText(chapter.title));
+        return part == null ? 'main' : 'part:${part.group(1)!.toLowerCase()}';
     }
 
     String _taskKey(Work work)

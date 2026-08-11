@@ -171,6 +171,39 @@ void main()
         expect(title.chapterLabel, '第12话 Kakukuroi汉化组');
     });
 
+    test('作品名前的最终话标记不覆盖作者', ()
+    {
+        final StructuredTitle title = normalizer.analyze(
+            '[祐希堂百合组][一青二白汉化组][江島絵理]'
+            '[最终话]少女決戰Orgia 第19話',
+        );
+
+        expect(title.displayTitle, '少女決戰Orgia');
+        expect(title.creatorKey, '江島絵理');
+        expect(title.chapterOrder, 19);
+
+        final StructuredTitle wrappedTitle = normalizer.analyze('[最终话]第1话');
+        expect(wrappedTitle.displayTitle, '最终话');
+        expect(wrappedTitle.creatorKey, isEmpty);
+        expect(wrappedTitle.chapterOrder, 1);
+    });
+
+    test('明确的第N幕作为章节且裸幕编号不扩展识别', ()
+    {
+        final StructuredTitle numeric = normalizer.analyze(
+            '[中村汚濁]圣少女默示录 DEATHPAIR 第16幕 与救世者一起',
+        );
+        final StructuredTitle chinese = normalizer.analyze('测试作品 第十六幕 标题');
+        final StructuredTitle bare = normalizer.analyze('测试作品 16幕 标题');
+
+        expect(numeric.displayTitle, '圣少女默示录 DEATHPAIR');
+        expect(numeric.chapterLabel, '第16幕 与救世者一起');
+        expect(numeric.chapterOrder, 16);
+        expect(chinese.displayTitle, '测试作品');
+        expect(chinese.chapterOrder, 16);
+        expect(bare.hasChapterMarker, isFalse);
+    });
+
     test('括号后只有章节号时仍把括号内容视为作品名', ()
     {
         final StructuredTitle title = normalizer.analyze('【作品名】第12话');

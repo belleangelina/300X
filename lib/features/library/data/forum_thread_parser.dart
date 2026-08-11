@@ -209,6 +209,7 @@ class ForumThreadParser
     )
     {
         final List<ThreadLink> result = <ThreadLink>[];
+        final Map<dom.Element, int> linkIndexes = <dom.Element, int>{};
         final Set<String> seen = <String>{};
         for (final dom.Element anchor in message.querySelectorAll('a[href]'))
         {
@@ -236,6 +237,7 @@ class ForumThreadParser
                     result.add(
                         ThreadLink(label: label, uri: uri, kind: ThreadLinkKind.directory),
                     );
+                    linkIndexes[anchor] = result.length - 1;
                 }
                 continue;
             }
@@ -270,8 +272,109 @@ class ForumThreadParser
                     pid: pid,
                 ),
             );
+            linkIndexes[anchor] = result.length - 1;
         }
-        return result;
+        return _restoreGroupedChapterLabels(
+            result,
+            _groupedChapterText(message, linkIndexes),
+        );
+    }
+
+    String _groupedChapterText(
+        dom.Element message,
+        Map<dom.Element, int> linkIndexes,
+    )
+    {
+        final StringBuffer result = StringBuffer();
+
+        void visit(dom.Node node)
+        {
+            if (node is dom.Text)
+            {
+                result.write(node.data);
+                return;
+            }
+            if (node is! dom.Element || _isExcludedLink(node, message))
+            {
+                return;
+            }
+            final String label = normalizeForumText(node.text);
+            final int? linkIndex = linkIndexes[node];
+            if (linkIndex != null && RegExp(r'^\d{1,4}$').hasMatch(label))
+            {
+                result.write(' \ue000$linkIndex:$label\ue001 ');
+                return;
+            }
+            if (node.localName == 'br' || node.localName == 'hr')
+            {
+                result.write(' ');
+                return;
+            }
+            for (final dom.Node child in node.nodes)
+            {
+                visit(child);
+            }
+        }
+
+        for (final dom.Node node in message.nodes)
+        {
+            visit(node);
+        }
+        return normalizeForumText(result.toString());
+    }
+
+    List<ThreadLink> _restoreGroupedChapterLabels(
+        List<ThreadLink> links,
+        String messageText,
+    )
+    {
+        final RegExp groupPattern = RegExp(
+            r'(\d+(?:\.\d+)?)\s*(话|話|章|回|节|節)\s*[（(]\s*'
+            r'([^）)]*)\s*[）)]',
+        );
+        final RegExp linkPattern = RegExp(
+            '\ue000(\\d+):(\\d{1,4})\ue001',
+        );
+        List<ThreadLink>? restored;
+        for (final Match group in groupPattern.allMatches(messageText))
+        {
+            final String content = group.group(3)!.replaceAllMapped(
+                linkPattern,
+                (Match marker) => ' ${marker.group(2)} ',
+            );
+            final List<String> parts = content
+                    .split(RegExp(r'[\s、,，/／]+'))
+                    .where((String value) => value.isNotEmpty)
+                    .toList(growable: false);
+            bool isSequential = parts.length >= 2;
+            for (int index = 0; isSequential && index < parts.length; index++)
+            {
+                isSequential = parts[index] == '${index + 1}';
+            }
+            if (!isSequential)
+            {
+                continue;
+            }
+            for (final Match marker in linkPattern.allMatches(group.group(3)!))
+            {
+                final int linkIndex = int.parse(marker.group(1)!);
+                final String part = marker.group(2)!;
+                if (linkIndex >= links.length || links[linkIndex].label != part)
+                {
+                    continue;
+                }
+                restored ??= List<ThreadLink>.of(links);
+                final ThreadLink link = links[linkIndex];
+                restored[linkIndex] = ThreadLink(
+                    label: '${group.group(1)}${group.group(2)}其$part',
+                    uri: link.uri,
+                    kind: ThreadLinkKind.chapter,
+                    tid: link.tid,
+                    pid: link.pid,
+                );
+            }
+        }
+        return restored ?? links;
     }
 
     bool _isExcludedLink(dom.Element anchor, dom.Element message)
@@ -325,7 +428,7 @@ class ForumThreadParser
         }
         if (pid != null ||
                 RegExp(
-                    r'(第\s*[零〇一二三四五六七八九十百两兩\d]+\s*(?:话|話|章|回|节|節|卷)|\d+(?:\.\d+)?\s*(?:话|話|章|回|节|節|卷)|ch(?:apter)?\.?\s*\d|序章|终章|終章|最终|最終|番外|特典|附录|附錄)',
+                    r'(第\s*[零〇一二三四五六七八九十百两兩\d]+\s*(?:话|話|章|回|节|節|卷|幕)|\d+(?:\.\d+)?\s*(?:话|話|章|回|节|節|卷)|ch(?:apter)?\.?\s*\d|序章|终章|終章|最终|最終|番外|特典|附录|附錄)',
                     caseSensitive: false,
                 ).hasMatch(label))
         {
