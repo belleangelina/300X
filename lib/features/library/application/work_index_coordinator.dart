@@ -2252,12 +2252,27 @@ class WorkIndexCoordinator
 
     String _numericChapterVariant(Chapter chapter)
     {
+        final String normalizedTitle = normalizeForumText(chapter.title);
         final Match? part = RegExp(
             r'(?:其(?:之|の)|part|pt\.?)\s*'
             r'([零〇一二三四五六七八九十百两兩\d]+)\s*$',
             caseSensitive: false,
-        ).firstMatch(normalizeForumText(chapter.title));
-        return part == null ? 'main' : 'part:${part.group(1)!.toLowerCase()}';
+        ).firstMatch(normalizedTitle);
+        if (part != null)
+        {
+            return 'part:${part.group(1)!.toLowerCase()}';
+        }
+        final Match? namedPart = RegExp(
+            r'(?:话|話|章|回|节|節)\s*[（(]?\s*'
+            r'(前|后|後|上|中|下)(?:篇|編)(?=\s|[（()）]|$)',
+        ).firstMatch(normalizedTitle);
+        return switch (namedPart?.group(1))
+        {
+            '前' || '上' => 'part:front',
+            '中' => 'part:middle',
+            '后' || '後' || '下' => 'part:back',
+            _ => 'main',
+        };
     }
 
     String _taskKey(Work work)

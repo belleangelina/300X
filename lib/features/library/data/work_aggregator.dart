@@ -977,7 +977,8 @@ class WorkAggregator
                         _isBracketPrefixAlias(source, target);
                 if (!bracketPrefixAlias &&
                         !_isUnclosedCreatorBracketAlias(source, target) &&
-                        !_isParenthesizedTitleAlias(source, target))
+                        !_isParenthesizedTitleAlias(source, target) &&
+                        !_isSlashTitleAlias(source, target))
                 {
                     continue;
                 }
@@ -1141,6 +1142,54 @@ class WorkAggregator
         });
     }
 
+    bool _isSlashTitleAlias(
+        List<_Candidate> source,
+        List<_Candidate> target,
+    )
+    {
+        if (source.length < 2 ||
+                target.length < 2 ||
+                source.any(
+                    (_Candidate candidate) =>
+                            candidate.thread.board.kind != LibraryKind.comic ||
+                            !candidate.title.hasChapterMarker,
+                ) ||
+                target.any(
+                    (_Candidate candidate) =>
+                            candidate.thread.board.kind != LibraryKind.comic ||
+                            !candidate.title.hasChapterMarker,
+                ) ||
+                !_hasMultipleChapterOrders(source) ||
+                !_hasMultipleChapterOrders(target) ||
+                !_hasCompatibleTypeIds(source, target) ||
+                !_hasAdjacentChapterCoverage(source, target))
+        {
+            return false;
+        }
+        final Set<String> sourceCreators = _creatorKeys(source);
+        final Set<String> targetCreators = _creatorKeys(target);
+        if (sourceCreators.length != 1 ||
+                targetCreators.length != 1 ||
+                sourceCreators.single != targetCreators.single)
+        {
+            return false;
+        }
+        final String targetKey = _candidateTitleKey(target.first);
+        if (targetKey.length < 4)
+        {
+            return false;
+        }
+        return source.every((_Candidate candidate)
+        {
+            final List<String> aliases = _candidateDisplayTitle(candidate)
+                    .split(RegExp(r'[/／]'))
+                    .map((String value) => _normalizer.analyze(value).titleKey)
+                    .where((String value) => value == targetKey)
+                    .toList(growable: false);
+            return aliases.length == 1;
+        });
+    }
+
     bool _hasMultipleChapterOrders(List<_Candidate> candidates)
     {
         final Set<double> orders = candidates
@@ -1148,6 +1197,32 @@ class WorkAggregator
                 .whereType<double>()
                 .toSet();
         return orders.length >= 2;
+    }
+
+    bool _hasAdjacentChapterCoverage(
+        List<_Candidate> left,
+        List<_Candidate> right,
+    )
+    {
+        final Set<double> leftOrders = left
+                .map((_Candidate candidate) => candidate.title.chapterOrder)
+                .whereType<double>()
+                .where((double order) => order < 800000)
+                .toSet();
+        final Set<double> rightOrders = right
+                .map((_Candidate candidate) => candidate.title.chapterOrder)
+                .whereType<double>()
+                .where((double order) => order < 800000)
+                .toSet();
+        if (leftOrders.length < 2 || rightOrders.length < 2)
+        {
+            return false;
+        }
+        return leftOrders.any(
+            (double leftOrder) => rightOrders.any(
+                (double rightOrder) => (leftOrder - rightOrder).abs() <= 1,
+            ),
+        );
     }
 
     bool _hasCompatibleTypeIds(
@@ -1310,14 +1385,30 @@ class WorkAggregator
 
     String _numberedChapterKey(double order, String title)
     {
+        final String normalizedTitle = normalizeForumText(title);
         final Match? part = RegExp(
             r'(?:其(?:之|の)|part|pt\.?)\s*'
             r'([零〇一二三四五六七八九十百两兩\d]+)\s*$',
             caseSensitive: false,
-        ).firstMatch(normalizeForumText(title));
-        return part == null
+        ).firstMatch(normalizedTitle);
+        if (part != null)
+        {
+            return 'main:$order:part:${part.group(1)!.toLowerCase()}';
+        }
+        final Match? namedPart = RegExp(
+            r'(?:话|話|章|回|节|節)\s*[（(]?\s*'
+            r'(前|后|後|上|中|下)(?:篇|編)(?=\s|[（()）]|$)',
+        ).firstMatch(normalizedTitle);
+        final String? namedPartKey = switch (namedPart?.group(1))
+        {
+            '前' || '上' => 'front',
+            '中' => 'middle',
+            '后' || '後' || '下' => 'back',
+            _ => null,
+        };
+        return namedPartKey == null
                 ? 'main:$order'
-                : 'main:$order:part:${part.group(1)!.toLowerCase()}';
+                : 'main:$order:part:$namedPartKey';
     }
 
     int _compareChapters(Chapter left, Chapter right)

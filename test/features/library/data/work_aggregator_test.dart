@@ -349,6 +349,63 @@ void main()
         expect(insufficientEvidence, hasLength(2));
     });
 
+    test('斜杠并列标题经多帖互证并入单一标题并保留前后篇', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            for (int chapter = 1; chapter <= 6; chapter++)
+                _thread(
+                    527000 + chapter,
+                    '[あらた伊里]也无风雨也无晴/雨でも晴れでも '
+                    '第$chapter话',
+                ),
+            _thread(527007, '[あらた伊里]也无风雨也无晴/雨でも晴れでも 第7话前篇'),
+            _thread(527008, '[あらた伊里]也无风雨也无晴/雨でも晴れでも 第7话後篇'),
+            for (int chapter = 8; chapter <= 16; chapter++)
+                _thread(
+                    527010 + chapter,
+                    '[あらた伊里]也无风雨也无晴/雨でも晴れでも '
+                    '第$chapter话',
+                ),
+            _thread(527284, '[あらた伊里]也无风雨也无晴 16话后篇'),
+            _thread(527285, '[あらた伊里]也无风雨也无晴 17话'),
+            _thread(527287, '[あらた伊里]也无风雨也无晴 18话前篇'),
+            _thread(527288, '[あらた伊里]也无风雨也无晴 18话后篇'),
+            _thread(527325, '[あらた伊里]也无风雨也无晴 19话（完结）'),
+        ]);
+
+        expect(works, hasLength(1));
+        expect(works.single.title, '也无风雨也无晴');
+        expect(works.single.chapters, hasLength(22));
+        expect(
+            works.single.chapters
+                    .where((Chapter chapter) => chapter.order == 7)
+                    .map((Chapter chapter) => chapter.sourceTid)
+                    .toSet(),
+            <int>{527007, 527008},
+        );
+        expect(
+            works.single.chapters
+                    .where((Chapter chapter) => chapter.order == 18)
+                    .map((Chapter chapter) => chapter.sourceTid)
+                    .toSet(),
+            <int>{527287, 527288},
+        );
+
+        final List<Work> insufficientEvidence = aggregator.aggregate(<SourceThread>[
+            _thread(600, '[作者甲]旧标题/新标题 第1话'),
+            _thread(601, '[作者甲]新标题 第2话'),
+            _thread(602, '[作者甲]新标题 第3话'),
+        ]);
+        final List<Work> separatedRanges = aggregator.aggregate(<SourceThread>[
+            _thread(610, '[作者甲]作品甲/作品乙 第1话'),
+            _thread(611, '[作者甲]作品甲/作品乙 第2话'),
+            _thread(620, '[作者甲]作品乙 第10话'),
+            _thread(621, '[作者甲]作品乙 第11话'),
+        ]);
+        expect(insufficientEvidence, hasLength(2));
+        expect(separatedRanges, hasLength(2));
+    });
+
     test('话和明确的第N幕聚合为同一作品', ()
     {
         final List<Work> works = aggregator.aggregate(<SourceThread>[

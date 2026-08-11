@@ -2046,6 +2046,39 @@ void main()
             <int>{531, 522, 533},
         );
     });
+
+    test('主动搜索刷新前篇时保留同话后篇', () async
+    {
+        final Work oldWork = aggregator.aggregate(<SourceThread>[
+            _thread(541, '分段刷新 第1话前篇'),
+            _thread(542, '分段刷新 第1话后篇'),
+            _thread(543, '分段刷新 第2话'),
+        ]).single;
+        final Work newWork = aggregator.aggregate(<SourceThread>[
+            _thread(551, '分段刷新 第1话前篇'),
+            _thread(553, '分段刷新 第2话'),
+        ]).single;
+        final String canonicalKey = aggregator.canonicalKeyForWork(oldWork)!;
+        await indexRepository.save(canonicalKey: canonicalKey, work: oldWork);
+        when(
+            () => libraryRepository.loadThread(
+                any(),
+                includeAllOriginalPosterPosts: true,
+                forceReload: true,
+            ),
+        ).thenAnswer((_) async => _emptyPage(newWork));
+
+        final WorkIndexResult result = await coordinator.rebuildFromActiveSearch(
+            newWork,
+        );
+
+        expect(
+            result.work.chapters
+                    .map((Chapter chapter) => chapter.sourceTid)
+                    .toSet(),
+            <int>{551, 542, 553},
+        );
+    });
 }
 
 SourceThread _thread(
