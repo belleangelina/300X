@@ -258,6 +258,39 @@ void main()
         );
     });
 
+    test('普通正文说明和单个数字链接不误判为分段目录', ()
+    {
+        const String html = '''
+                        <html>
+                        <body id="forum" class="pg_viewthread">
+                                <div class="view_tit">测试漫画 第7话</div>
+                                <div class="plc cl" id="pid100">
+                                        <ul class="authi">
+                                                <li class="mtit"><span class="y">1楼</span><span class="z"><a>楼主</a></span></li>
+                                        </ul>
+                                        <div class="message">
+                                                第5话（参见<a href="thread-205-1-1.html">1</a>页）
+                                                第6话（<a href="thread-206-1-1.html">1</a>）
+                                                第7话（<a href="thread-207-1-1.html">1</a> 3）
+                                        </div>
+                                </div>
+                        </body>
+                        </html>
+                ''';
+
+        final ForumThreadPage page = parser.parse(html, pageUri, ForumBoard.comic);
+        final List<ThreadLink> links = page.originalPost!.links;
+
+        expect(
+            links.map((ThreadLink link) => link.label),
+            <String>['1', '1', '1'],
+        );
+        expect(
+            links.map((ThreadLink link) => link.kind),
+            everyElement(ThreadLinkKind.related),
+        );
+    });
+
     test('忽略论坛错误包裹的数据图片占位符', ()
     {
         const String html = '''

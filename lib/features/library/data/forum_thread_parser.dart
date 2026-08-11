@@ -338,6 +338,23 @@ class ForumThreadParser
         List<ThreadLink>? restored;
         for (final Match group in groupPattern.allMatches(messageText))
         {
+            final String content = group.group(3)!.replaceAllMapped(
+                linkPattern,
+                (Match marker) => ' ${marker.group(2)} ',
+            );
+            final List<String> parts = content
+                    .split(RegExp(r'[\s、,，/／]+'))
+                    .where((String value) => value.isNotEmpty)
+                    .toList(growable: false);
+            bool isSequential = parts.length >= 2;
+            for (int index = 0; isSequential && index < parts.length; index++)
+            {
+                isSequential = parts[index] == '${index + 1}';
+            }
+            if (!isSequential)
+            {
+                continue;
+            }
             for (final Match marker in linkPattern.allMatches(group.group(3)!))
             {
                 final int linkIndex = int.parse(marker.group(1)!);

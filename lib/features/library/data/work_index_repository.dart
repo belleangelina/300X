@@ -24,7 +24,7 @@ class WorkIndexRecord
 
 class WorkIndexRepository
 {
-    static const int currentResolverVersion = 23;
+    static const int currentResolverVersion = 24;
 
     WorkIndexRepository(this._database, [this._workCodec = const WorkCodec()]);
 
