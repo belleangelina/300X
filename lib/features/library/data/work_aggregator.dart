@@ -8,6 +8,21 @@ import 'package:x300/features/library/domain/library_models.dart';
 
 class WorkAggregator
 {
+    static final RegExp _bracketedFieldPattern = RegExp(
+        r'^\s*(?:\[([^\]]{1,60})\]|【([^】]{1,60})】)\s*',
+    );
+    static final RegExp _completionPattern = RegExp(
+        r'^(?:完|完结|完結|end)?$',
+        caseSensitive: false,
+    );
+    static final RegExp _explicitBracketedChapterPattern = RegExp(
+        r'^(?:第\s*)?0*[1-9]\d{0,3}\s*(?:话|話|章|回|节|節)$',
+        caseSensitive: false,
+    );
+    static final RegExp _bareBracketedChapterPattern = RegExp(
+        r'^0*[1-9]\d{0,2}$',
+    );
+
     const WorkAggregator([
         this._normalizer = const TitleNormalizer(),
         this._longFormClassifier = const LongFormClassifier(),
@@ -39,13 +54,7 @@ class WorkAggregator
                     : canonicalKeyForThread(work.sourceThreads.first);
         }
         final List<_Candidate> candidates = _withBracketPrefixAliases(
-            work.sourceThreads
-                    .map(
-                        (SourceThread thread) => _Candidate(
-                            thread,
-                            _normalizer.analyze(thread.title),
-                        ),
-                    )
+            _candidatesForThreads(work.sourceThreads)
                     .where(
                         (_Candidate value) =>
                                 _candidateTitleKey(value).isNotEmpty,
@@ -62,9 +71,8 @@ class WorkAggregator
 
     bool hasStrongChapterMarker(Work work)
     {
-        return work.sourceThreads.any(
-            (SourceThread thread) =>
-                    _normalizer.analyze(thread.title).hasChapterMarker,
+        return _candidatesForThreads(work.sourceThreads).any(
+            (_Candidate candidate) => candidate.title.hasChapterMarker,
         );
     }
 
@@ -518,14 +526,14 @@ class WorkAggregator
         final Map<String, List<_Candidate>> coarseGroups =
                 <String, List<_Candidate>>{};
 
-        for (final SourceThread thread in sourceThreads)
+        for (final _Candidate candidate in _candidatesForThreads(sourceThreads))
         {
+            final SourceThread thread = candidate.thread;
             if (thread.administrative)
             {
                 continue;
             }
-            final StructuredTitle title = _normalizer.analyze(thread.title);
-            final _Candidate candidate = _Candidate(thread, title);
+            final StructuredTitle title = candidate.title;
             final bool novelEditionRoot =
                     thread.board.kind == LibraryKind.novel && title.novelEdition != null;
             if (_longFormClassifier.isExplicitShortComicThread(thread) ||
@@ -772,6 +780,111 @@ class WorkAggregator
             return false;
         }
         return candidate.thread.tid > current.thread.tid;
+    }
+
+    List<_Candidate> _candidatesForThreads(Iterable<SourceThread> sourceThreads)
+    {
+        final List<_Candidate> candidates = sourceThreads
+                .map(
+                    (SourceThread thread) => _Candidate(
+                        thread,
+                        _normalizer.analyze(thread.title),
+                    ),
+                )
+                .toList(growable: false);
+        final Map<String, List<_Candidate>> groups =
+                <String, List<_Candidate>>{};
+        for (final _Candidate candidate in candidates)
+        {
+            if (candidate.thread.administrative ||
+                    candidate.thread.board.kind != LibraryKind.comic ||
+                    candidate.title.hasChapterMarker ||
+                    _longFormClassifier.isExplicitShortComicThread(candidate.thread))
+            {
+                continue;
+            }
+            final StructuredTitle? inferred = _bracketedChapterTitle(
+                candidate.thread.title,
+            );
+            if (inferred == null)
+            {
+                continue;
+            }
+            final String key = '${inferred.titleKey}\u0000${inferred.creatorKey}';
+            groups
+                    .putIfAbsent(key, () => <_Candidate>[])
+                    .add(_Candidate(candidate.thread, inferred));
+        }
+        final Map<int, _Candidate> confirmed = <int, _Candidate>{};
+        for (final List<_Candidate> group in groups.values)
+        {
+            final Set<int> typeIds = group
+                    .map((_Candidate candidate) => candidate.thread.typeId)
+                    .whereType<int>()
+                    .toSet();
+            final Set<double> chapterOrders = group
+                    .map((_Candidate candidate) => candidate.title.chapterOrder)
+                    .whereType<double>()
+                    .toSet();
+            if (group.length < 2 || typeIds.length > 1 || chapterOrders.length < 2)
+            {
+                continue;
+            }
+            for (final _Candidate candidate in group)
+            {
+                confirmed[candidate.thread.tid] = candidate;
+            }
+        }
+        if (confirmed.isEmpty)
+        {
+            return candidates;
+        }
+        return candidates
+                .map(
+                    (_Candidate candidate) =>
+                            confirmed[candidate.thread.tid] ?? candidate,
+                )
+                .toList(growable: false);
+    }
+
+    StructuredTitle? _bracketedChapterTitle(String original)
+    {
+        String remaining = normalizeForumText(original);
+        final List<String> fields = <String>[];
+        for (int index = 0; index < 4; index++)
+        {
+            final Match? match = _bracketedFieldPattern.firstMatch(remaining);
+            if (match == null)
+            {
+                return null;
+            }
+            fields.add(normalizeForumText(match.group(1) ?? match.group(2)!));
+            remaining = remaining.substring(match.end).trim();
+        }
+        if (!_completionPattern.hasMatch(remaining))
+        {
+            return null;
+        }
+        final String creator = fields[1];
+        final String workTitle = fields[2];
+        final String chapter = fields[3];
+        if (creator.length < 2 || creator.length > 30 || workTitle.length < 2)
+        {
+            return null;
+        }
+        if (!_explicitBracketedChapterPattern.hasMatch(chapter) &&
+                !_bareBracketedChapterPattern.hasMatch(chapter))
+        {
+            return null;
+        }
+        final StructuredTitle inferred = _normalizer.analyze(
+            '($creator) $workTitle $chapter',
+        );
+        return inferred.hasChapterMarker &&
+                    inferred.chapterOrder != null &&
+                    inferred.creatorKey.isNotEmpty
+                ? inferred
+                : null;
     }
 
     List<List<_Candidate>> _partitionCompatible(List<_Candidate> candidates)
@@ -1032,13 +1145,7 @@ class WorkAggregator
     _WorkIdentity? _identityForWork(Work work)
     {
         final List<_Candidate> candidates = _withBracketPrefixAliases(
-            work.sourceThreads
-                    .map(
-                        (SourceThread thread) => _Candidate(
-                            thread,
-                            _normalizer.analyze(thread.title),
-                        ),
-                    )
+            _candidatesForThreads(work.sourceThreads)
                     .where(
                         (_Candidate value) =>
                                 _candidateTitleKey(value).isNotEmpty,

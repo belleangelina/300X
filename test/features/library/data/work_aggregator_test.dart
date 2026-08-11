@@ -117,6 +117,79 @@ void main()
         );
     });
 
+    test('四段方括号数字章节经多帖互证后聚合', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            _thread(
+                238988,
+                '[天轻漫画组]【鍵空とみやき】[Happy Sugar Life][001]',
+            ),
+            _thread(
+                240222,
+                '[天轻漫画组][鍵空とみやき][Happy Sugar Life][第5话]',
+            ),
+            _thread(
+                508873,
+                '[天轻X片羽][鍵空とみやき][Happy Sugar Life][第47话]',
+            ),
+            _thread(
+                509659,
+                '[天轻X片羽][鍵空とみやき][Happy Sugar Life][第48话]完',
+            ),
+            _thread(
+                477413,
+                '[天轻X片羽][鍵空とみやき][Happy Sugar Life][插曲A]',
+            ),
+        ]);
+
+        expect(works, hasLength(2));
+        final Work main = works.firstWhere(
+            (Work work) => work.sourceThreads.length == 4,
+        );
+        expect(main.title, 'Happy Sugar Life');
+        expect(
+            main.chapters.map((Chapter chapter) => chapter.title),
+            <String>['001', '第5话', '第47话', '第48话'],
+        );
+        expect(
+            aggregator.canonicalKeyForWork(main),
+            contains('author=鍵空とみやき'),
+        );
+        expect(aggregator.hasStrongChapterMarker(main), isTrue);
+        expect(
+            works.singleWhere((Work work) => work.sourceThreads.length == 1).title,
+            '[天轻X片羽][鍵空とみやき][Happy Sugar Life][插曲A]',
+        );
+    });
+
+    test('四段方括号候选缺少多帖或分类互证时不生效', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            _thread(100, '[发布组][作者甲][孤立作品][第1话]'),
+            _thread(101, '[发布组][作者乙][分类冲突][第1话]', typeId: 65),
+            _thread(102, '[发布组][作者乙][分类冲突][第2话]', typeId: 66),
+            _thread(105, '[发布组][作者丁][重复话作品][第1话]'),
+            _thread(106, '[发布组][作者丁][重复话作品][第1话]'),
+            _thread(103, '[汉化][作者丙]正常作品 第1话'),
+            _thread(104, '[汉化][作者丙]正常作品 第2话'),
+        ]);
+
+        expect(works, hasLength(6));
+        final Work existing = works.singleWhere(
+            (Work work) => work.title == '正常作品',
+        );
+        expect(
+            existing.chapters.map((Chapter chapter) => chapter.title),
+            <String>['第1话', '第2话'],
+        );
+        final Work isolated = works.singleWhere(
+            (Work work) => work.sourceThreads.length == 1 &&
+                    work.sourceThreads.single.tid == 100,
+        );
+        expect(isolated.title, '[发布组][作者甲][孤立作品][第1话]');
+        expect(isolated.chapters.single.title, '正文');
+    });
+
     test('缺少括号前缀证据、创作者不同或分类冲突时不执行兼容合并', ()
     {
         final List<Work> missingEvidence = aggregator.aggregate(<SourceThread>[
