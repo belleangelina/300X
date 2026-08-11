@@ -239,6 +239,26 @@ class TitleNormalizer
             }
         }
 
+        final Match? actChapter = hasChapterMarker
+                ? null
+                : RegExp(
+                    r'(第\s*([零〇一二三四五六七八九十百两兩\d]+)\s*幕)'
+                    r'(?:\s*[-—:：#]?\s*(.{1,48}))?\s*$',
+                ).firstMatch(working);
+        final double? actOrder = actChapter == null
+                ? null
+                : _numberOrder(actChapter.group(2)!);
+        if (actChapter != null && actOrder != null)
+        {
+            chapterLabel = _chapterLabel(
+                actChapter.group(1)!,
+                actChapter.group(3),
+            );
+            chapterOrder = actOrder;
+            hasChapterMarker = true;
+            working = working.substring(0, actChapter.start).trim();
+        }
+
         final Match? numericChapter = hasChapterMarker
                 ? null
                 : RegExp(
@@ -725,6 +745,8 @@ class TitleNormalizer
             r'(?:第\s*)?[零〇一二三四五六七八九十百两兩\d]+(?:\.\d+)?'
             r'(?:\s*(?:-|~|～|—|–|至)\s*(?:第\s*)?\d+(?:\.\d+)?)?'
             r'\s*(?:话|話|章|回|节|節)(?:\s*[-—:：#]?\s*.{1,48})?|'
+            r'第\s*[零〇一二三四五六七八九十百两兩\d]+\s*幕'
+            r'(?:\s*[-—:：#]?\s*.{1,48})?|'
             r'(?:第\s*)?[零〇一二三四五六七八九十百两兩\d]+\s*卷|'
             r'vol(?:ume)?\.?\s*\d+)\s*$',
             caseSensitive: false,

@@ -349,6 +349,28 @@ void main()
         expect(insufficientEvidence, hasLength(2));
     });
 
+    test('话和明确的第N幕聚合为同一作品', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            for (int chapter = 1; chapter <= 13; chapter++)
+                _thread(
+                    561600 + chapter,
+                    '【茅森月歌吧汉化委员会】[中村汚濁]'
+                    '圣少女默示录 DEATHPAIR 第$chapter话 标题',
+                ),
+            for (int chapter = 14; chapter <= 16; chapter++)
+                _thread(
+                    574700 + chapter,
+                    '【受祝福的因果律协会汉化组】[中村汚濁]'
+                    '圣少女默示录 DEATHPAIR 第$chapter幕 标题',
+                ),
+        ]);
+
+        expect(works, hasLength(1));
+        expect(works.single.title, '圣少女默示录 DEATHPAIR');
+        expect(works.single.chapters, hasLength(16));
+    });
+
     test('连字符和小数分段跨来源按相同逻辑话数聚合', ()
     {
         final Work work = aggregator.aggregate(<SourceThread>[

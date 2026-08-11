@@ -181,6 +181,33 @@ void main()
         expect(page.originalPost!.links.single.kind, ThreadLinkKind.chapter);
     });
 
+    test('明确的第N幕链接识别为章节', ()
+    {
+        const String html = '''
+                        <html>
+                        <body id="forum" class="pg_viewthread">
+                                <div class="view_tit">测试作品 第3幕</div>
+                                <div class="plc cl" id="pid100">
+                                        <ul class="authi">
+                                                <li class="mtit"><span class="y">1楼</span><span class="z"><a>楼主</a></span></li>
+                                        </ul>
+                                        <div class="message">
+                                                <a href="thread-201-1-1.html">第一幕</a>
+                                                <a href="thread-202-1-1.html">第二幕</a>
+                                        </div>
+                                </div>
+                        </body>
+                        </html>
+                ''';
+
+        final ForumThreadPage page = parser.parse(html, pageUri, ForumBoard.comic);
+
+        expect(
+            page.originalPost!.links.map((ThreadLink link) => link.kind),
+            everyElement(ThreadLinkKind.chapter),
+        );
+    });
+
     test('目录括号内的裸分段链接继承外层话数', ()
     {
         const String html = '''

@@ -16,7 +16,8 @@ class WorkAggregator
         caseSensitive: false,
     );
     static final RegExp _explicitBracketedChapterPattern = RegExp(
-        r'^(?:第\s*)?0*[1-9]\d{0,3}\s*(?:话|話|章|回|节|節)$',
+        r'^(?:(?:第\s*)?0*[1-9]\d{0,3}\s*(?:话|話|章|回|节|節)|'
+        r'第\s*0*[1-9]\d{0,3}\s*幕)$',
         caseSensitive: false,
     );
     static final RegExp _bareBracketedChapterPattern = RegExp(

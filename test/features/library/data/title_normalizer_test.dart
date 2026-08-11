@@ -188,6 +188,22 @@ void main()
         expect(wrappedTitle.chapterOrder, 1);
     });
 
+    test('明确的第N幕作为章节且裸幕编号不扩展识别', ()
+    {
+        final StructuredTitle numeric = normalizer.analyze(
+            '[中村汚濁]圣少女默示录 DEATHPAIR 第16幕 与救世者一起',
+        );
+        final StructuredTitle chinese = normalizer.analyze('测试作品 第十六幕 标题');
+        final StructuredTitle bare = normalizer.analyze('测试作品 16幕 标题');
+
+        expect(numeric.displayTitle, '圣少女默示录 DEATHPAIR');
+        expect(numeric.chapterLabel, '第16幕 与救世者一起');
+        expect(numeric.chapterOrder, 16);
+        expect(chinese.displayTitle, '测试作品');
+        expect(chinese.chapterOrder, 16);
+        expect(bare.hasChapterMarker, isFalse);
+    });
+
     test('括号后只有章节号时仍把括号内容视为作品名', ()
     {
         final StructuredTitle title = normalizer.analyze('【作品名】第12话');

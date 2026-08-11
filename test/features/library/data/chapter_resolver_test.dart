@@ -42,6 +42,28 @@ void main()
         ]);
     });
 
+    test('相关链接簇中的第N幕形成漫画目录', ()
+    {
+        final Work work = _work(kind: LibraryKind.comic);
+        final ChapterResolution result = resolver.resolveWithEvidence(
+            work,
+            _page(<ThreadLink>[
+                _relatedLink('第一幕', 11),
+                _relatedLink('第二幕', 12),
+            ]),
+        );
+
+        expect(result.evidence, ChapterResolutionEvidence.inlineDirectory);
+        expect(result.chapters, hasLength(3));
+        expect(
+            result.chapters
+                    .take(2)
+                    .map((Chapter chapter) => chapter.order),
+            <double?>[1, 2],
+        );
+        expect(result.chapters.last.sourceTid, 10);
+    });
+
     test('只有上一章链接时按上一章、当前章排序', ()
     {
         final Work work = _work(kind: LibraryKind.comic);
