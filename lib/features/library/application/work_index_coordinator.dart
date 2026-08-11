@@ -2123,15 +2123,36 @@ class WorkIndexCoordinator
 
     SourceThread _preferSourceThread(SourceThread current, SourceThread next)
     {
-        if (current.typeId != null && next.typeId == null)
+        final bool preferCurrent =
+                current.typeId != null && next.typeId == null ||
+                current.typeName.isNotEmpty && next.typeName.isEmpty;
+        final SourceThread preferred = preferCurrent ? current : next;
+        final SourceThread alternate = preferCurrent ? next : current;
+        final int? typeId = preferred.typeId ?? alternate.typeId;
+        final String typeName = preferred.typeName.isEmpty
+                ? alternate.typeName
+                : preferred.typeName;
+        if (typeId == preferred.typeId && typeName == preferred.typeName)
         {
-            return current;
+            return preferred;
         }
-        if (current.typeName.isNotEmpty && next.typeName.isEmpty)
-        {
-            return current;
-        }
-        return next;
+        return SourceThread(
+            tid: preferred.tid,
+            board: preferred.board,
+            typeId: typeId,
+            typeName: typeName,
+            title: preferred.title,
+            summary: preferred.summary,
+            author: preferred.author,
+            avatarUri: preferred.avatarUri,
+            timeLabel: preferred.timeLabel,
+            postedAt: preferred.postedAt,
+            views: preferred.views,
+            replies: preferred.replies,
+            pinned: preferred.pinned,
+            administrative: preferred.administrative,
+            uri: preferred.uri,
+        );
     }
 
     int _compareChapters(Chapter left, Chapter right)

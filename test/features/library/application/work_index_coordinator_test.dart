@@ -659,6 +659,34 @@ void main()
         );
     });
 
+    test('合并同一来源时保留互补的分类编号和名称', ()
+    {
+        final Work selected = _standalone(
+            _thread(
+                607,
+                '[轻小说] 分类互补 第一卷',
+                board: ForumBoard.lightNovel,
+                typeName: '#轻小说',
+            ),
+        );
+        final Work next = _standalone(
+            _thread(
+                607,
+                '[轻小说] 分类互补 第一卷',
+                board: ForumBoard.lightNovel,
+                typeId: 700,
+            ),
+        );
+
+        final Work matched = coordinator.findMatchingWork(
+            selected,
+            <Work>[next],
+        )!;
+
+        expect(matched.sourceThreads.single.typeId, 700);
+        expect(matched.sourceThreads.single.typeName, '#轻小说');
+    });
+
     test('主动搜索中的相邻卷号主题与显式卷号一起展开', () async
     {
         final List<Work> candidates = <SourceThread>[
