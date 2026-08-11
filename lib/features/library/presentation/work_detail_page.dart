@@ -1118,7 +1118,7 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
     int _defaultVisibleChapterCount(double width, double height)
     {
         const int compactVisibleCount = 15;
-        if (!widget.embedded || _directoryView != _ChapterDirectoryView.grid)
+        if (width < 600 || _directoryView != _ChapterDirectoryView.grid)
         {
             return compactVisibleCount;
         }

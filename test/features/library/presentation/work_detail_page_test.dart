@@ -207,7 +207,7 @@ void main()
         expect(find.byTooltip('切换为正序'), findsOneWidget);
     });
 
-    testWidgets('平板详情栏按可用空间自动展开目录', (WidgetTester tester) async
+    testWidgets('竖屏平板全页详情按可用空间自动展开目录', (WidgetTester tester) async
     {
         tester.view.physicalSize = const Size(750, 800);
         tester.view.devicePixelRatio = 1;
@@ -228,7 +228,7 @@ void main()
                     workIndexCoordinatorProvider.overrideWithValue(indexCoordinator),
                 ],
                 child: MaterialApp(
-                    home: WorkDetailPage(work: work, embedded: true),
+                    home: WorkDetailPage(work: work),
                 ),
             ),
         );
