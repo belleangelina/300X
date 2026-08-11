@@ -294,6 +294,61 @@ void main()
         expect(works.single.directories, hasLength(2));
     });
 
+    test('括号内旧标题经多帖互证并入后续标题', ()
+    {
+        final List<Work> works = aggregator.aggregate(<SourceThread>[
+            _thread(
+                239999,
+                '[百合會挖坑組][江島絵理]'
+                '少女決戦オルギア（少女決戰Orgia） 第1話',
+            ),
+            _thread(
+                241927,
+                '[百合會挖坑組][江島絵理]'
+                '少女決戦オルギア（少女決戰Orgia） 第2話',
+            ),
+            for (int chapter = 3; chapter <= 11; chapter++)
+                _thread(
+                    508700 + chapter,
+                    '[祐希堂][江島絵理]少女決戰Orgia 第$chapter話',
+                ),
+            for (int chapter = 12; chapter <= 13; chapter++)
+                _thread(
+                    549400 + chapter,
+                    '[祐希堂百合组][一清二白汉化组][江島絵理]'
+                    '少女決戰Orgia 第$chapter話',
+                ),
+            for (int chapter = 14; chapter <= 18; chapter++)
+                _thread(
+                    552000 + chapter,
+                    '[祐希堂百合组][一青二白汉化组][江島絵理]'
+                    '少女決戰Orgia 第$chapter話',
+                ),
+            _thread(
+                555870,
+                '[祐希堂百合组][一青二白汉化组][江島絵理]'
+                '[最终话]少女決戰Orgia 第19話',
+            ),
+        ]);
+
+        expect(works, hasLength(1));
+        expect(works.single.title, '少女決戰Orgia');
+        expect(works.single.chapters, hasLength(19));
+        expect(
+            works.single.chapters.map((Chapter chapter) => chapter.order),
+            <double>[
+                for (int chapter = 1; chapter <= 19; chapter++) chapter.toDouble(),
+            ],
+        );
+
+        final List<Work> insufficientEvidence = aggregator.aggregate(<SourceThread>[
+            _thread(600, '[作者甲]旧标题（新标题） 第1话'),
+            _thread(601, '[作者甲]新标题 第2话'),
+            _thread(602, '[作者甲]新标题 第3话'),
+        ]);
+        expect(insufficientEvidence, hasLength(2));
+    });
+
     test('连字符和小数分段跨来源按相同逻辑话数聚合', ()
     {
         final Work work = aggregator.aggregate(<SourceThread>[

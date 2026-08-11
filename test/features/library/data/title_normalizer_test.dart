@@ -171,6 +171,23 @@ void main()
         expect(title.chapterLabel, '第12话 Kakukuroi汉化组');
     });
 
+    test('作品名前的最终话标记不覆盖作者', ()
+    {
+        final StructuredTitle title = normalizer.analyze(
+            '[祐希堂百合组][一青二白汉化组][江島絵理]'
+            '[最终话]少女決戰Orgia 第19話',
+        );
+
+        expect(title.displayTitle, '少女決戰Orgia');
+        expect(title.creatorKey, '江島絵理');
+        expect(title.chapterOrder, 19);
+
+        final StructuredTitle wrappedTitle = normalizer.analyze('[最终话]第1话');
+        expect(wrappedTitle.displayTitle, '最终话');
+        expect(wrappedTitle.creatorKey, isEmpty);
+        expect(wrappedTitle.chapterOrder, 1);
+    });
+
     test('括号后只有章节号时仍把括号内容视为作品名', ()
     {
         final StructuredTitle title = normalizer.analyze('【作品名】第12话');

@@ -679,6 +679,9 @@ class TitleNormalizer
             if (_isCreatorMarker(marker))
             {
                 authorMarker = _creatorKey(marker);
+            } else if (_isLeadingCompletionMetadata(marker, remainder))
+            {
+                // 作品名前的完结状态不是作者信息。
             } else if (!_isReleaseTag(marker) && !bracket.hasMatch(remainder))
             {
                 authorMarker = _keyText(marker);
@@ -687,6 +690,13 @@ class TitleNormalizer
                 final Match? next = bracket.firstMatch(remainder);
                 if (next != null &&
                         _isWrappedWorkTitle(
+                            _metadataMarker(next),
+                            remainder.substring(next.end).trim(),
+                        ))
+                {
+                    authorMarker = _keyText(marker);
+                } else if (next != null &&
+                        _isLeadingCompletionMetadata(
                             _metadataMarker(next),
                             remainder.substring(next.end).trim(),
                         ))
@@ -719,6 +729,14 @@ class TitleNormalizer
             r'vol(?:ume)?\.?\s*\d+)\s*$',
             caseSensitive: false,
         ).hasMatch(suffix);
+    }
+
+    bool _isLeadingCompletionMetadata(String marker, String remainder)
+    {
+        return RegExp(
+                    r'^(?:最终话|最終話|终话|終話|终章|終章|最终回|最終回)$',
+                ).hasMatch(normalizeForumText(marker)) &&
+                _hasOwnTitleBeforeChapter(remainder);
     }
 
     bool _hasOwnTitleBeforeChapter(String value)

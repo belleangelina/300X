@@ -975,7 +975,8 @@ class WorkAggregator
                         sourceKey.length < targetKey.length &&
                         _isBracketPrefixAlias(source, target);
                 if (!bracketPrefixAlias &&
-                        !_isUnclosedCreatorBracketAlias(source, target))
+                        !_isUnclosedCreatorBracketAlias(source, target) &&
+                        !_isParenthesizedTitleAlias(source, target))
                 {
                     continue;
                 }
@@ -1091,6 +1092,61 @@ class WorkAggregator
                             contextKey.length >= 2 &&
                             '$contextKey$recoveredKey' == targetKey,
                 );
+    }
+
+    bool _isParenthesizedTitleAlias(
+        List<_Candidate> source,
+        List<_Candidate> target,
+    )
+    {
+        if (source.length < 2 ||
+                target.length < 2 ||
+                source.any(
+                    (_Candidate candidate) =>
+                            candidate.thread.board.kind != LibraryKind.comic ||
+                            !candidate.title.hasChapterMarker,
+                ) ||
+                target.any(
+                    (_Candidate candidate) =>
+                            candidate.thread.board.kind != LibraryKind.comic ||
+                            !candidate.title.hasChapterMarker,
+                ) ||
+                !_hasMultipleChapterOrders(source) ||
+                !_hasMultipleChapterOrders(target) ||
+                !_hasCompatibleTypeIds(source, target))
+        {
+            return false;
+        }
+        final Set<String> sourceCreators = _creatorKeys(source);
+        final Set<String> targetCreators = _creatorKeys(target);
+        if (sourceCreators.length != 1 ||
+                targetCreators.length != 1 ||
+                sourceCreators.single != targetCreators.single)
+        {
+            return false;
+        }
+        final String targetKey = _candidateTitleKey(target.first);
+        if (targetKey.length < 4)
+        {
+            return false;
+        }
+        return source.every((_Candidate candidate)
+        {
+            final Match? alias = RegExp(
+                r'^.{2,80}[（(]([^（）()]{2,80})[）)]$',
+            ).firstMatch(_candidateDisplayTitle(candidate));
+            return alias != null &&
+                    _normalizer.analyze(alias.group(1)!).titleKey == targetKey;
+        });
+    }
+
+    bool _hasMultipleChapterOrders(List<_Candidate> candidates)
+    {
+        final Set<double> orders = candidates
+                .map((_Candidate candidate) => candidate.title.chapterOrder)
+                .whereType<double>()
+                .toSet();
+        return orders.length >= 2;
     }
 
     bool _hasCompatibleTypeIds(
