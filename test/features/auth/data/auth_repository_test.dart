@@ -40,6 +40,23 @@ void main()
         ).thenThrow(const ForumConnectionException('离线'));
     });
 
+    test('无凭据和会话 Cookie 时直接进入登录页', () async
+    {
+        when(credentials.read).thenAnswer((_) async => null);
+        when(client.hasPotentialLoginSession).thenAnswer((_) async => false);
+
+        final AuthState state = await repository.restoreSession();
+
+        expect(state.status, AuthStatus.unauthenticated);
+        expect(state.message, isEmpty);
+        verifyNever(
+            () => client.getText(
+                AuthRepository.verificationUri,
+                retryCount: 1,
+            ),
+        );
+    });
+
     test('已成功保存凭据时离线启动可进入本地界面', () async
     {
         when(credentials.read).thenAnswer(
@@ -55,9 +72,10 @@ void main()
         expect(state.username, 'offline-user');
     });
 
-    test('从未成功登录时连接失败仍进入登录页', () async
+    test('只有会话 Cookie 时连接失败仍进入登录页', () async
     {
         when(credentials.read).thenAnswer((_) async => null);
+        when(client.hasPotentialLoginSession).thenAnswer((_) async => true);
 
         final AuthState state = await repository.restoreSession();
 

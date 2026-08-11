@@ -27,6 +27,11 @@ class AuthRepository
     {
         final StoredCredentials? credentials =
             await _credentialStore.read();
+        if (credentials == null &&
+            !await _client.hasPotentialLoginSession())
+        {
+            return const AuthState.unauthenticated();
+        }
         try
         {
             final _SessionIdentity? session = await _readValidSession();

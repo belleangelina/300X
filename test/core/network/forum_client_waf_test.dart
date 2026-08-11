@@ -77,6 +77,30 @@ void main()
         );
     });
 
+    test('WAF Cookie 不作为可恢复的登录会话', () async
+    {
+        final CookieJar cookieJar = CookieJar();
+        final Cookie wafCookie = Cookie('nox_jst_v1', 'waf-cookie');
+        await cookieJar.saveFromResponse(
+            ForumClient.baseUri,
+            <Cookie>[wafCookie],
+        );
+        final ForumClient client = _client(
+            _WafAdapter(),
+            _FakeWafChallengeSolver(),
+            cookieJar: cookieJar,
+        );
+
+        expect(await client.hasPotentialLoginSession(), isFalse);
+
+        await cookieJar.saveFromResponse(
+            ForumClient.baseUri,
+            <Cookie>[Cookie('auth_session', 'forum-cookie')],
+        );
+
+        expect(await client.hasPotentialLoginSession(), isTrue);
+    });
+
     test('并发 GET 只执行一次 WAF 挑战', () async
     {
         final _WafAdapter adapter = _WafAdapter();

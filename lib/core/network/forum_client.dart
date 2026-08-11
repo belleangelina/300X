@@ -285,6 +285,14 @@ class ForumClient
         await cookieJar.deleteAll();
     }
 
+    Future<bool> hasPotentialLoginSession() async
+    {
+        final List<Cookie> cookies = await cookieJar.loadForRequest(baseUri);
+        return cookies.any(
+            (Cookie cookie) => cookie.name != 'nox_jst_v1',
+        );
+    }
+
     Future<List<Cookie>> exportCookies()
     {
         return cookieJar.loadForRequest(baseUri);
