@@ -291,6 +291,100 @@ void main()
         await tester.pumpAndSettle();
     });
 
+    testWidgets('阅读器目录打开时定位到当前章节', (
+        WidgetTester tester,
+    ) async
+    {
+        await tester.binding.setSurfaceSize(const Size(420, 640));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await settingsRepository.save(
+            const AppSettings(novelDirection: ReaderDirection.vertical),
+        );
+        final Uri uri = Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=202&mobile=2',
+        );
+        final List<Chapter> chapters = List<Chapter>.generate(
+            30,
+            (int index) => Chapter(
+                id: 'novel:202:${index + 1}',
+                title: '第${index + 1}章',
+                sourceUri: uri,
+                sourceTid: 202,
+                sourcePid: 2001 + index,
+                order: index + 1,
+            ),
+        );
+        final Work work = Work(
+            id: 'novel:202',
+            kind: LibraryKind.novel,
+            title: '测试长篇小说',
+            sourceThreads: <SourceThread>[
+                SourceThread(
+                    tid: 202,
+                    board: ForumBoard.literature,
+                    title: '测试长篇小说',
+                    uri: uri,
+                ),
+            ],
+            chapters: chapters,
+        );
+        final Chapter currentChapter = chapters[19];
+        await downloadRepository.enqueue(
+            work: work,
+            chapter: currentChapter,
+            directoryPath: '',
+        );
+        await downloadRepository.complete(
+            downloadRepository.taskId(work.id, currentChapter.id),
+            blocks: const <PostContentBlock>[
+                PostTextBlock(text: '当前章节离线正文'),
+            ],
+            referer: currentChapter.sourceUri,
+        );
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appDatabaseProvider.overrideWithValue(database),
+                    forumLibraryRepositoryProvider.overrideWithValue(
+                        forumRepository,
+                    ),
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                ],
+                child: MaterialApp(
+                    home: ChapterReaderPage(
+                        work: work,
+                        chapter: currentChapter,
+                    ),
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+        await _showReaderControls(tester);
+
+        await tester.tap(find.byKey(const Key('reader-directory-button')));
+        await tester.pumpAndSettle();
+
+        final Finder directory = find.byType(BottomSheet);
+        final Finder currentTitle = find.descendant(
+            of: directory,
+            matching: find.text('第20章'),
+        );
+        expect(directory, findsOneWidget);
+        expect(currentTitle, findsOneWidget);
+        expect(
+            tester.getRect(directory).overlaps(tester.getRect(currentTitle)),
+            isTrue,
+        );
+
+        Navigator.of(tester.element(currentTitle)).pop();
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+    });
+
     testWidgets('阅读器控制层保持对比度并可强制刷新当前章节', (
         WidgetTester tester,
     ) async

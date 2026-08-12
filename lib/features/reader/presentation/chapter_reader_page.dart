@@ -56,6 +56,7 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
     static const Duration _comicSwipeDecisionWindow = Duration(
         milliseconds: 100,
     );
+    static const double _chapterDirectoryItemExtent = 56;
 
     late Future<_LoadedChapter> _contentFuture;
     late Future<void>? _progressFuture;
@@ -2796,32 +2797,47 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
 
     Future<void> _showChapterDirectory() async
     {
-        final Chapter? selected = await showModalBottomSheet<Chapter>(
-            context: context,
-            builder: (BuildContext context) => SafeArea(
-                child: ListView.builder(
-                    itemCount: _chapters.length,
-                    itemBuilder: (BuildContext context, int index)
-                    {
-                        final Chapter value = _chapters[index];
-                        final bool selected = value.id == _chapter.id;
-                        return ListTile(
-                            title: Text(value.title),
-                            trailing: selected
-                                ? const Icon(Icons.check)
-                                : null,
-                            onTap: () => Navigator.of(context).pop(value),
-                        );
-                    },
-                ),
-            ),
+        final List<Chapter> chapters = _chapters;
+        final ScrollController directoryController = ScrollController(
+            initialScrollOffset: _chapterIndex * _chapterDirectoryItemExtent,
         );
+        final Chapter? selected;
+        try
+        {
+            selected = await showModalBottomSheet<Chapter>(
+                context: context,
+                builder: (BuildContext context) => SafeArea(
+                    child: ListView.builder(
+                        controller: directoryController,
+                        itemExtent: _chapterDirectoryItemExtent,
+                        itemCount: chapters.length,
+                        itemBuilder: (BuildContext context, int index)
+                        {
+                            final Chapter value = chapters[index];
+                            final bool selected = value.id == _chapter.id;
+                            return ListTile(
+                                title: Text(value.title),
+                                trailing: selected
+                                    ? const Icon(Icons.check)
+                                    : null,
+                                onTap: () => Navigator.of(context).pop(value),
+                            );
+                        },
+                    ),
+                ),
+            );
+        }
+        finally
+        {
+            directoryController.dispose();
+        }
         if (selected == null || selected.id == _chapter.id || !mounted)
         {
             return;
         }
+        final String selectedId = selected.id;
         final int targetIndex = _chapters.indexWhere(
-            (Chapter value) => value.id == selected.id,
+            (Chapter value) => value.id == selectedId,
         );
         await _changeChapter(targetIndex - _chapterIndex);
     }
