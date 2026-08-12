@@ -106,7 +106,7 @@ upload_asset()
         remote_etag="$(awk \
             'tolower($1) == "etag:" \
                 { value=$2 } END \
-                { gsub(/[[:space:]\"]/, "", value); print value }' \
+                { gsub(/[[:space:]"]/, "", value); print value }' \
             "$header_file")"
         rm -f "$header_file"
         if [[ "$remote_size" == "$expected_size" &&
@@ -126,7 +126,10 @@ upload_asset()
     header_file="$(mktemp)"
     jq -r '.headers // {} | to_entries[] | "\(.key): \(.value)"' \
         <<<"$upload_json" >"$header_file"
-    curl_args=(-fsS -X PUT --data-binary "@$asset")
+    curl_args=(
+        -fsS --retry 2 --retry-delay 5 --retry-all-errors
+        -X PUT --data-binary "@$asset"
+    )
     while IFS= read -r header
     do
         [[ -n "$header" ]] && curl_args+=(-H "$header")
