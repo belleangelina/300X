@@ -79,10 +79,9 @@ upload_asset()
     local name
     local existing
     local existing_id
+    local expected_md5
     local expected_size
-    local expected_sha256
-    local remote_file
-    local remote_sha256
+    local remote_etag
     local remote_size
     local upload_json
     local upload_url
@@ -90,24 +89,31 @@ upload_asset()
     local -a curl_args
     name="$(basename "$asset")"
     expected_size="$(wc -c <"$asset" | tr -d ' ')"
-    expected_sha256="$(sha256sum "$asset" | awk '{ print $1 }')"
+    expected_md5="$(md5sum "$asset" | awk '{ print $1 }')"
     existing="$(jq -c --arg name "$name" \
         '[.assets[]? | select(.name == $name)][0] // empty' \
         <<<"$release_json")"
     if [[ -n "$existing" ]]
     then
-        remote_file="$(mktemp)"
-        curl -fsSL -o "$remote_file" \
-            "$(jq -r .browser_download_url <<<"$existing")"
-        remote_size="$(wc -c <"$remote_file" | tr -d ' ')"
-        remote_sha256="$(sha256sum "$remote_file" | awk '{ print $1 }')"
+        header_file="$(mktemp)"
+        curl -fsSIL -D "$header_file" -o /dev/null \
+            "$api/releases/$tag/attach_files/$name/download"
+        remote_size="$(awk \
+            'tolower($1) == "content-length:" \
+                { value=$2 } END \
+                { gsub(/[[:space:]]/, "", value); print value }' \
+            "$header_file")"
+        remote_etag="$(awk \
+            'tolower($1) == "etag:" \
+                { value=$2 } END \
+                { gsub(/[[:space:]\"]/, "", value); print value }' \
+            "$header_file")"
+        rm -f "$header_file"
         if [[ "$remote_size" == "$expected_size" &&
-            "$remote_sha256" == "$expected_sha256" ]]
+            "$remote_etag" == "$expected_md5" ]]
         then
-            rm -f "$remote_file"
             return
         fi
-        rm -f "$remote_file"
         existing_id="$(jq -er .id <<<"$existing")"
         curl -fsS -X DELETE \
             --url-query "access_token=$GITCODE_TOKEN" \
