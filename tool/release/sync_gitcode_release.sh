@@ -23,30 +23,12 @@ do
     [[ -f "$asset" ]] || fail "找不到附件：$asset"
 done
 
-main_commit="$(git rev-parse HEAD)"
 tag_ref="$(git rev-parse "refs/tags/$tag")"
 api_root='https://api.gitcode.com/api/v5'
-gitcode_login="$(curl -fsS -G \
-    --data-urlencode "access_token=$GITCODE_TOKEN" \
-    "$api_root/user" | jq -er .login)"
-export GITCODE_LOGIN="$gitcode_login"
-askpass="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/x300-gitcode-askpass.sh"
-printf '%s\n' \
-    '#!/usr/bin/env sh' \
-    'case "$1" in' \
-    '    *Username*) printf "%s\n" "$GITCODE_LOGIN" ;;' \
-    '    *) printf "%s\n" "$GITCODE_TOKEN" ;;' \
-    'esac' >"$askpass"
-chmod 700 "$askpass"
-GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git push \
-    https://gitcode.com/belleangelina/300X.git \
-    HEAD:refs/heads/main "refs/tags/$tag:refs/tags/$tag"
-remote_main="$(git ls-remote https://gitcode.com/belleangelina/300X.git \
-    refs/heads/main | awk '{ print $1 }')"
 remote_tag="$(git ls-remote https://gitcode.com/belleangelina/300X.git \
     "refs/tags/$tag" | awk '{ print $1 }')"
-[[ "$remote_main" == "$main_commit" && "$remote_tag" == "$tag_ref" ]] ||
-    fail "GitCode 代码或标签同步校验失败：$tag"
+[[ "$remote_tag" == "$tag_ref" ]] ||
+    fail "GitCode 镜像尚未同步标签：$tag"
 
 api="$api_root/repos/belleangelina/300X"
 

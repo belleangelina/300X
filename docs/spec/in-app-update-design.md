@@ -209,14 +209,15 @@ SHA-256，并显示：
 - 并行构建正式签名 Android universal/arm64 APK、Linux tar.gz、未签名 iOS IPA。
 - 严格校验 Android 版本、ABI 与固定发布证书；构建日志由 CI 保存，对话只报告摘要。
 - 汇总产物大小和 SHA-256，读取本地脚本提交的发布说明，生成统一清单。
-- 创建 GitHub Release，并使用 GitHub Secrets 中的 GitCode 令牌先快进同步镜像的
-  `main` 和原标签，再创建相同 GitCode Release；令牌不进入仓库或安装包。
+- 创建 GitHub Release；GitCode 官方 Pull 镜像同步相同代码与原标签后，工作流使用
+  GitHub Secrets 中的 GitCode 令牌创建相同 GitCode Release。令牌不进入仓库或安装包。
 - GitHub Secrets 至少包含现有四项 Android 签名配置、固定证书摘要
   `ANDROID_CERT_SHA256` 和 `GITCODE_TOKEN`；任一缺失时发布失败，不降级处理。
 - 两端均先上传平台产物，最后上传 `update-manifest.json`。客户端忽略缺少有效清单的
   不完整 Release。
-- GitCode 同步失败时保留已成功的 GitHub Release 和标签；使用手动“仅同步已有
-  Release”入口补齐。内容一致的同名附件跳过，不一致则失败，不静默覆盖。
+- GitCode 镜像标签尚未同步或 Release 同步失败时，保留已成功的 GitHub Release 和
+  标签；镜像完成后使用手动“仅同步已有 Release”入口补齐。内容一致的同名附件跳过，
+  不一致则失败，不静默覆盖。
 
 ### 8.3 历史回填
 
