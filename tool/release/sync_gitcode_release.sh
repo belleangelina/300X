@@ -56,7 +56,6 @@ fi
 if [[ "$(jq -r .name <<<"$release_json")" != "$tag" ||
     "$(jq -r .body <<<"$release_json")" != "$(cat "$notes_file")" ]]
 then
-    release_id="$(jq -er .id <<<"$release_json")"
     release_json="$(
         jq -n \
             --arg tag "$tag" \
@@ -66,7 +65,7 @@ then
             curl -fsS -X PATCH \
                 --url-query "access_token=$GITCODE_TOKEN" \
                 -H 'Content-Type: application/json' \
-                --data-binary @- "$api/releases/$release_id"
+                --data-binary @- "$api/releases/$tag"
     )"
 fi
 [[ "$(jq -r .tag_name <<<"$release_json")" == "$tag" &&
