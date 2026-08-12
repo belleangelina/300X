@@ -25,11 +25,16 @@ done
 
 main_commit="$(git rev-parse HEAD)"
 tag_ref="$(git rev-parse "refs/tags/$tag")"
+api_root='https://api.gitcode.com/api/v5'
+gitcode_login="$(curl -fsS -G \
+    --data-urlencode "access_token=$GITCODE_TOKEN" \
+    "$api_root/user" | jq -er .login)"
+export GITCODE_LOGIN="$gitcode_login"
 askpass="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/x300-gitcode-askpass.sh"
 printf '%s\n' \
     '#!/usr/bin/env sh' \
     'case "$1" in' \
-    '    *Username*) printf "%s\n" belleangelina ;;' \
+    '    *Username*) printf "%s\n" "$GITCODE_LOGIN" ;;' \
     '    *) printf "%s\n" "$GITCODE_TOKEN" ;;' \
     'esac' >"$askpass"
 chmod 700 "$askpass"
@@ -43,7 +48,7 @@ remote_tag="$(git ls-remote https://gitcode.com/belleangelina/300X.git \
 [[ "$remote_main" == "$main_commit" && "$remote_tag" == "$tag_ref" ]] ||
     fail "GitCode 代码或标签同步校验失败：$tag"
 
-api='https://api.gitcode.com/api/v5/repos/belleangelina/300X'
+api="$api_root/repos/belleangelina/300X"
 
 release_json="$(curl -sS -G \
     --data-urlencode "access_token=$GITCODE_TOKEN" \
