@@ -67,9 +67,9 @@ jobs:
           test -n "$EXPECTED_CERT_SHA256"
           printf '%s' "$KEYSTORE" | base64 --decode > android/app/x300-release.jks
           actual_cert=$(
-            keytool -list -v -keystore android/app/x300-release.jks \
+            keytool -exportcert -keystore android/app/x300-release.jks \
               -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" |
-              sed -n 's/^[[:space:]]*SHA256: //p' | tr -d ':'
+              sha256sum | awk '{ print $1 }'
           )
           test "${actual_cert,,}" = "${EXPECTED_CERT_SHA256,,}"
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=x300-release.jks\n' \
