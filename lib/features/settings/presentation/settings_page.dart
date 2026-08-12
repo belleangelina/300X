@@ -7,6 +7,7 @@ import 'package:x300/features/library/data/work_index_repository.dart';
 import 'package:x300/features/settings/application/app_settings_controller.dart';
 import 'package:x300/features/settings/data/cache_maintenance_repository.dart';
 import 'package:x300/features/settings/domain/app_settings.dart';
+import 'package:x300/features/update/application/update_controller.dart';
 import 'package:x300/shared/presentation/app_snack_bar.dart';
 
 class SettingsPage extends ConsumerStatefulWidget
@@ -139,8 +140,144 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     title: const Text('字体大小跟随系统'),
                     subtitle: const Text('关闭后使用应用设计字号'),
                 ),
+                const Divider(),
+                SwitchListTile(
+                    value: settings.automaticUpdateChecks,
+                    onChanged: (bool value) =>
+                        _setAutomaticUpdateChecks(settings, value),
+                    title: const Text('自动检查更新'),
+                    subtitle: const Text(
+                        '关闭后永不自动提醒；开启时每 24 小时最多检查一次',
+                    ),
+                ),
+                ListTile(
+                    title: const Text('国内下载源'),
+                    subtitle: Text(settings.domesticUpdateSource.label),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _showUpdateSource(settings),
+                ),
+                if (settings.domesticUpdateSource ==
+                    DomesticUpdateSource.customProxy)
+                    ListTile(
+                        title: const Text('自定义代理地址'),
+                        subtitle: Text(settings.updateProxyUrl),
+                        trailing: const Icon(Icons.edit_outlined),
+                        onTap: () => _editUpdateProxy(settings),
+                    ),
             ],
         );
+    }
+
+    Future<void> _showUpdateSource(AppSettings settings) async
+    {
+        final DomesticUpdateSource? selected =
+            await showDialog<DomesticUpdateSource>(
+                context: context,
+                builder: (BuildContext context) => SimpleDialog(
+                    title: const Text('国内下载源'),
+                    children: <Widget>[
+                        RadioGroup<DomesticUpdateSource>(
+                            groupValue: settings.domesticUpdateSource,
+                            onChanged: (DomesticUpdateSource? value) =>
+                                Navigator.of(context).pop(value),
+                            child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: DomesticUpdateSource.values
+                                    .map(
+                                        (DomesticUpdateSource value) =>
+                                            RadioListTile<
+                                                DomesticUpdateSource
+                                            >(
+                                                value: value,
+                                                title: Text(value.label),
+                                            ),
+                                    )
+                                    .toList(growable: false),
+                            ),
+                        ),
+                    ],
+                ),
+            );
+        if (selected != null)
+        {
+            _update(settings.copyWith(domesticUpdateSource: selected));
+        }
+    }
+
+    Future<void> _editUpdateProxy(AppSettings settings) async
+    {
+        final TextEditingController controller = TextEditingController(
+            text: settings.updateProxyUrl,
+        );
+        final String? value = await showDialog<String>(
+            context: context,
+            builder: (BuildContext context) => AlertDialog(
+                title: const Text('自定义 GitHub 代理'),
+                content: TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.url,
+                    decoration: const InputDecoration(
+                        hintText: 'https://gh-proxy.org/',
+                        helperText: '用于拼接完整 GitHub 下载地址',
+                    ),
+                ),
+                actions: <Widget>[
+                    TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('取消'),
+                    ),
+                    FilledButton(
+                        onPressed: () => Navigator.of(
+                            context,
+                        ).pop(controller.text.trim()),
+                        child: const Text('保存'),
+                    ),
+                ],
+            ),
+        );
+        controller.dispose();
+        if (value == null)
+        {
+            return;
+        }
+        final Uri? uri = Uri.tryParse(value);
+        if (uri == null ||
+            uri.scheme != 'https' ||
+            uri.host.isEmpty ||
+            uri.userInfo.isNotEmpty ||
+            (uri.path.isNotEmpty && uri.path != '/') ||
+            uri.hasQuery ||
+            uri.hasFragment)
+        {
+            if (mounted)
+            {
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const AppSnackBar(
+                        content: Text('请输入有效的 HTTPS 根地址'),
+                    ),
+                );
+            }
+            return;
+        }
+        final String normalized = value.endsWith('/') ? value : '$value/';
+        _update(settings.copyWith(updateProxyUrl: normalized));
+    }
+
+    void _setAutomaticUpdateChecks(AppSettings settings, bool value)
+    {
+        _update(settings.copyWith(automaticUpdateChecks: value));
+        if (value)
+        {
+            unawaited(
+                ref
+                    .read(updateControllerProvider.notifier)
+                    .checkAutomatically(),
+            );
+        }
+        else
+        {
+            ref.read(updateControllerProvider.notifier).dismissPending();
+        }
     }
 
     Widget _buildComic(AppSettings settings)

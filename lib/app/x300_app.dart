@@ -3,18 +3,16 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:x300/app/app_navigation.dart';
 import 'package:x300/app/app_theme.dart';
 import 'package:x300/core/network/waf_challenge_solver.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
-import 'package:x300/features/auth/presentation/login_page.dart';
 import 'package:x300/features/home/presentation/home_shell.dart';
 import 'package:x300/features/library/data/cover_repository.dart';
 import 'package:x300/features/library/presentation/cover_load_interaction_boundary.dart';
 import 'package:x300/features/settings/application/app_settings_controller.dart';
 import 'package:x300/features/settings/domain/app_settings.dart';
-import 'package:x300/shared/presentation/app_error_view.dart';
-import 'package:x300/shared/presentation/app_loading_view.dart';
 
 class X300App extends ConsumerWidget
 {
@@ -45,6 +43,7 @@ class X300App extends ConsumerWidget
                 GlobalCupertinoLocalizations.delegate,
             ],
             scrollBehavior: const X300ScrollBehavior(),
+            navigatorObservers: <NavigatorObserver>[x300RouteObserver],
             builder: (BuildContext context, Widget? child)
             {
                 final Widget content = CoverLoadInteractionBoundary(
@@ -86,24 +85,8 @@ class AuthGate extends ConsumerWidget
     Widget build(BuildContext context, WidgetRef ref)
     {
         final AsyncValue<AuthState> auth = ref.watch(authControllerProvider);
-        return auth.when(
-            data: (AuthState value)
-            {
-                if (value.status == AuthStatus.authenticated)
-                {
-                    return HomeShell(username: value.username);
-                }
-                return LoginPage(authState: value);
-            },
-            loading: () => const Scaffold(
-                body: AppLoadingView(message: '正在恢复登录状态'),
-            ),
-            error: (Object error, StackTrace stackTrace) => Scaffold(
-                body: AppErrorView(
-                    message: '初始化登录状态失败：$error',
-                    onRetry: () => ref.invalidate(authControllerProvider),
-                ),
-            ),
+        return HomeShell(
+            authState: auth.value ?? const AuthState.unauthenticated(),
         );
     }
 }

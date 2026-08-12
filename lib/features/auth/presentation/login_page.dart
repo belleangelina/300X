@@ -34,6 +34,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
     final FocusNode _passwordFocus = FocusNode();
     final FocusNode _captchaFocus = FocusNode();
     bool _passwordVisible = false;
+    bool _submitting = false;
 
     @override
     void dispose()
@@ -49,8 +50,10 @@ class _LoginPageState extends ConsumerState<LoginPage>
     @override
     Widget build(BuildContext context)
     {
+        final AuthState authState = ref.watch(authControllerProvider).value ??
+            widget.authState;
         final bool needsCaptcha =
-            widget.authState.status == AuthStatus.captchaRequired;
+            authState.status == AuthStatus.captchaRequired;
         final bool supportsWebLogin =
             defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS;
@@ -152,11 +155,11 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                                     const SizedBox(height: 12),
                                                     _buildCaptcha(context),
                                                 ],
-                                                if (widget.authState.message
+                                                if (authState.message
                                                     .isNotEmpty) ...<Widget>[
                                                     const SizedBox(height: 12),
                                                     Text(
-                                                        widget.authState.message,
+                                                        authState.message,
                                                         textAlign:
                                                             TextAlign.center,
                                                         style: TextStyle(
@@ -171,8 +174,14 @@ class _LoginPageState extends ConsumerState<LoginPage>
                                                 SizedBox(
                                                     height: 44,
                                                     child: ElevatedButton(
-                                                        onPressed: _submit,
-                                                        child: const Text('登录'),
+                                                        onPressed: _submitting
+                                                            ? null
+                                                            : _submit,
+                                                        child: Text(
+                                                            _submitting
+                                                                ? '登录中…'
+                                                                : '登录',
+                                                        ),
                                                     ),
                                                 ),
                                                 if (supportsWebLogin) ...<Widget>[
@@ -244,7 +253,9 @@ class _LoginPageState extends ConsumerState<LoginPage>
 
     Widget _buildCaptcha(BuildContext context)
     {
-        final CaptchaChallenge captcha = widget.authState.captcha!;
+        final AuthState authState =
+            ref.watch(authControllerProvider).value ?? widget.authState;
+        final CaptchaChallenge captcha = authState.captcha!;
         return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
@@ -288,8 +299,12 @@ class _LoginPageState extends ConsumerState<LoginPage>
         );
     }
 
-    void _submit()
+    Future<void> _submit() async
     {
+        if (_submitting)
+        {
+            return;
+        }
         final String username = _usernameController.text.trim();
         final String password = _passwordController.text;
         if (username.isEmpty || password.isEmpty)
@@ -299,11 +314,38 @@ class _LoginPageState extends ConsumerState<LoginPage>
             );
             return;
         }
-        ref.read(authControllerProvider.notifier).login(
-              username: username,
-              password: password,
-              captcha: _captchaController.text,
-          );
+        setState(()
+        {
+            _submitting = true;
+        });
+        try
+        {
+            await ref.read(authControllerProvider.notifier).login(
+                username: username,
+                password: password,
+                captcha: _captchaController.text,
+            );
+        }
+        finally
+        {
+            if (mounted)
+            {
+                setState(()
+                {
+                    _submitting = false;
+                });
+            }
+        }
+        if (!mounted)
+        {
+            return;
+        }
+        final AuthState? state = ref.read(authControllerProvider).value;
+        if (state?.status == AuthStatus.authenticated &&
+            ModalRoute.of(context)?.isCurrent == true)
+        {
+            Navigator.of(context).pop();
+        }
     }
 
     Future<void> _openWebLogin() async
@@ -313,5 +355,14 @@ class _LoginPageState extends ConsumerState<LoginPage>
                 builder: (BuildContext context) => const WebLoginPage(),
             ),
         );
+        if (!mounted)
+        {
+            return;
+        }
+        if (ref.read(authControllerProvider).value?.status ==
+            AuthStatus.authenticated)
+        {
+            Navigator.of(context).pop();
+        }
     }
 }

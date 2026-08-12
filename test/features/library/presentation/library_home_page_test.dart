@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/library/data/cover_repository.dart';
 import 'package:x300/features/library/data/forum_library_repository.dart';
 import 'package:x300/features/library/domain/library_models.dart';
@@ -88,6 +89,8 @@ void main()
                 child: MaterialApp(
                     home: LibraryHomePage(
                         kind: LibraryKind.comic,
+                        authState: const AuthState.authenticated('测试账号'),
+                        onLogin: _noop,
                         controller: controller,
                         onOpenWork: (Work work) {},
                     ),
@@ -311,6 +314,8 @@ void main()
             child: MaterialApp(
                 home: LibraryHomePage(
                     kind: LibraryKind.comic,
+                    authState: const AuthState.authenticated('测试账号'),
+                    onLogin: _noop,
                     onOpenWork: (Work work) {},
                 ),
             ),
@@ -392,6 +397,8 @@ void main()
                 child: MaterialApp(
                     home: LibraryHomePage(
                         kind: LibraryKind.novel,
+                        authState: const AuthState.authenticated('测试账号'),
+                        onLogin: _noop,
                         onOpenWork: (Work work) {},
                     ),
                 ),
@@ -466,6 +473,53 @@ void main()
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
     });
+
+    testWidgets('未登录时保留漫画区布局且不请求论坛目录', (
+        WidgetTester tester,
+    ) async
+    {
+        final _MockForumLibraryRepository repository =
+            _MockForumLibraryRepository();
+        var loginTapped = false;
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    forumLibraryRepositoryProvider.overrideWithValue(repository),
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                ],
+                child: MaterialApp(
+                    home: LibraryHomePage(
+                        kind: LibraryKind.comic,
+                        authState: const AuthState.unauthenticated(),
+                        onLogin: () => loginTapped = true,
+                        onOpenWork: (Work work) {},
+                    ),
+                ),
+            ),
+        );
+        await tester.pump();
+
+        expect(find.text('漫画区'), findsOneWidget);
+        expect(find.text('登录后查看漫画区'), findsOneWidget);
+        verifyNever(
+            () => repository.loadCatalog(
+                kind: LibraryKind.comic,
+                section: CatalogSection.updated,
+                novelSource: NovelSourceFilter.all,
+                page: 1,
+                typeId: null,
+            ),
+        );
+        await tester.tap(find.text('登录'));
+        expect(loginTapped, isTrue);
+    });
+}
+
+void _noop()
+{
 }
 
 WorkCatalogPage _page(

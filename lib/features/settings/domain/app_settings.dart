@@ -34,6 +34,16 @@ enum NovelReaderPalette
     final String label;
 }
 
+enum DomesticUpdateSource
+{
+    gitCode('GitCode 官方镜像'),
+    customProxy('自定义代理');
+
+    const DomesticUpdateSource(this.label);
+
+    final String label;
+}
+
 class AppSettings
 {
     const AppSettings({
@@ -55,6 +65,9 @@ class AppSettings
         this.allowMobileDownloads = true,
         this.comicMaximumDownloads = 1,
         this.novelMaximumDownloads = 1,
+        this.automaticUpdateChecks = true,
+        this.domesticUpdateSource = DomesticUpdateSource.gitCode,
+        this.updateProxyUrl = 'https://gh-proxy.org/',
     });
 
     final AppThemePreference theme;
@@ -75,6 +88,9 @@ class AppSettings
     final bool allowMobileDownloads;
     final int comicMaximumDownloads;
     final int novelMaximumDownloads;
+    final bool automaticUpdateChecks;
+    final DomesticUpdateSource domesticUpdateSource;
+    final String updateProxyUrl;
 
     AppSettings copyWith({
         AppThemePreference? theme,
@@ -95,6 +111,9 @@ class AppSettings
         bool? allowMobileDownloads,
         int? comicMaximumDownloads,
         int? novelMaximumDownloads,
+        bool? automaticUpdateChecks,
+        DomesticUpdateSource? domesticUpdateSource,
+        String? updateProxyUrl,
     })
     {
         return AppSettings(
@@ -125,6 +144,11 @@ class AppSettings
                 comicMaximumDownloads ?? this.comicMaximumDownloads,
             novelMaximumDownloads:
                 novelMaximumDownloads ?? this.novelMaximumDownloads,
+            automaticUpdateChecks:
+                automaticUpdateChecks ?? this.automaticUpdateChecks,
+            domesticUpdateSource:
+                domesticUpdateSource ?? this.domesticUpdateSource,
+            updateProxyUrl: updateProxyUrl ?? this.updateProxyUrl,
         );
     }
 }

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:x300/app/app_colors.dart';
 import 'package:x300/app/app_theme.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
+import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/profile/presentation/about_page.dart';
 import 'package:x300/features/profile/presentation/profile_page.dart';
 import 'package:x300/features/reader/data/reader_media_repository.dart';
@@ -184,12 +185,37 @@ void main()
         );
     });
 
+    testWidgets('未登录个人页点击头像和云收藏都请求登录', (
+        WidgetTester tester,
+    ) async
+    {
+        var loginRequests = 0;
+        await tester.pumpWidget(
+            _profileApp(
+                settingsRepository,
+                AppTheme.light,
+                authState: const AuthState.unauthenticated(),
+                onLogin: () => loginRequests++,
+            ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('未登录'), findsOneWidget);
+        await tester.tap(find.widgetWithText(ListTile, '未登录'));
+        await tester.tap(find.text('漫画收藏'));
+
+        expect(loginRequests, 2);
+        expect(find.text('漫画收藏'), findsOneWidget);
+    });
+
     testWidgets('关于页合并免责声明且不重复展示开源和参考项目链接', (
         WidgetTester tester,
     ) async
     {
         await tester.pumpWidget(
-            const MaterialApp(home: AboutPage()),
+            const ProviderScope(
+                child: MaterialApp(home: AboutPage()),
+            ),
         );
         await tester.pumpAndSettle();
 
@@ -209,6 +235,8 @@ Widget _profileApp(
     Uri? avatarUri,
     ReaderMediaRepository? mediaRepository,
     ValueChanged<ProfileDetailDestination>? onOpenDetail,
+    AuthState authState = const AuthState.authenticated('测试账号'),
+    VoidCallback onLogin = _noop,
 })
 {
     return ProviderScope(
@@ -225,7 +253,8 @@ Widget _profileApp(
         child: MaterialApp(
             theme: theme,
             home: ProfilePage(
-                username: '测试账号',
+                authState: authState,
+                onLogin: onLogin,
                 onLogout: _noop,
                 onOpenDetail: onOpenDetail,
             ),

@@ -24,6 +24,9 @@ void main()
             allowMobileDownloads: true,
             comicMaximumDownloads: 4,
             novelMaximumDownloads: 3,
+            automaticUpdateChecks: false,
+            domesticUpdateSource: DomesticUpdateSource.customProxy,
+            updateProxyUrl: 'https://proxy.example/',
         );
 
         await repository.save(changed);
@@ -41,6 +44,12 @@ void main()
         expect(restored.allowMobileDownloads, isTrue);
         expect(restored.comicMaximumDownloads, 4);
         expect(restored.novelMaximumDownloads, 3);
+        expect(restored.automaticUpdateChecks, isFalse);
+        expect(
+            restored.domesticUpdateSource,
+            DomesticUpdateSource.customProxy,
+        );
+        expect(restored.updateProxyUrl, 'https://proxy.example/');
     });
 
     test('损坏的枚举设置回退为安全默认值', () async

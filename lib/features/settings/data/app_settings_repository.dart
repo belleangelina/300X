@@ -21,6 +21,35 @@ class AppSettingsRepository
 
     final SharedPreferences _preferences;
 
+    DateTime? get lastSuccessfulUpdateCheck
+    {
+        final int? milliseconds = _preferences.getInt(
+            'last_successful_update_check',
+        );
+        return milliseconds == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(milliseconds, isUtc: true);
+    }
+
+    int get ignoredUpdateBuildNumber =>
+        _preferences.getInt('ignored_update_build_number') ?? 0;
+
+    Future<void> saveSuccessfulUpdateCheck(DateTime value)
+    {
+        return _preferences.setInt(
+            'last_successful_update_check',
+            value.toUtc().millisecondsSinceEpoch,
+        );
+    }
+
+    Future<void> ignoreUpdateBuild(int buildNumber)
+    {
+        return _preferences.setInt(
+            'ignored_update_build_number',
+            buildNumber,
+        );
+    }
+
     bool catalogUsesGrid(String scope)
     {
         return _preferences.getBool('catalog_view_grid_$scope') ?? false;
@@ -128,6 +157,17 @@ class AppSettingsRepository
                 _preferences.getInt('novel_maximum_downloads'),
                 defaults.novelMaximumDownloads,
             ),
+            automaticUpdateChecks:
+                _preferences.getBool('automatic_update_checks') ??
+                    defaults.automaticUpdateChecks,
+            domesticUpdateSource: _enum(
+                DomesticUpdateSource.values,
+                _preferences.getString('domestic_update_source'),
+                defaults.domesticUpdateSource,
+            ),
+            updateProxyUrl:
+                _preferences.getString('update_proxy_url') ??
+                    defaults.updateProxyUrl,
         );
     }
 
@@ -202,6 +242,18 @@ class AppSettingsRepository
             _preferences.setInt(
                 'novel_maximum_downloads',
                 value.novelMaximumDownloads,
+            ),
+            _preferences.setBool(
+                'automatic_update_checks',
+                value.automaticUpdateChecks,
+            ),
+            _preferences.setString(
+                'domestic_update_source',
+                value.domesticUpdateSource.name,
+            ),
+            _preferences.setString(
+                'update_proxy_url',
+                value.updateProxyUrl,
             ),
         ]);
     }

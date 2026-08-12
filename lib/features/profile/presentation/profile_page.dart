@@ -8,6 +8,7 @@ import 'package:x300/app/app_colors.dart';
 import 'package:x300/app/app_links.dart';
 import 'package:x300/core/network/forum_client.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
+import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/downloads/presentation/downloads_page.dart';
 import 'package:x300/features/favorites/presentation/cloud_favorites_page.dart';
 import 'package:x300/features/history/presentation/reading_history_page.dart';
@@ -60,13 +61,15 @@ Widget buildProfileDetailPage(ProfileDetailDestination destination)
 class ProfilePage extends ConsumerWidget
 {
     const ProfilePage({
-        required this.username,
+        required this.authState,
+        required this.onLogin,
         required this.onLogout,
         this.onOpenDetail,
         super.key,
     });
 
-    final String username;
+    final AuthState authState;
+    final VoidCallback onLogin;
     final VoidCallback onLogout;
     final ValueChanged<ProfileDetailDestination>? onOpenDetail;
 
@@ -77,6 +80,8 @@ class ProfilePage extends ConsumerWidget
             appSettingsControllerProvider,
         );
         final Uri? avatarUri = ref.watch(currentUserAvatarUriProvider);
+        final bool authenticated =
+            authState.status == AuthStatus.authenticated;
         return Scaffold(
             backgroundColor: Theme.of(context).brightness == Brightness.light
                     ? AppColors.background
@@ -87,12 +92,25 @@ class ProfilePage extends ConsumerWidget
                     children: <Widget>[
                         ListTile(
                             leading: _ProfileAvatar(uri: avatarUri),
-                            title: Text(username),
-                            subtitle: const Text('百合会论坛账号'),
-                            trailing: IconButton(
-                                onPressed: onLogout,
-                                icon: const Icon(Remix.logout_box_r_line),
+                            title: Text(
+                                authenticated ? authState.username : '未登录',
                             ),
+                            subtitle: Text(
+                                authState.sessionExpired
+                                    ? '登录状态已失效，请重新登录'
+                                    : authenticated
+                                    ? '百合会论坛账号'
+                                    : '点击头像登录百合会论坛',
+                            ),
+                            trailing: authenticated
+                                ? IconButton(
+                                      onPressed: onLogout,
+                                      icon: const Icon(
+                                          Remix.logout_box_r_line,
+                                      ),
+                                  )
+                                : const Icon(Icons.chevron_right),
+                            onTap: authenticated ? null : onLogin,
                         ),
                         const SizedBox(height: 12),
                         _ProfileCard(
@@ -105,6 +123,7 @@ class ProfilePage extends ConsumerWidget
                                     onTap: () => _openDetail(
                                         context,
                                         ProfileDetailDestination.novelFavorites,
+                                        requiresLogin: true,
                                     ),
                                 ),
                                 ListTile(
@@ -138,6 +157,7 @@ class ProfilePage extends ConsumerWidget
                                     onTap: () => _openDetail(
                                         context,
                                         ProfileDetailDestination.comicFavorites,
+                                        requiresLogin: true,
                                     ),
                                 ),
                                 ListTile(
@@ -216,8 +236,15 @@ class ProfilePage extends ConsumerWidget
     void _openDetail(
         BuildContext context,
         ProfileDetailDestination destination,
+        {bool requiresLogin = false,}
     )
     {
+        if (requiresLogin &&
+            authState.status != AuthStatus.authenticated)
+        {
+            onLogin();
+            return;
+        }
         final ValueChanged<ProfileDetailDestination>? callback = onOpenDetail;
         if (callback != null)
         {

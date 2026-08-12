@@ -68,4 +68,14 @@ class AuthController extends AsyncNotifier<AuthState>
         await _repository.logout();
         state = const AsyncData<AuthState>(AuthState.unauthenticated());
     }
+
+    void markSessionExpired()
+    {
+        state = const AsyncData<AuthState>(
+            AuthState.unauthenticated(
+                message: '登录状态已失效，请重新登录',
+                sessionExpired: true,
+            ),
+        );
+    }
 }

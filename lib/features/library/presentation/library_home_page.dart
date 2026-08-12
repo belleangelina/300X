@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:x300/core/network/forum_exceptions.dart';
+import 'package:x300/features/auth/application/auth_controller.dart';
+import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/library/data/forum_library_repository.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 import 'package:x300/features/library/presentation/work_widgets.dart';
@@ -41,12 +44,16 @@ class LibraryHomePage extends ConsumerStatefulWidget
     const LibraryHomePage({
         required this.kind,
         required this.onOpenWork,
+        required this.authState,
+        required this.onLogin,
         this.controller,
         this.onSearch,
         super.key,
     });
 
     final LibraryKind kind;
+    final AuthState authState;
+    final VoidCallback onLogin;
     final ValueChanged<Work> onOpenWork;
     final LibraryHomeController? controller;
     final VoidCallback? onSearch;
@@ -162,6 +169,10 @@ class _LibraryHomePageState extends ConsumerState<LibraryHomePage>
                         child: _CatalogFeedView(
                             key: _feedKeys[index],
                             kind: feed.kind,
+                            authenticated: widget.authState.status ==
+                                AuthStatus.authenticated,
+                            sessionExpired: widget.authState.sessionExpired,
+                            onLogin: widget.onLogin,
                             novelSource: feed.novelSource,
                             viewMode: _viewModes[index],
                             onViewModeChanged: (_CatalogViewMode value) =>
@@ -240,6 +251,9 @@ class _CatalogFeedView extends ConsumerStatefulWidget
 {
     const _CatalogFeedView({
         required this.kind,
+        required this.authenticated,
+        required this.sessionExpired,
+        required this.onLogin,
         required this.novelSource,
         required this.viewMode,
         required this.onViewModeChanged,
@@ -248,6 +262,9 @@ class _CatalogFeedView extends ConsumerStatefulWidget
     });
 
     final LibraryKind kind;
+    final bool authenticated;
+    final bool sessionExpired;
+    final VoidCallback onLogin;
     final NovelSourceFilter novelSource;
     final _CatalogViewMode viewMode;
     final ValueChanged<_CatalogViewMode> onViewModeChanged;
@@ -286,7 +303,14 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
     {
         super.initState();
         _scrollController.addListener(_handleScroll);
-        _load(reset: true);
+        if (widget.authenticated)
+        {
+            _load(reset: true);
+        }
+        else
+        {
+            _loading = false;
+        }
     }
 
     @override
@@ -306,6 +330,23 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
             widget.viewMode == _CatalogViewMode.grid)
         {
             _scheduleGridFill();
+        }
+        if (!oldWidget.authenticated && widget.authenticated)
+        {
+            _load(reset: true);
+        }
+        else if (oldWidget.authenticated && !widget.authenticated)
+        {
+            _generation++;
+            setState(()
+            {
+                _loading = false;
+                _loadingMore = false;
+                _error = null;
+                _cursor = null;
+                _works = <Work>[];
+                _sourceThreads.clear();
+            });
         }
     }
 
@@ -333,6 +374,21 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
 
     Widget _buildContent()
     {
+        if (!widget.authenticated)
+        {
+            final String section = widget.kind == LibraryKind.comic
+                ? '漫画区'
+                : widget.novelSource == NovelSourceFilter.lightNovel
+                ? '轻小说'
+                : '文学区';
+            return AppEmptyView(
+                message: widget.sessionExpired
+                    ? '登录状态已失效，请重新登录'
+                    : '登录后查看$section',
+                actionLabel: widget.sessionExpired ? '重新登录' : '登录',
+                onRefresh: widget.onLogin,
+            );
+        }
         if (_loading)
         {
             return const AppLoadingView(message: '正在读取论坛目录');
@@ -515,6 +571,10 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
 
     Future<void> _load({required bool reset}) async
     {
+        if (!widget.authenticated)
+        {
+            return;
+        }
         final int generation = reset ? ++_generation : _generation;
         if (reset)
         {
@@ -556,6 +616,13 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
             });
             _scheduleGridFill();
         }
+        on ForumSessionExpiredException
+        {
+            if (mounted && generation == _generation)
+            {
+                ref.read(authControllerProvider.notifier).markSessionExpired();
+            }
+        }
         on Object catch (error)
         {
             if (!mounted || generation != _generation)
@@ -573,7 +640,10 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
     Future<void> _loadMore() async
     {
         final WorkCatalogPage? cursor = _cursor;
-        if (_loadingMore || cursor == null || !cursor.hasMore)
+        if (!widget.authenticated ||
+            _loadingMore ||
+            cursor == null ||
+            !cursor.hasMore)
         {
             return;
         }
@@ -612,6 +682,13 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
                 _loadingMore = false;
             });
             _scheduleGridFill();
+        }
+        on ForumSessionExpiredException
+        {
+            if (mounted && generation == _generation)
+            {
+                ref.read(authControllerProvider.notifier).markSessionExpired();
+            }
         }
         on Object catch (error)
         {

@@ -5,6 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
+import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/downloads/application/download_manager.dart';
 import 'package:x300/features/home/presentation/home_shell.dart';
 import 'package:x300/features/library/data/forum_library_repository.dart';
@@ -12,6 +13,7 @@ import 'package:x300/features/library/domain/library_models.dart';
 import 'package:x300/features/profile/presentation/profile_page.dart';
 import 'package:x300/features/settings/data/app_settings_repository.dart';
 import 'package:x300/features/settings/data/cache_maintenance_repository.dart';
+import 'package:x300/features/settings/domain/app_settings.dart';
 import 'package:x300/features/settings/presentation/settings_page.dart';
 
 class _MockDownloadManager extends Mock implements DownloadManager
@@ -40,6 +42,9 @@ void main()
         SharedPreferences.setMockInitialValues(<String, Object>{});
         settingsRepository = AppSettingsRepository(
             await SharedPreferences.getInstance(),
+        );
+        await settingsRepository.save(
+            const AppSettings(automaticUpdateChecks: false),
         );
         downloadManager = _MockDownloadManager();
         libraryRepository = _MockForumLibraryRepository();
@@ -166,7 +171,9 @@ Widget _homeApp(
             currentUserAvatarUriProvider.overrideWithValue(null),
         ],
         child: const MaterialApp(
-            home: HomeShell(username: '测试账号'),
+            home: HomeShell(
+                authState: AuthState.authenticated('测试账号'),
+            ),
         ),
     );
 }

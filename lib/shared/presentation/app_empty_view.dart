@@ -6,11 +6,13 @@ class AppEmptyView extends StatelessWidget
     const AppEmptyView({
         this.message = '这里什么都没有',
         this.onRefresh,
+        this.actionLabel,
         super.key,
     });
 
     final String message;
     final VoidCallback? onRefresh;
+    final String? actionLabel;
 
     @override
     Widget build(BuildContext context)
@@ -37,6 +39,13 @@ class AppEmptyView extends StatelessWidget
                                     fontSize: 12,
                                 ),
                             ),
+                            if (actionLabel != null) ...<Widget>[
+                                const SizedBox(height: 16),
+                                FilledButton(
+                                    onPressed: onRefresh,
+                                    child: Text(actionLabel!),
+                                ),
+                            ],
                         ],
                     ),
                 ),

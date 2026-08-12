@@ -1,12 +1,6 @@
-name: Build iOS IPA and Android APKs
+name: Build and publish release
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag to attach artifacts to (e.g. v1.0.0). Leave empty to only upload as workflow artifacts.'
-        required: false
-        default: ''
   push:
     tags:
       - 'v*'
@@ -15,144 +9,263 @@ permissions:
   contents: write
 
 jobs:
-  build-ios:
-    runs-on: macos-latest
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      build-number: ${{ steps.release.outputs.build-number }}
+      commit: ${{ steps.release.outputs.commit }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.3'
-          channel: stable
-          cache: true
-
-      - run: flutter pub get
-
-      - name: Build iOS archive (unsigned)
-        run: flutter build ipa --no-codesign
-
-      - name: Package unsigned IPA from xcarchive
+          fetch-depth: 0
+      - id: release
+        shell: bash
         run: |
-          version=$(awk '/^version:/ {print $2}' pubspec.yaml | cut -d '+' -f 1)
-          archive=$(find build/ios/archive -maxdepth 1 -name '*.xcarchive' | head -1)
-          app_path=$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' | head -1)
-          mkdir -p build/ios/ipa/Payload
-          cp -R "$app_path" build/ios/ipa/Payload/
-          cd build/ios/ipa
-          zip -r -q "X300-v${version}-ios-unsigned.ipa" Payload
-          rm -rf Payload
-          echo "::notice::Built $(ls)"
-
-      - name: Upload IPA as workflow artifact
-        uses: actions/upload-artifact@v4
+          set -Eeuo pipefail
+          current=$(awk '/^version:/ { print $2; exit }' pubspec.yaml)
+          version=${current%%+*}
+          build_number=${current##*+}
+          test "${GITHUB_REF_NAME}" = "v${version}"
+          git for-each-ref "refs/tags/${GITHUB_REF_NAME}" \
+            --format='%(contents)' > release-notes.md
+          test -s release-notes.md
+          commit=$(git rev-list -n 1 "$GITHUB_REF_NAME")
+          printf 'version=%s\nbuild-number=%s\ncommit=%s\n' \
+            "$version" "$build_number" "$commit" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
         with:
-          name: 300X-ios-unsigned-ipa
-          path: build/ios/ipa/*.ipa
-          if-no-files-found: error
+          name: release-notes
+          path: release-notes.md
 
   build-android:
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
-
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.3'
           channel: stable
           cache: true
-
-      - name: Configure Android release signing
+      - name: Configure release signing
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
         run: |
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEY_ALIAS" ] || \
-             [ -z "$ANDROID_KEY_PASSWORD" ] || [ -z "$ANDROID_STORE_PASSWORD" ]; then
-            echo "::error::Android release signing secrets are incomplete."
-            exit 1
-          fi
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/x300-release.jks
+          set -Eeuo pipefail
+          test -n "$KEYSTORE" && test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD" && test -n "$STORE_PASSWORD"
+          test -n "$EXPECTED_CERT_SHA256"
+          printf '%s' "$KEYSTORE" | base64 --decode > android/app/x300-release.jks
+          actual_cert=$(
+            keytool -list -v -keystore android/app/x300-release.jks \
+              -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" |
+              sed -n 's/^[[:space:]]*SHA256: //p' | tr -d ':'
+          )
+          test "${actual_cert,,}" = "${EXPECTED_CERT_SHA256,,}"
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=x300-release.jks\n' \
-            "$ANDROID_STORE_PASSWORD" \
-            "$ANDROID_KEY_PASSWORD" \
-            "$ANDROID_KEY_ALIAS" > android/key.properties
-
+            "$STORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
       - run: flutter pub get
-
-      - name: Build universal APK
+      - name: Build APKs
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
+          EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
         run: |
-          version=$(awk '/^version:/ {print $2}' pubspec.yaml | cut -d '+' -f 1)
-          flutter build apk --release
-          mkdir -p build/android-apk
+          set -Eeuo pipefail
+          mkdir -p release-assets
+          flutter build apk --release --build-name="$VERSION" \
+            --build-number="$BUILD_NUMBER"
           cp build/app/outputs/flutter-apk/app-release.apk \
-            "build/android-apk/X300-v${version}-android-universal-release.apk"
-
-      - name: Build arm64 APK
-        run: |
-          version=$(awk '/^version:/ {print $2}' pubspec.yaml | cut -d '+' -f 1)
-          flutter build apk --release \
-            --target-platform android-arm64 \
+            "release-assets/X300-v${VERSION}-android-universal-release.apk"
+          flutter build apk --release --target-platform android-arm64 \
             --android-project-arg x300TargetAbi=arm64-v8a \
-            --android-project-arg disable-abi-filtering=true
+            --android-project-arg disable-abi-filtering=true \
+            --build-name="$VERSION" --build-number="$BUILD_NUMBER"
           cp build/app/outputs/flutter-apk/app-release.apk \
-            "build/android-apk/X300-v${version}-android-arm64-v8a-release.apk"
-
-      - name: Upload APKs as workflow artifact
-        uses: actions/upload-artifact@v4
+            "release-assets/X300-v${VERSION}-android-arm64-v8a-release.apk"
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          aapt=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
+          test -x "$apksigner"
+          test -x "$aapt"
+          "$apksigner" verify --verbose release-assets/*.apk >/dev/null
+          for apk in release-assets/*.apk; do
+            actual_cert=$(
+              "$apksigner" verify --print-certs "$apk" |
+                sed -n 's/^Signer #1 certificate SHA-256 digest: //p'
+            )
+            test "${actual_cert,,}" = "${EXPECTED_CERT_SHA256,,}"
+            badging=$("$aapt" dump badging "$apk" | head -1)
+            grep -Fq "versionCode='$BUILD_NUMBER'" <<<"$badging"
+            grep -Fq "versionName='$VERSION'" <<<"$badging"
+          done
+          unzip -Z1 "release-assets/X300-v${VERSION}-android-universal-release.apk" |
+            awk -F/ '/^lib\/[^/]+\/.*\.so$/ { print $2 }' | sort -u \
+              > universal-abis.txt
+          printf '%s\n' arm64-v8a armeabi-v7a x86_64 > expected-universal-abis.txt
+          cmp expected-universal-abis.txt universal-abis.txt
+          unzip -Z1 "release-assets/X300-v${VERSION}-android-arm64-v8a-release.apk" |
+            awk -F/ '/^lib\/[^/]+\/.*\.so$/ { print $2 }' | sort -u \
+              > arm64-abis.txt
+          printf '%s\n' arm64-v8a > expected-arm64-abis.txt
+          cmp expected-arm64-abis.txt arm64-abis.txt
+      - uses: actions/upload-artifact@v4
         with:
-          name: 300X-android-release-apks
-          path: build/android-apk/*.apk
-          if-no-files-found: error
+          name: android-release
+          path: release-assets/*
+
+  build-linux:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build pkg-config libgtk-3-dev \
+            libsecret-1-dev libwebkit2gtk-4.0-dev
+      - run: flutter pub get
+      - name: Build Linux archive
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
+        run: |
+          set -Eeuo pipefail
+          flutter build linux --release --build-name="$VERSION" \
+            --build-number="$BUILD_NUMBER"
+          test -x build/linux/x64/release/bundle/x300
+          test -x build/linux/x64/release/bundle/x300_waf_challenge
+          mkdir -p release-assets
+          tar -C build/linux/x64/release/bundle -czf \
+            "release-assets/X300-v${VERSION}-linux-x64-release.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: release-assets/*
+
+  build-ios:
+    needs: prepare
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build unsigned IPA
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
+        run: |
+          set -Eeuo pipefail
+          flutter build ipa --release --no-codesign --build-name="$VERSION" \
+            --build-number="$BUILD_NUMBER"
+          archive=$(find build/ios/archive -maxdepth 1 -name '*.xcarchive' | head -1)
+          app=$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' | head -1)
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+            "$app/Info.plist")" = "$VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
+            "$app/Info.plist")" = "$BUILD_NUMBER"
+          mkdir -p package/Payload release-assets
+          cp -R "$app" package/Payload/
+          (cd package && zip -r -q \
+            "../release-assets/X300-v${VERSION}-ios-unsigned.ipa" Payload)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-release
+          path: release-assets/*
 
   publish:
-    needs:
-      - build-ios
-      - build-android
+    needs: [prepare, build-android, build-linux, build-ios]
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
     steps:
-      - name: Download IPA
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
         with:
-          name: 300X-ios-unsigned-ipa
-          path: release-assets
-
-      - name: Download APKs
-        uses: actions/download-artifact@v4
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+      - uses: actions/download-artifact@v4
         with:
-          name: 300X-android-release-apks
+          pattern: '*-release'
           path: release-assets
-
-      - name: Attach artifacts to GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          EVENT_NAME: ${{ github.event_name }}
-          INPUT_TAG: ${{ github.event.inputs.tag }}
-          REF_NAME: ${{ github.ref_name }}
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: release-metadata
+      - name: Generate update manifest
         run: |
-          if [ "$EVENT_NAME" = "push" ]; then
-            tag="$REF_NAME"
+          flutter pub get
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct "$GITHUB_REF_NAME")
+          dart run tool/release/generate_update_manifest.dart \
+            release-assets "$VERSION" "$BUILD_NUMBER" \
+            release-metadata/release-notes.md \
+            release-assets/update-manifest.json
+      - name: Publish GitHub Release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          tag="v$VERSION"
+          mkdir -p /tmp/github-existing
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --verify-tag --title "$tag" \
+              --notes-file release-metadata/release-notes.md
+          fi
+          release=$(gh release view "$tag" \
+            --json tagName,name,body,isDraft,isPrerelease)
+          test "$(jq -r .tagName <<<"$release")" = "$tag"
+          test "$(jq -r .name <<<"$release")" = "$tag"
+          test "$(jq -r .body <<<"$release")" = \
+            "$(cat release-metadata/release-notes.md)"
+          jq -e '(.isDraft | not) and (.isPrerelease | not)' \
+            <<<"$release" >/dev/null
+          for asset in release-assets/*; do
+            test "$(basename "$asset")" = update-manifest.json && continue
+            if gh release view "$tag" --json assets \
+              --jq ".assets[].name" | grep -Fxq "$(basename "$asset")"; then
+              gh release download "$tag" --pattern "$(basename "$asset")" \
+                --dir /tmp/github-existing
+              cmp "$asset" "/tmp/github-existing/$(basename "$asset")"
+            else
+              gh release upload "$tag" "$asset"
+            fi
+          done
+          asset=release-assets/update-manifest.json
+          if gh release view "$tag" --json assets \
+            --jq '.assets[].name' | grep -Fxq update-manifest.json; then
+            gh release download "$tag" --pattern update-manifest.json \
+              --dir /tmp/github-existing
+            cmp "$asset" /tmp/github-existing/update-manifest.json
           else
-            tag="$INPUT_TAG"
+            gh release upload "$tag" "$asset"
           fi
-          if [ -z "$tag" ]; then
-            echo "No tag specified; skipping release upload (artifacts are available as workflow artifacts)."
-            exit 0
-          fi
-          echo "Attaching IPA and APKs to release: $tag"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" release-assets/* --clobber
-          else
-            gh release create "$tag" release-assets/* \
-              --title "$tag" \
-              --notes "Unsigned iOS IPA and signed Android APKs for $tag." \
-              --target "$GITHUB_SHA"
-          fi
+      - name: Sync GitCode Release
+        env:
+          GITCODE_TARGET: ${{ needs.prepare.outputs.commit }}
+        run: |
+          test -n "$GITCODE_TOKEN"
+          tool/release/sync_gitcode_release.sh "v$VERSION" \
+            release-metadata/release-notes.md release-assets/*

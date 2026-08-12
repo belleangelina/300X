@@ -140,6 +140,39 @@ void main()
         await tester.pumpAndSettle();
         verify(maintenance.clearCoverCaches).called(1);
     });
+
+    testWidgets('常规设置展示自动检查和可选择的国内下载源', (
+        WidgetTester tester,
+    ) async
+    {
+        await tester.pumpWidget(_app(
+            settingsRepository,
+            initialIndex: 0,
+            maintenance: maintenance,
+        ));
+        await tester.pumpAndSettle();
+
+        expect(find.text('自动检查更新'), findsOneWidget);
+        expect(find.textContaining('关闭后永不自动提醒'), findsOneWidget);
+        expect(find.text('GitCode 官方镜像'), findsOneWidget);
+
+        await tester.tap(find.text('国内下载源'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('自定义代理'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('自定义代理地址'), findsOneWidget);
+        expect(find.text('https://gh-proxy.org/'), findsOneWidget);
+        expect(find.text('恢复默认下载源'), findsNothing);
+
+        await tester.tap(find.text('国内下载源'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('GitCode 官方镜像'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('自定义代理地址'), findsNothing);
+        expect(find.text('GitCode 官方镜像'), findsOneWidget);
+    });
 }
 
 Widget _app(

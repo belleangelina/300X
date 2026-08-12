@@ -16,16 +16,19 @@ class AuthState
         this.captcha,
         this.avatarUri,
         this.webFallbackAvailable = false,
+        this.sessionExpired = false,
     });
 
     const AuthState.unauthenticated({
         String message = '',
         bool webFallbackAvailable = false,
+        bool sessionExpired = false,
     })
         : this(
               status: AuthStatus.unauthenticated,
               message: message,
               webFallbackAvailable: webFallbackAvailable,
+              sessionExpired: sessionExpired,
           );
 
     const AuthState.authenticated(
@@ -53,6 +56,7 @@ class AuthState
     final CaptchaChallenge? captcha;
     final Uri? avatarUri;
     final bool webFallbackAvailable;
+    final bool sessionExpired;
 }
 
 class CaptchaChallenge

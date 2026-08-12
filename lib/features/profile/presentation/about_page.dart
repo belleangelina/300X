@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:x300/features/update/application/update_controller.dart';
+import 'package:x300/features/update/presentation/update_dialog.dart';
 
-class AboutPage extends StatelessWidget
+class AboutPage extends ConsumerWidget
 {
     const AboutPage({super.key});
 
     @override
-    Widget build(BuildContext context)
+    Widget build(BuildContext context, WidgetRef ref)
     {
         return Scaffold(
             appBar: AppBar(title: const Text('关于APP')),
@@ -41,6 +44,45 @@ class AboutPage extends StatelessWidget
                                 : 'v1.0.0',
                             textAlign: TextAlign.center,
                             style: const TextStyle(color: Colors.grey),
+                        ),
+                    ),
+                    Align(
+                        child: Consumer(
+                            builder: (
+                                BuildContext context,
+                                WidgetRef ref,
+                                Widget? child,
+                            )
+                            {
+                                final UpdateState state = ref.watch(
+                                    updateControllerProvider,
+                                );
+                                return Column(
+                                    children: <Widget>[
+                                        TextButton(
+                                            onPressed: state.checkingManually
+                                                ? null
+                                                : () => _checkUpdate(
+                                                      context,
+                                                      ref,
+                                                  ),
+                                            child: Text(
+                                                state.checkingManually
+                                                    ? '正在检查'
+                                                    : '检查更新',
+                                            ),
+                                        ),
+                                        if (state.manualMessage.isNotEmpty)
+                                            Text(
+                                                state.manualMessage,
+                                                style: const TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 12,
+                                                ),
+                                            ),
+                                    ],
+                                );
+                            },
                         ),
                     ),
                     const SizedBox(height: 24),
@@ -102,5 +144,25 @@ class AboutPage extends StatelessWidget
                 ],
             ),
         );
+    }
+
+    Future<void> _checkUpdate(BuildContext context, WidgetRef ref) async
+    {
+        final manifest = await ref
+            .read(updateControllerProvider.notifier)
+            .checkManually();
+        if (manifest == null || !context.mounted)
+        {
+            return;
+        }
+        final bool ignored = await showUpdateDialog(context, ref, manifest);
+        if (ignored)
+        {
+            await ref.read(updateControllerProvider.notifier).ignorePending();
+        }
+        else
+        {
+            ref.read(updateControllerProvider.notifier).dismissPending();
+        }
     }
 }
