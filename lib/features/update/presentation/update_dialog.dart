@@ -18,6 +18,15 @@ enum _UpdateAction
     ignore,
 }
 
+const ButtonStyle _downloadButtonStyle = ButtonStyle(
+    minimumSize: WidgetStatePropertyAll<Size>(Size(0, 44)),
+    shape: WidgetStatePropertyAll<OutlinedBorder>(
+        RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+        ),
+    ),
+);
+
 @visibleForTesting
 TargetPlatform? updateTargetPlatformOverride;
 
@@ -112,24 +121,43 @@ Future<bool> showUpdateDialog(
                     ),
                 ),
             ),
+            actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
             actions: <Widget>[
-                TextButton(
-                    onPressed: () => Navigator.of(context).pop(
-                        _UpdateAction.ignore,
+                SizedBox(
+                    width: double.maxFinite,
+                    child: Column(
+                        children: <Widget>[
+                            Row(
+                                children: <Widget>[
+                                    Expanded(
+                                        child: OutlinedButton(
+                                            style: _downloadButtonStyle,
+                                            onPressed: () => Navigator.of(
+                                                context,
+                                            ).pop(_UpdateAction.domestic),
+                                            child: const Text('国内下载'),
+                                        ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                        child: FilledButton(
+                                            style: _downloadButtonStyle,
+                                            onPressed: () => Navigator.of(
+                                                context,
+                                            ).pop(_UpdateAction.github),
+                                            child: const Text('GitHub 直连'),
+                                        ),
+                                    ),
+                                ],
+                            ),
+                            TextButton(
+                                onPressed: () => Navigator.of(context).pop(
+                                    _UpdateAction.ignore,
+                                ),
+                                child: const Text('忽略此版本'),
+                            ),
+                        ],
                     ),
-                    child: const Text('忽略此版本'),
-                ),
-                OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(
-                        _UpdateAction.domestic,
-                    ),
-                    child: const Text('国内下载'),
-                ),
-                FilledButton(
-                    onPressed: () => Navigator.of(context).pop(
-                        _UpdateAction.github,
-                    ),
-                    child: const Text('GitHub 直连'),
                 ),
             ],
         ),

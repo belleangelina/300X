@@ -55,6 +55,19 @@ void main()
         expect(find.widgetWithText(OutlinedButton, '国内下载'), findsOneWidget);
         expect(find.text('忽略此版本'), findsOneWidget);
         expect(find.textContaining('SHA-256'), findsOneWidget);
+        final Rect github = tester.getRect(find.text('GitHub 直连'));
+        final Rect domestic = tester.getRect(find.text('国内下载'));
+        final Rect ignore = tester.getRect(find.text('忽略此版本'));
+        expect(github.center.dy, domestic.center.dy);
+        expect(ignore.top, greaterThan(github.bottom));
+        final Size githubButton = tester.getSize(
+            find.widgetWithText(FilledButton, 'GitHub 直连'),
+        );
+        final Size domesticButton = tester.getSize(
+            find.widgetWithText(OutlinedButton, '国内下载'),
+        );
+        expect(githubButton, domesticButton);
+        expect(githubButton.height, greaterThanOrEqualTo(44));
 
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
