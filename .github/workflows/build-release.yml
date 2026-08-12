@@ -96,7 +96,7 @@ jobs:
                 sed -n 's/^Signer #1 certificate SHA-256 digest: //p'
             )
             test "${actual_cert,,}" = "${EXPECTED_CERT_SHA256,,}"
-            badging=$("$aapt" dump badging "$apk" | head -1)
+            badging=$("$aapt" dump badging "$apk" | sed -n '1p')
             grep -Fq "versionCode='$BUILD_NUMBER'" <<<"$badging"
             grep -Fq "versionName='$VERSION'" <<<"$badging"
           done
