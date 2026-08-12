@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:x300/features/settings/application/app_settings_controller.dart';
 import 'package:x300/features/settings/data/app_settings_repository.dart';
+import 'package:x300/features/update/application/update_platform.dart';
 import 'package:x300/features/update/data/update_repository.dart';
 import 'package:x300/features/update/domain/update_models.dart';
 
@@ -56,6 +57,10 @@ class UpdateController extends Notifier<UpdateState>
 
     Future<void> checkAutomatically() async
     {
+        if (!UpdatePlatform.supportsUpdates)
+        {
+            return;
+        }
         if (_automaticCheckStarted)
         {
             return;
@@ -94,6 +99,11 @@ class UpdateController extends Notifier<UpdateState>
 
     Future<UpdateManifest?> checkManually() async
     {
+        if (!UpdatePlatform.supportsUpdates)
+        {
+            state = state.copyWith(manualMessage: '当前平台暂不支持应用内更新');
+            return null;
+        }
         if (state.checkingManually)
         {
             return null;

@@ -11,18 +11,18 @@
 ## 1. 目标与范围
 
 - Android 支持后台检查、应用内下载、SHA-256 校验和调用系统安装器升级。
-- Linux 和 iOS 支持后台检查，并在系统浏览器下载对应产物；应用展示 SHA-256，
-  但不宣称已经校验浏览器下载的文件。
+- iOS 支持后台检查，并在系统浏览器下载对应产物；应用展示 SHA-256，但不宣称已经
+  校验浏览器下载的文件。
 - GitCode 官方镜像优先检查，GitHub 作为备用检查源。
 - 更新弹窗允许用户选择 GitHub 直连或国内下载。
 - 国内下载默认使用项目维护者控制的 GitCode 官方镜像，并允许在设置中改为自定义
   GitHub 前缀代理。
 - 登录页不再阻塞应用启动；未登录或会话失效时保持主界面结构与视觉效果一致。
-- Git 标签触发 GitHub Actions 构建三个平台，并将相同发布内容同步到 GitHub 和
-  GitCode。
+- Git 标签触发 GitHub Actions 构建 Android 和 iOS，并将相同发布内容同步到 GitHub
+  和 GitCode。
 
-本期不实现强制更新、系统通知栏下载、断点续传、Linux 原地替换、iOS 签名或安装、
-更新清单独立数字签名。
+本期不实现强制更新、系统通知栏下载、断点续传、iOS 签名或安装、更新清单独立数字
+签名。Linux 可继续用于开发和视觉验收，但不检查或发布应用更新。
 
 ## 2. 发布源与信任边界
 
@@ -67,8 +67,8 @@ Release 构建缺少正式签名配置时必须失败，禁止回退 debug 签�
 }
 ```
 
-`artifacts` 包含 Android universal、Android arm64-v8a、当前 Linux 构建架构和未签名
-iOS IPA。Android arm64 设备优先选用 arm64-v8a 包，其它设备使用 universal 包。
+`artifacts` 包含 Android universal、Android arm64-v8a 和未签名 iOS IPA。Android
+arm64 设备优先选用 arm64-v8a 包，其它设备使用 universal 包。
 
 应用不依赖 Release 网页结构。检查入口固定为两个官方发布源的最新正式版清单；
 自定义代理只把 GitHub 安装包 URL 拼接为：
@@ -153,12 +153,7 @@ iOS IPA。Android arm64 设备优先选用 arm64-v8a 包，其它设备使用 un
 - 新版应用下次启动时删除低于当前构建号的旧安装包；未完成的 `.part` 留到再次选择
   更新时清理，不实现断点续传。
 
-### 6.2 Linux
-
-“GitHub 直连”或“国内下载”均使用系统浏览器打开当前架构 `.tar.gz`。弹窗展示并允许
-复制 SHA-256。应用不下载、不替换正在运行的程序，也不宣称已验证浏览器保存文件。
-
-### 6.3 iOS
+### 6.2 iOS
 
 “GitHub 直连”或“国内下载”均使用系统浏览器打开未签名 IPA。弹窗展示并允许复制
 SHA-256，并显示：
@@ -209,7 +204,7 @@ SHA-256，并显示：
 - 推送 `v*` 标签触发正式构建发布；手动入口仅用于将已有 GitHub Release 补同步到
   GitCode，不重新构建或创建版本。
 - 校验标签版本与 `pubspec.yaml` 一致。
-- 并行构建正式签名 Android universal/arm64 APK、Linux tar.gz、未签名 iOS IPA。
+- 并行构建正式签名 Android universal/arm64 APK 和未签名 iOS IPA。
 - 严格校验 Android 版本、ABI 与固定发布证书；构建日志由 CI 保存，对话只报告摘要。
 - 汇总产物大小和 SHA-256，读取本地脚本提交的发布说明，生成统一清单。
 - 创建 GitHub Release；GitCode 官方 Pull 镜像同步相同代码与原标签后，工作流使用
@@ -237,9 +232,8 @@ SHA-256，并显示：
 
 - Android 已登录、未登录、会话失效、arm64 下载、哈希校验、取消/失败/复用、未知
   来源授权和覆盖安装；
-- Linux 后台检查、两条下载线路、浏览器打开和 SHA-256 展示；
 - iOS 条件允许时验证检查、线路选择、IPA 浏览器下载和安装提示；
-- GitHub 标签触发、三平台产物、GitHub Release、GitCode 镜像及失败重试；
+- GitHub 标签触发、Android/iOS 产物、GitHub Release、GitCode 镜像及失败重试；
 - 自动检查忽略版本、永不提醒、24 小时间隔和手动检查覆盖规则；
 - 窄屏、横屏宽屏、浅色和深色下登录空状态及更新弹窗视觉一致性。
 

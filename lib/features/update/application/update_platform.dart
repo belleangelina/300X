@@ -13,8 +13,11 @@ class UpdatePlatform
     @visibleForTesting
     static String? platformOverride;
 
-    @visibleForTesting
-    static String? linuxMachineOverride;
+    static bool get supportsUpdates
+    {
+        final String platform = platformOverride ?? Platform.operatingSystem;
+        return platform == 'android' || platform == 'ios';
+    }
 
     static Future<UpdateArtifact?> selectArtifact(
         UpdateManifest manifest,
@@ -33,22 +36,6 @@ class UpdatePlatform
         if (platform == 'ios')
         {
             return manifest.artifactFor('ios', 'unsigned');
-        }
-        if (platform == 'linux')
-        {
-            final String machine = linuxMachineOverride ??
-                (await Process.run('uname', <String>['-m']))
-                    .stdout
-                    .toString()
-                    .trim();
-            final String variant = switch (machine)
-            {
-                'x86_64' || 'amd64' => 'x64',
-                'aarch64' || 'arm64' => 'arm64',
-                'riscv64' => 'riscv64',
-                _ => machine,
-            };
-            return manifest.artifactFor('linux', variant);
         }
         return null;
     }

@@ -19,7 +19,7 @@ class UpdateArtifact
         final String sha256 = _requiredString(json, 'sha256').toLowerCase();
         final Uri githubUrl = Uri.parse(_requiredString(json, 'githubUrl'));
         final Uri gitcodeUrl = Uri.parse(_requiredString(json, 'gitcodeUrl'));
-        if (!const <String>{'android', 'linux', 'ios'}.contains(platform) ||
+        if (!const <String>{'android', 'ios'}.contains(platform) ||
             variant.isEmpty ||
             !_validFileName(fileName) ||
             size <= 0 ||

@@ -11,13 +11,11 @@ void main()
         WidgetTester tester,
     ) async
     {
-        UpdatePlatform.platformOverride = 'linux';
-        UpdatePlatform.linuxMachineOverride = 'x86_64';
-        updateTargetPlatformOverride = TargetPlatform.linux;
+        UpdatePlatform.platformOverride = 'ios';
+        updateTargetPlatformOverride = TargetPlatform.iOS;
         addTearDown(()
         {
             UpdatePlatform.platformOverride = null;
-            UpdatePlatform.linuxMachineOverride = null;
             updateTargetPlatformOverride = null;
         });
         bool? ignored;
@@ -77,7 +75,7 @@ void main()
 
 UpdateManifest _manifest()
 {
-    const String fileName = 'X300-v1.0.8-linux-x64-release.tar.gz';
+    const String fileName = 'X300-v1.0.8-ios-unsigned.ipa';
     return UpdateManifest(
         versionName: '1.0.8',
         buildNumber: 11,
@@ -85,8 +83,8 @@ UpdateManifest _manifest()
         publishedAt: DateTime.utc(2026, 8, 12),
         artifacts: <UpdateArtifact>[
             UpdateArtifact(
-                platform: 'linux',
-                variant: 'x64',
+                platform: 'ios',
+                variant: 'unsigned',
                 fileName: fileName,
                 size: 1024,
                 sha256: 'a' * 64,

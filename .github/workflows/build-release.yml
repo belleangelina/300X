@@ -125,41 +125,6 @@ jobs:
           name: android-release
           path: release-assets/*
 
-  build-linux:
-    needs: prepare
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.3'
-          channel: stable
-          cache: true
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            clang cmake ninja-build pkg-config libgtk-3-dev \
-            libsecret-1-dev libwebkit2gtk-4.0-dev
-      - run: flutter pub get
-      - name: Build Linux archive
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-          BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
-        run: |
-          set -Eeuo pipefail
-          flutter build linux --release --build-name="$VERSION" \
-            --build-number="$BUILD_NUMBER"
-          test -x build/linux/x64/release/bundle/x300
-          test -x build/linux/x64/release/bundle/x300_waf_challenge
-          mkdir -p release-assets
-          tar -C build/linux/x64/release/bundle -czf \
-            "release-assets/X300-v${VERSION}-linux-x64-release.tar.gz" .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-release
-          path: release-assets/*
-
   build-ios:
     needs: prepare
     runs-on: macos-latest
@@ -195,7 +160,7 @@ jobs:
           path: release-assets/*
 
   publish:
-    needs: [prepare, build-android, build-linux, build-ios]
+    needs: [prepare, build-android, build-ios]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -312,7 +277,6 @@ jobs:
         pattern:
           - '*-android-universal-release.apk'
           - '*-ios-unsigned.ipa'
-          - '*-linux-*-release.tar.gz'
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}

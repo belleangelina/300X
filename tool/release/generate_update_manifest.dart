@@ -69,11 +69,16 @@ Future<void> main(List<String> arguments) async
     final Set<String> platforms = artifacts
         .map((Map<String, Object> value) => value['platform']! as String)
         .toSet();
-    if (!platforms.containsAll(<String>{'android', 'linux', 'ios'}) ||
+    if (!platforms.containsAll(<String>{'android', 'ios'}) ||
+        platforms.length != 2 ||
         artifacts.where(
                 (Map<String, Object> value) => value['platform'] == 'android',
             ).length !=
-            2)
+            2 ||
+        artifacts.where(
+                (Map<String, Object> value) => value['platform'] == 'ios',
+            ).length !=
+            1)
     {
         stderr.writeln('release assets are incomplete');
         exitCode = 1;
@@ -121,8 +126,5 @@ Future<void> main(List<String> arguments) async
     {
         return ('ios', 'unsigned');
     }
-    final RegExpMatch? linux = RegExp(
-        r'^linux-(x64|arm64|riscv64)-release\.tar\.gz$',
-    ).firstMatch(suffix);
-    return linux == null ? null : ('linux', linux.group(1)!);
+    return null;
 }

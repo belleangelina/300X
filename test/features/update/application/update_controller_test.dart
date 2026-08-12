@@ -7,6 +7,7 @@ import 'package:x300/features/settings/application/app_settings_controller.dart'
 import 'package:x300/features/settings/data/app_settings_repository.dart';
 import 'package:x300/features/settings/domain/app_settings.dart';
 import 'package:x300/features/update/application/update_controller.dart';
+import 'package:x300/features/update/application/update_platform.dart';
 import 'package:x300/features/update/data/update_repository.dart';
 import 'package:x300/features/update/domain/update_models.dart';
 
@@ -21,6 +22,7 @@ void main()
 
     setUp(() async
     {
+        UpdatePlatform.platformOverride = 'android';
         SharedPreferences.setMockInitialValues(<String, Object>{});
         settingsRepository = AppSettingsRepository(
             await SharedPreferences.getInstance(),
@@ -33,6 +35,11 @@ void main()
             buildNumber: '7',
             buildSignature: '',
         );
+    });
+
+    tearDown(()
+    {
+        UpdatePlatform.platformOverride = null;
     });
 
     test('自动检查遵守关闭开关和 24 小时间隔', () async
@@ -114,6 +121,30 @@ void main()
 
         expect(container.read(updateControllerProvider).pending, isNull);
         expect(settingsRepository.lastSuccessfulUpdateCheck, isNull);
+    });
+
+    test('不支持的平台不检查更新', () async
+    {
+        UpdatePlatform.platformOverride = 'linux';
+        final ProviderContainer container = _container(
+            settingsRepository,
+            updateRepository,
+        );
+        addTearDown(container.dispose);
+
+        await container
+            .read(updateControllerProvider.notifier)
+            .checkAutomatically();
+        final UpdateManifest? manifest = await container
+            .read(updateControllerProvider.notifier)
+            .checkManually();
+
+        verifyNever(updateRepository.fetchLatest);
+        expect(manifest, isNull);
+        expect(
+            container.read(updateControllerProvider).manualMessage,
+            '当前平台暂不支持应用内更新',
+        );
     });
 }
 
