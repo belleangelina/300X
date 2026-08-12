@@ -89,8 +89,8 @@ jobs:
           aapt=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
           test -x "$apksigner"
           test -x "$aapt"
-          "$apksigner" verify --verbose release-assets/*.apk >/dev/null
           for apk in release-assets/*.apk; do
+            "$apksigner" verify --verbose "$apk" >/dev/null
             actual_cert=$(
               "$apksigner" verify --print-certs "$apk" |
                 sed -n 's/^Signer #1 certificate SHA-256 digest: //p'
