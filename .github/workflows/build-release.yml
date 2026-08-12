@@ -34,6 +34,9 @@ jobs:
           version=${current%%+*}
           build_number=${current##*+}
           test "${GITHUB_REF_NAME}" = "v${version}"
+          git fetch --force origin \
+            "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
           git for-each-ref "refs/tags/${GITHUB_REF_NAME}" \
             --format='%(contents)' > release-notes.md
           test -s release-notes.md

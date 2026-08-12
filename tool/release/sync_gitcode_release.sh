@@ -23,6 +23,10 @@ do
     [[ -f "$asset" ]] || fail "找不到附件：$asset"
 done
 
+git fetch --quiet --force https://github.com/belleangelina/300X.git \
+    "refs/tags/$tag:refs/tags/$tag"
+[[ "$(git cat-file -t "refs/tags/$tag")" == tag ]] ||
+    fail "GitHub 标签不是注解标签：$tag"
 tag_ref="$(git rev-parse "refs/tags/$tag")"
 api_root='https://api.gitcode.com/api/v5'
 remote_tag="$(git ls-remote https://gitcode.com/belleangelina/300X.git \
@@ -49,6 +53,22 @@ then
                 --data-binary @- "$api/releases"
     )"
 fi
+if [[ "$(jq -r .name <<<"$release_json")" != "$tag" ||
+    "$(jq -r .body <<<"$release_json")" != "$(cat "$notes_file")" ]]
+then
+    release_id="$(jq -er .id <<<"$release_json")"
+    release_json="$(
+        jq -n \
+            --arg tag "$tag" \
+            --arg name "$tag" \
+            --rawfile body "$notes_file" \
+            '{tag_name:$tag,name:$name,body:$body}' |
+            curl -fsS -X PATCH \
+                --url-query "access_token=$GITCODE_TOKEN" \
+                -H 'Content-Type: application/json' \
+                --data-binary @- "$api/releases/$release_id"
+    )"
+fi
 [[ "$(jq -r .tag_name <<<"$release_json")" == "$tag" &&
     "$(jq -r .name <<<"$release_json")" == "$tag" &&
     "$(jq -r .body <<<"$release_json")" == "$(cat "$notes_file")" ]] ||
@@ -59,6 +79,7 @@ upload_asset()
     local asset="$1"
     local name
     local existing
+    local existing_id
     local expected_size
     local expected_sha256
     local remote_file
@@ -71,23 +92,27 @@ upload_asset()
     name="$(basename "$asset")"
     expected_size="$(wc -c <"$asset" | tr -d ' ')"
     expected_sha256="$(sha256sum "$asset" | awk '{ print $1 }')"
-    existing="$(jq -r --arg name "$name" \
-        '.assets[]? | select(.name == $name) | .browser_download_url' \
-        <<<"$release_json" | head -1)"
+    existing="$(jq -c --arg name "$name" \
+        '[.assets[]? | select(.name == $name)][0] // empty' \
+        <<<"$release_json")"
     if [[ -n "$existing" ]]
     then
         remote_file="$(mktemp)"
-        curl -fsSL -o "$remote_file" "$existing"
+        curl -fsSL -o "$remote_file" \
+            "$(jq -r .browser_download_url <<<"$existing")"
         remote_size="$(wc -c <"$remote_file" | tr -d ' ')"
         remote_sha256="$(sha256sum "$remote_file" | awk '{ print $1 }')"
-        if [[ "$remote_size" != "$expected_size" ||
-            "$remote_sha256" != "$expected_sha256" ]]
+        if [[ "$remote_size" == "$expected_size" &&
+            "$remote_sha256" == "$expected_sha256" ]]
         then
             rm -f "$remote_file"
-            fail "GitCode 同名附件内容不一致：$name"
+            return
         fi
         rm -f "$remote_file"
-        return
+        existing_id="$(jq -er .id <<<"$existing")"
+        curl -fsS -X DELETE \
+            --url-query "access_token=$GITCODE_TOKEN" \
+            "$api/releases/$tag/attach_files/$existing_id"
     fi
     upload_json="$(curl -fsS -G \
         --data-urlencode "access_token=$GITCODE_TOKEN" \
