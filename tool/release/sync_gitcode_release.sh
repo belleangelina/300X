@@ -16,7 +16,6 @@ command -v jq >/dev/null || fail '缺少 jq'
 tag="$1"
 notes_file="$2"
 shift 2
-target="${GITCODE_TARGET:-main}"
 [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "非法标签：$tag"
 [[ -s "$notes_file" ]] || fail "发布说明为空：$notes_file"
 for asset in "$@"
@@ -24,21 +23,41 @@ do
     [[ -f "$asset" ]] || fail "找不到附件：$asset"
 done
 
-api='https://api.gitcode.com/api/v5/repos/belleangelina/300X'
-auth_header="Authorization: Bearer $GITCODE_TOKEN"
+main_commit="$(git rev-parse HEAD)"
+tag_ref="$(git rev-parse "refs/tags/$tag")"
+askpass="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/x300-gitcode-askpass.sh"
+printf '%s\n' \
+    '#!/usr/bin/env sh' \
+    'case "$1" in' \
+    '    *Username*) printf "%s\n" belleangelina ;;' \
+    '    *) printf "%s\n" "$GITCODE_TOKEN" ;;' \
+    'esac' >"$askpass"
+chmod 700 "$askpass"
+GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git push \
+    https://gitcode.com/belleangelina/300X.git \
+    HEAD:refs/heads/main "refs/tags/$tag:refs/tags/$tag"
+remote_main="$(git ls-remote https://gitcode.com/belleangelina/300X.git \
+    refs/heads/main | awk '{ print $1 }')"
+remote_tag="$(git ls-remote https://gitcode.com/belleangelina/300X.git \
+    "refs/tags/$tag" | awk '{ print $1 }')"
+[[ "$remote_main" == "$main_commit" && "$remote_tag" == "$tag_ref" ]] ||
+    fail "GitCode 代码或标签同步校验失败：$tag"
 
-release_json="$(curl -sS -H "$auth_header" "$api/releases/tags/$tag")"
+api='https://api.gitcode.com/api/v5/repos/belleangelina/300X'
+
+release_json="$(curl -sS -G \
+    --data-urlencode "access_token=$GITCODE_TOKEN" \
+    "$api/releases/tags/$tag")"
 if ! jq -e '.tag_name' <<<"$release_json" >/dev/null 2>&1
 then
     release_json="$(
         jq -n \
             --arg tag "$tag" \
             --arg name "$tag" \
-            --arg target "$target" \
             --rawfile body "$notes_file" \
-            '{tag_name:$tag,name:$name,body:$body,target_commitish:$target,
-                release_status:"latest"}' |
-            curl -fsS -X POST -H "$auth_header" \
+            '{tag_name:$tag,name:$name,body:$body,release_status:"latest"}' |
+            curl -fsS -X POST \
+                --url-query "access_token=$GITCODE_TOKEN" \
                 -H 'Content-Type: application/json' \
                 --data-binary @- "$api/releases"
     )"
@@ -83,7 +102,8 @@ upload_asset()
         rm -f "$remote_file"
         return
     fi
-    upload_json="$(curl -fsS -G -H "$auth_header" \
+    upload_json="$(curl -fsS -G \
+        --data-urlencode "access_token=$GITCODE_TOKEN" \
         --data-urlencode "file_name=$name" "$api/releases/$tag/upload_url")"
     upload_url="$(jq -er '.url' <<<"$upload_json")"
     header_file="$(mktemp)"

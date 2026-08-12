@@ -4,12 +4,19 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      sync_tag:
+        description: '仅将已有 GitHub Release 同步到 GitCode'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   prepare:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.release.outputs.version }}
@@ -255,9 +262,37 @@ jobs:
             gh release upload "$tag" "$asset"
           fi
       - name: Sync GitCode Release
-        env:
-          GITCODE_TARGET: ${{ needs.prepare.outputs.commit }}
         run: |
           test -n "$GITCODE_TOKEN"
           tool/release/sync_gitcode_release.sh "v$VERSION" \
+            release-metadata/release-notes.md release-assets/*
+
+  sync-existing-gitcode-release:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download existing GitHub Release
+        env:
+          TAG: ${{ inputs.sync_tag }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          mkdir -p release-assets release-metadata
+          gh release view "$TAG" --json body --jq .body \
+            > release-metadata/release-notes.md
+          test -s release-metadata/release-notes.md
+          gh release download "$TAG" --dir release-assets
+          test -f release-assets/update-manifest.json
+      - name: Sync GitCode Release
+        env:
+          TAG: ${{ inputs.sync_tag }}
+        run: |
+          test -n "$GITCODE_TOKEN"
+          tool/release/sync_gitcode_release.sh "$TAG" \
             release-metadata/release-notes.md release-assets/*
