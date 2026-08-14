@@ -184,6 +184,72 @@ void main()
         await tester.pumpAndSettle();
     });
 
+    testWidgets('传入讨论回调时替代原帖入口且只触发一次', (
+        WidgetTester tester,
+    ) async
+    {
+        await settingsRepository.save(
+            const AppSettings(novelDirection: ReaderDirection.vertical),
+        );
+        final Work work = _work();
+        final Chapter chapter = work.chapters.first;
+        await downloadRepository.enqueue(
+            work: work,
+            chapter: chapter,
+            directoryPath: '',
+        );
+        await downloadRepository.complete(
+            downloadRepository.taskId(work.id, chapter.id),
+            blocks: const <PostContentBlock>[
+                PostTextBlock(text: '讨论入口离线正文'),
+            ],
+            referer: chapter.sourceUri,
+        );
+        when(
+            () => forumRepository.loadChapterPage(any(), any()),
+        ).thenThrow(StateError('不应请求论坛'));
+        int openCount = 0;
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appDatabaseProvider.overrideWithValue(database),
+                    forumLibraryRepositoryProvider.overrideWithValue(
+                        forumRepository,
+                    ),
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                ],
+                child: MaterialApp(
+                    home: ChapterReaderPage(
+                        work: work,
+                        chapter: chapter,
+                        onOpenDiscussion: ()
+                        {
+                            openCount++;
+                        },
+                    ),
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+        await _showReaderControls(tester);
+
+        expect(find.byKey(const Key('reader-discussion-button')), findsOneWidget);
+        expect(find.byKey(const Key('reader-original-button')), findsNothing);
+        expect(find.text('讨论'), findsOneWidget);
+        await tester.tap(find.byKey(const Key('reader-discussion-button')));
+        await tester.pump();
+        expect(openCount, 1);
+        verifyNever(
+            () => forumRepository.loadChapterPage(any(), any()),
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+    });
+
     testWidgets('离线阅读器可以切换章节并保持零论坛请求', (
         WidgetTester tester,
     ) async

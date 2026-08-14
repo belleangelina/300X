@@ -47,7 +47,9 @@ class LibraryHomePage extends ConsumerStatefulWidget
         required this.authState,
         required this.onLogin,
         this.controller,
+        this.combined = false,
         this.onSearch,
+        this.onSearchForKind,
         super.key,
     });
 
@@ -56,7 +58,9 @@ class LibraryHomePage extends ConsumerStatefulWidget
     final VoidCallback onLogin;
     final ValueChanged<Work> onOpenWork;
     final LibraryHomeController? controller;
+    final bool combined;
     final VoidCallback? onSearch;
+    final ValueChanged<LibraryKind>? onSearchForKind;
 
     @override
     ConsumerState<LibraryHomePage> createState()
@@ -79,7 +83,25 @@ class _LibraryHomePageState extends ConsumerState<LibraryHomePage>
     void initState()
     {
         super.initState();
-        _feeds = widget.kind == LibraryKind.comic
+        _feeds = widget.combined
+            ? const <_CatalogFeedDefinition>[
+                _CatalogFeedDefinition(
+                    title: '漫画区',
+                    kind: LibraryKind.comic,
+                    novelSource: NovelSourceFilter.all,
+                ),
+                _CatalogFeedDefinition(
+                    title: '轻小说',
+                    kind: LibraryKind.novel,
+                    novelSource: NovelSourceFilter.lightNovel,
+                ),
+                _CatalogFeedDefinition(
+                    title: '文学区',
+                    kind: LibraryKind.novel,
+                    novelSource: NovelSourceFilter.literature,
+                ),
+            ]
+            : widget.kind == LibraryKind.comic
                 ? const <_CatalogFeedDefinition>[
                         _CatalogFeedDefinition(
                             title: '漫画区',
@@ -153,7 +175,7 @@ class _LibraryHomePageState extends ConsumerState<LibraryHomePage>
                     children: <Widget>[
                         IconButton(
                             key: const ValueKey<String>('catalog-search'),
-                            onPressed: widget.onSearch,
+                            onPressed: _openSearch,
                             icon: const Icon(Icons.search),
                         ),
                     ],
@@ -190,6 +212,17 @@ class _LibraryHomePageState extends ConsumerState<LibraryHomePage>
         return _feedKeys[_tabController.index].currentState
                         ?.scrollToTopAndRefresh() ??
                 Future<void>.value();
+    }
+
+    void _openSearch()
+    {
+        final ValueChanged<LibraryKind>? callback = widget.onSearchForKind;
+        if (callback != null)
+        {
+            callback(_feeds[_tabController.index].kind);
+            return;
+        }
+        widget.onSearch?.call();
     }
 
     void _handleFeedChanged()

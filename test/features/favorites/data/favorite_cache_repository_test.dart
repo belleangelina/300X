@@ -13,7 +13,7 @@ void main()
     setUp(()
     {
         database = AppDatabase(NativeDatabase.memory());
-        repository = FavoriteCacheRepository(database);
+        repository = FavoriteCacheRepository(database, 101);
     });
 
     tearDown(() async
@@ -53,6 +53,64 @@ void main()
         await repository.save(<FavoriteWork>[novel]);
         cached = await repository.load();
         expect(cached!.works.single.work.id, novel.work.id);
+    });
+
+    test('云收藏缓存按账号隔离', () async
+    {
+        final FavoriteWork comic = _favorite(
+            id: 'comic:101',
+            tid: 101,
+            kind: LibraryKind.comic,
+            board: ForumBoard.comic,
+        );
+        await repository.save(<FavoriteWork>[comic]);
+
+        final FavoriteCacheRepository other = FavoriteCacheRepository(
+            database,
+            202,
+        );
+
+        expect(await other.load(), isNull);
+        expect((await repository.load())!.works, hasLength(1));
+    });
+
+    test('云收藏缓存不落盘 formhash', () async
+    {
+        final FavoriteWork favorite = _favorite(
+            id: 'comic:303',
+            tid: 303,
+            kind: LibraryKind.comic,
+            board: ForumBoard.comic,
+        );
+        final CloudFavoriteRecord record = favorite.records.single;
+        await repository.save(<FavoriteWork>[
+            FavoriteWork(
+                work: favorite.work,
+                records: <CloudFavoriteRecord>[
+                    CloudFavoriteRecord(
+                        favoriteId: record.favoriteId,
+                        threadId: record.threadId,
+                        title: record.title,
+                        threadUri: record.threadUri,
+                        deleteDialogUri: record.deleteDialogUri.replace(
+                            queryParameters: <String, String>{
+                                ...record.deleteDialogUri.queryParameters,
+                                'formhash': 'sensitive-token',
+                            },
+                        ),
+                    ),
+                ],
+            ),
+        ]);
+
+        final FavoriteCache row = await database
+            .select(database.favoriteCaches)
+            .getSingle();
+        expect(row.recordsJson, isNot(contains('sensitive-token')));
+        expect(row.recordsJson, isNot(contains('formhash')));
+        final CloudFavoriteRecord restored =
+            (await repository.load())!.works.single.records.single;
+        expect(restored.deleteDialogUri.queryParameters['favid'], '1303');
     });
 }
 

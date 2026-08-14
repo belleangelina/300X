@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:x300/core/network/forum_client.dart';
 import 'package:x300/core/network/forum_exceptions.dart';
 import 'package:x300/core/storage/credential_store.dart';
@@ -27,30 +29,69 @@ class AuthRepository
     {
         final StoredCredentials? credentials =
             await _credentialStore.read();
+        if (_client.hasPendingWebIdentity)
+        {
+            try
+            {
+                return await completeWebLogin();
+            }
+            on ForumConnectionException
+            {
+                return const AuthState.unauthenticated(
+                    message: '网页登录状态待确认，请联网后重试',
+                );
+            }
+        }
         if (credentials == null &&
             !await _client.hasPotentialLoginSession())
         {
             return const AuthState.unauthenticated();
         }
+        final _SessionIdentity? session;
         try
         {
-            final _SessionIdentity? session = await _readValidSession();
-            if (session != null)
-            {
-                return AuthState.authenticated(
-                    credentials?.username ?? '已登录',
-                    avatarUri: session.avatarUri,
-                );
-            }
+            session = await _readValidSession();
         }
         on ForumConnectionException
         {
-            if (credentials != null)
+            if (credentials != null && credentials.userId > 0)
             {
-                return AuthState.authenticated(credentials.username);
+                await _activateSession(credentials.userId);
+                return AuthState.authenticated(
+                    credentials.username,
+                    userId: credentials.userId,
+                );
             }
             return const AuthState.unauthenticated(
                 message: '暂时无法连接论坛，请检查网络后重试登录',
+            );
+        }
+        if (session != null)
+        {
+            await _activateSession(session.userId);
+            String username = '已登录';
+            if (credentials != null &&
+                (credentials.userId == 0 ||
+                    credentials.userId == session.userId))
+            {
+                username = credentials.username;
+                if (credentials.userId == 0)
+                {
+                    await _credentialStore.write(StoredCredentials(
+                        username: credentials.username,
+                        password: credentials.password,
+                        userId: session.userId,
+                    ));
+                }
+            }
+            else if (credentials != null)
+            {
+                await _credentialStore.clear();
+            }
+            return AuthState.authenticated(
+                username,
+                userId: session.userId,
+                avatarUri: session.avatarUri,
             );
         }
         if (credentials == null)
@@ -73,6 +114,7 @@ class AuthRepository
         final ParsedAuthPage page;
         try
         {
+            AuthPageParser.requireLoginPageUri(response.realUri);
             page = _parser.parse(
                 response.data ?? '',
                 response.realUri,
@@ -90,14 +132,17 @@ class AuthRepository
                 : null;
             if (session != null)
             {
+                await _activateSession(session.userId);
                 await _credentialStore.write(
                     StoredCredentials(
                         username: username,
                         password: password,
+                        userId: session.userId,
                     ),
                 );
                 return AuthState.authenticated(
                     username,
+                    userId: session.userId,
                     avatarUri: session.avatarUri,
                 );
             }
@@ -111,7 +156,7 @@ class AuthRepository
 
         if (form.requiresCaptcha && captcha.trim().isEmpty)
         {
-            return _captchaState(form, loginUri);
+            return _captchaState(form, response.realUri);
         }
 
         final Map<String, dynamic> fields = <String, dynamic>{
@@ -125,14 +170,26 @@ class AuthRepository
             fields[form.captchaField!] = captcha.trim();
         }
 
+        try
+        {
+            AuthPageParser.requireLoginActionUri(form.action);
+        }
+        on ForumParseException catch (error)
+        {
+            return _webFallbackState(error.message);
+        }
         final postResponse = await _client.postForm(
             form.action,
             fields: fields,
-            referer: loginUri.toString(),
+            referer: response.realUri.toString(),
         );
         final ParsedAuthPage resultPage;
         try
         {
+            AuthPageParser.requireForumOrigin(
+                postResponse.realUri,
+                label: '论坛登录结果页',
+            );
             resultPage = _parser.parse(
                 postResponse.data ?? '',
                 postResponse.realUri,
@@ -147,13 +204,15 @@ class AuthRepository
             postResponse.data ?? '',
             postResponse.realUri,
         );
+        int? userId = _parser.currentUserId(postResponse.data ?? '');
         _SessionIdentity? session;
-        if (!resultPage.loggedIn || avatarUri == null)
+        if (!resultPage.loggedIn || avatarUri == null || userId == null)
         {
             try
             {
                 session = await _readValidSession();
                 avatarUri ??= session?.avatarUri;
+                userId ??= session?.userId;
             }
             on ForumConnectionException
             {
@@ -163,17 +222,28 @@ class AuthRepository
                 }
             }
         }
-        if (resultPage.loggedIn || session != null)
+        if ((userId ?? 0) > 0)
         {
+            await _activateSession(userId ?? 0);
             await _credentialStore.write(
                 StoredCredentials(
                     username: username.trim(),
                     password: password,
+                    userId: userId ?? 0,
                 ),
             );
             return AuthState.authenticated(
                 username.trim(),
+                userId: userId ?? 0,
                 avatarUri: avatarUri,
+            );
+        }
+
+        if (resultPage.loggedIn)
+        {
+            return const AuthState.unauthenticated(
+                message: '无法确认论坛账号身份，请重新登录',
+                webFallbackAvailable: true,
             );
         }
 
@@ -196,6 +266,7 @@ class AuthRepository
     Future<AuthState> refreshCaptcha() async
     {
         final response = await _client.getText(loginUri, retryCount: 1);
+        AuthPageParser.requireLoginPageUri(response.realUri);
         final ParsedAuthPage page = _parser.parse(
             response.data ?? '',
             response.realUri,
@@ -216,19 +287,89 @@ class AuthRepository
         await _client.clearSession();
     }
 
-    Future<AuthState> completeWebLogin() async
+    Future<AuthState> completeWebLogin({
+        List<Cookie>? cookies,
+        int? expectedIdentityGeneration,
+        ForumWebSessionTransitionReservation? reservation,
+    }) async
+    {
+        if (cookies != null)
+        {
+            return _client.transitionWebSession<AuthState>(
+                cookies: cookies,
+                verify: _verifyPendingWebSession,
+                expectedIdentityGeneration: expectedIdentityGeneration,
+                reservation: reservation,
+            );
+        }
+        if (_client.hasPendingWebIdentity)
+        {
+            return _client.resumePendingWebSession<AuthState>(
+                verify: _verifyPendingWebSession,
+            );
+        }
+        final _SessionIdentity? session = await _readValidSession();
+        if (session != null)
+        {
+            await _activateSession(session.userId);
+            final StoredCredentials? credentials =
+                await _credentialStore.read();
+            if (credentials != null &&
+                credentials.userId != session.userId)
+            {
+                await _credentialStore.clear();
+            }
+            return AuthState.authenticated(
+                '已登录',
+                userId: session.userId,
+                avatarUri: session.avatarUri,
+            );
+        }
+        await _credentialStore.clear();
+        await _client.clearSession();
+        return const AuthState.unauthenticated(
+            message: '未检测到登录状态，请重试',
+            webFallbackAvailable: true,
+        );
+    }
+
+    Future<ForumWebSessionVerification<AuthState>>
+        _verifyPendingWebSession() async
     {
         final _SessionIdentity? session = await _readValidSession();
         if (session != null)
         {
-            return AuthState.authenticated(
-                '已登录',
-                avatarUri: session.avatarUri,
+            final StoredCredentials? credentials =
+                await _credentialStore.read();
+            if (credentials != null &&
+                credentials.userId != session.userId)
+            {
+                await _credentialStore.clear();
+            }
+            return ForumWebSessionVerification<AuthState>(
+                userId: session.userId,
+                value: AuthState.authenticated(
+                    '已登录',
+                    userId: session.userId,
+                    avatarUri: session.avatarUri,
+                ),
             );
         }
-        return const AuthState.unauthenticated(
-            message: '未检测到登录状态，请重试',
-            webFallbackAvailable: true,
+        await _credentialStore.clear();
+        return const ForumWebSessionVerification<AuthState>(
+            userId: 0,
+            value: AuthState.unauthenticated(
+                message: '未检测到登录状态，请重试',
+                webFallbackAvailable: true,
+            ),
+        );
+    }
+
+    Future<void> _activateSession(int userId)
+    {
+        return _client.activateAccount(
+            userId,
+            migrateCurrentCookies: _client.activeUserId != userId,
         );
     }
 
@@ -238,12 +379,19 @@ class AuthRepository
             verificationUri,
             retryCount: 1,
         );
+        AuthPageParser.requireVerificationUri(response.realUri);
         final String html = response.data ?? '';
         if (!_parser.isForumPage(html))
         {
             return null;
         }
+        final int? userId = _parser.currentUserId(html);
+        if (userId == null)
+        {
+            return null;
+        }
         return _SessionIdentity(
+            userId: userId,
             avatarUri: _parser.currentUserAvatarUri(
                 html,
                 response.realUri,
@@ -257,6 +405,9 @@ class AuthRepository
         String message = '',
     }) async
     {
+        AuthPageParser.requireLoginPageUri(referer);
+        AuthPageParser.requireLoginActionUri(form.action);
+        AuthPageParser.requireCaptchaUri(form.captchaImage!);
         final imageBytes = await _client.getBytes(
             form.captchaImage!,
             referer: referer.toString(),
@@ -280,7 +431,11 @@ class AuthRepository
 
 class _SessionIdentity
 {
-    const _SessionIdentity({required this.avatarUri});
+    const _SessionIdentity({
+        required this.userId,
+        required this.avatarUri,
+    });
 
+    final int userId;
     final Uri? avatarUri;
 }

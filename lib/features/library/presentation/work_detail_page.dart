@@ -8,6 +8,10 @@ import 'package:x300/features/downloads/data/download_repository.dart';
 import 'package:x300/features/downloads/domain/download_models.dart';
 import 'package:x300/features/favorites/data/forum_favorite_repository.dart';
 import 'package:x300/features/favorites/domain/favorite_models.dart';
+import 'package:x300/features/forum/data/forum_submission_tombstone_repository.dart';
+import 'package:x300/features/forum/domain/forum_action_models.dart';
+import 'package:x300/features/forum/domain/forum_models.dart' as forum_domain;
+import 'package:x300/features/forum/presentation/forum_topic_page.dart';
 import 'package:x300/features/history/data/reading_history_repository.dart';
 import 'package:x300/features/history/domain/reading_history_models.dart';
 import 'package:x300/features/library/application/work_index_coordinator.dart';
@@ -269,7 +273,8 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
         } on WorkIndexCancelledException
         {
             return;
-        } on Object catch (error)
+        }
+        on Object catch (error)
         {
             if (!mounted || !identical(_indexCancellation, cancellation))
             {
@@ -284,6 +289,132 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
         finally
         {
             coverCoordinator.endCriticalOperation();
+        }
+    }
+
+    Future<void> _resolveUncertainFavorite(
+        ForumUnresolvedSubmission submission,
+    ) async
+    {
+        final bool readback = await showDialog<bool>(
+                context: context,
+                builder: (BuildContext context) => AlertDialog(
+                    title: const Text('收藏操作结果待核对'),
+                    content: const Text(
+                        '上一次收藏请求可能已经送达论坛。'
+                        '为避免重复操作，请先回读完整云端收藏列表。',
+                    ),
+                    actions: <Widget>[
+                        TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('稍后处理'),
+                        ),
+                        FilledButton(
+                            key: const ValueKey<String>(
+                                'work-favorite-readback',
+                            ),
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: const Text('回读收藏列表'),
+                        ),
+                    ],
+                ),
+            ) ??
+            false;
+        if (!readback || !mounted)
+        {
+            return;
+        }
+        setState(() => _favoriteBusy = true);
+        final ForumFavoriteRepository repository = ref.read(
+            forumFavoriteRepositoryProvider,
+        );
+        final ForumFavoriteReadbackResult result;
+        try
+        {
+            result = await repository.readbackUnresolved(submission, _work);
+        }
+        on Object catch (error)
+        {
+            if (!mounted)
+            {
+                return;
+            }
+            setState(() => _favoriteBusy = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+                AppSnackBar(content: Text('收藏列表回读失败：$error')),
+            );
+            return;
+        }
+        if (!mounted)
+        {
+            return;
+        }
+        setState(()
+        {
+            _favoriteBusy = false;
+            _favoriteFuture = Future<List<CloudFavoriteRecord>>.value(
+                result.records,
+            );
+        });
+        if (result.trustedOutcomeConfirmed)
+        {
+            ScaffoldMessenger.of(context).showSnackBar(
+                const AppSnackBar(content: Text('列表已确认上次操作，防重封存已解除')),
+            );
+            return;
+        }
+        final bool acknowledged = await showDialog<bool>(
+                context: context,
+                builder: (BuildContext context) => AlertDialog(
+                    title: const Text('仍无法确认操作结果'),
+                    content: const Text(
+                        '列表回读未能确认上次操作是否完成。'
+                        '请人工核对当前收藏状态；解除封存只会解除防重限制，'
+                        '不会再次提交。',
+                    ),
+                    actions: <Widget>[
+                        TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('保留封存'),
+                        ),
+                        FilledButton(
+                            key: const ValueKey<String>(
+                                'work-favorite-confirm-acknowledge',
+                            ),
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: const Text('已核对，解除封存'),
+                        ),
+                    ],
+                ),
+            ) ??
+            false;
+        if (!acknowledged || !mounted)
+        {
+            return;
+        }
+        setState(() => _favoriteBusy = true);
+        try
+        {
+            await repository.acknowledgeUnresolved(submission);
+            if (!mounted)
+            {
+                return;
+            }
+            setState(() => _favoriteBusy = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+                const AppSnackBar(content: Text('防重封存已解除，本次未发起新提交')),
+            );
+        }
+        on Object catch (error)
+        {
+            if (!mounted)
+            {
+                return;
+            }
+            setState(() => _favoriteBusy = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+                AppSnackBar(content: Text('解除收藏封存失败：$error')),
+            );
         }
     }
 
@@ -1370,6 +1501,7 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
                     chapter: chapter,
                     chapters: chapters,
                     restoreProgress: restoreProgress,
+                    onOpenDiscussion: () => _openChapterDiscussion(chapter),
                 ),
             ),
         );
@@ -1380,6 +1512,23 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
                 _historyFuture = _loadHistory();
             });
         }
+    }
+
+    void _openChapterDiscussion(Chapter chapter)
+    {
+        Navigator.of(context).push(
+            MaterialPageRoute<void>(
+                builder: (BuildContext context) => ForumTopicPage(
+                    thread: forum_domain.ForumThreadSummary(
+                        id: chapter.sourceTid,
+                        boardId: 0,
+                        title: _selectedWork.title,
+                        uri: chapter.sourceUri,
+                    ),
+                    focusedPostId: chapter.sourcePid,
+                ),
+            ),
+        );
     }
 
     Future<void> _chooseDownloads(List<Chapter> chapters) async
@@ -1719,6 +1868,14 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
 
     Future<void> _toggleFavorite(List<CloudFavoriteRecord> records) async
     {
+        if (_favoriteBusy)
+        {
+            return;
+        }
+        setState(()
+        {
+            _favoriteBusy = true;
+        });
         if (records.isNotEmpty)
         {
             final bool confirmed =
@@ -1747,14 +1904,16 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
                     false;
             if (!confirmed || !mounted)
             {
+                if (mounted)
+                {
+                    setState(()
+                    {
+                        _favoriteBusy = false;
+                    });
+                }
                 return;
             }
         }
-
-        setState(()
-        {
-            _favoriteBusy = true;
-        });
         try
         {
             final ForumFavoriteRepository repository = ref.read(
@@ -1781,7 +1940,20 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
             ScaffoldMessenger.of(context).showSnackBar(
                 AppSnackBar(content: Text(records.isEmpty ? '已加入云端收藏' : '已取消云端收藏')),
             );
-        } on Object catch (error)
+        }
+        on ForumSubmissionBlockedException catch (error)
+        {
+            if (!mounted)
+            {
+                return;
+            }
+            setState(()
+            {
+                _favoriteBusy = false;
+            });
+            await _resolveUncertainFavorite(error.submission);
+        }
+        on Object catch (error)
         {
             if (!mounted)
             {

@@ -11,6 +11,7 @@ class AuthState
 {
     const AuthState({
         required this.status,
+        this.userId = 0,
         this.username = '',
         this.message = '',
         this.captcha,
@@ -33,10 +34,12 @@ class AuthState
 
     const AuthState.authenticated(
         String username, {
+        int userId = 0,
         Uri? avatarUri,
     })
         : this(
               status: AuthStatus.authenticated,
+              userId: userId,
               username: username,
               avatarUri: avatarUri,
           );
@@ -51,6 +54,7 @@ class AuthState
           );
 
     final AuthStatus status;
+    final int userId;
     final String username;
     final String message;
     final CaptchaChallenge? captcha;

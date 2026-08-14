@@ -32,6 +32,17 @@ void main()
         client = _MockForumClient();
         credentials = _MockCredentialStore();
         repository = AuthRepository(client, credentials);
+        when(credentials.read).thenAnswer((_) async => null);
+        when(credentials.clear).thenAnswer((_) async {});
+        when(client.clearSession).thenAnswer((_) async {});
+        when(() => client.activeUserId).thenReturn(0);
+        when(() => client.hasPendingWebIdentity).thenReturn(false);
+        when(
+            () => client.activateAccount(
+                any(),
+                migrateCurrentCookies: any(named: 'migrateCurrentCookies'),
+            ),
+        ).thenAnswer((_) async {});
         when(
             () => client.getText(
                 AuthRepository.verificationUri,
@@ -63,6 +74,7 @@ void main()
             (_) async => const StoredCredentials(
                 username: 'offline-user',
                 password: 'saved-after-success',
+                userId: 471581,
             ),
         );
 
@@ -70,6 +82,28 @@ void main()
 
         expect(state.status, AuthStatus.authenticated);
         expect(state.username, 'offline-user');
+        expect(state.userId, 471581);
+        verify(
+            () => client.activateAccount(
+                471581,
+                migrateCurrentCookies: true,
+            ),
+        ).called(1);
+    });
+
+    test('旧凭据缺少账号 ID 时离线启动不建立未隔离登录态', () async
+    {
+        when(credentials.read).thenAnswer(
+            (_) async => const StoredCredentials(
+                username: 'legacy-user',
+                password: 'legacy-password',
+            ),
+        );
+
+        final AuthState state = await repository.restoreSession();
+
+        expect(state.status, AuthStatus.unauthenticated);
+        expect(state.message, '暂时无法连接论坛，请检查网络后重试登录');
     });
 
     test('只有会话 Cookie 时连接失败仍进入登录页', () async
@@ -107,6 +141,7 @@ void main()
             ''',
             AuthRepository.verificationUri,
         ));
+        when(() => credentials.write(any())).thenAnswer((_) async {});
 
         final AuthState state = await repository.restoreSession();
 
@@ -116,6 +151,48 @@ void main()
             state.avatarUri.toString(),
             'https://bbs.yamibo.com/uc_server/avatar.php?uid=471581&size=middle',
         );
+        final StoredCredentials upgraded = verify(
+            () => credentials.write(captureAny()),
+        ).captured.single as StoredCredentials;
+        expect(upgraded.userId, 471581);
+    });
+
+    test('Cookie 账号与保存凭据 uid 冲突时不复用另一账号密码', () async
+    {
+        when(credentials.read).thenAnswer(
+            (_) async => const StoredCredentials(
+                username: 'account-a',
+                password: 'secret-a',
+                userId: 101,
+            ),
+        );
+        when(
+            () => client.getText(
+                AuthRepository.verificationUri,
+                retryCount: 1,
+            ),
+        ).thenAnswer((_) async => _response(
+            '''
+            <html><head><script>var discuz_uid = '202';</script></head>
+            <body id="forum" class="pg_forumdisplay"></body></html>
+            ''',
+            AuthRepository.verificationUri,
+        ));
+        when(credentials.clear).thenAnswer((_) async {});
+
+        final AuthState state = await repository.restoreSession();
+
+        expect(state.status, AuthStatus.authenticated);
+        expect(state.userId, 202);
+        expect(state.username, '已登录');
+        verify(credentials.clear).called(1);
+        verifyNever(() => credentials.write(any()));
+        verify(
+            () => client.activateAccount(
+                202,
+                migrateCurrentCookies: true,
+            ),
+        ).called(1);
     });
 
     test('无法解析登录挑战时只提供 WebView 兜底状态', () async
@@ -145,11 +222,132 @@ void main()
 
         expect(state.status, AuthStatus.unauthenticated);
         expect(state.webFallbackAvailable, isTrue);
-        expect(state.message, contains('账号或密码字段'));
+        expect(state.message, contains('登录表单'));
         verifyNever(
             () => client.postForm(
                 any(),
                 fields: any(named: 'fields'),
+                referer: any(named: 'referer'),
+            ),
+        );
+    });
+
+    for (final MapEntry<String, Uri> entry in <String, Uri>{
+        '外域最终跳转': Uri.parse(
+            'https://evil.example/member.php?mod=logging&action=login&mobile=2',
+        ),
+        'HTTP 降级': Uri.parse(
+            'http://bbs.yamibo.com/member.php?mod=logging&action=login&mobile=2',
+        ),
+        '错误同源路径': Uri.parse(
+            'https://bbs.yamibo.com/home.php?mod=logging&action=login&mobile=2',
+        ),
+    }.entries)
+    {
+        test('登录入口拒绝${entry.key}且不会提交凭据', () async
+        {
+            final Uri action = ForumClient.baseUri.resolve(
+                'member.php?mod=logging&action=login&mobile=2',
+            );
+            when(
+                () => client.getText(
+                    AuthRepository.loginUri,
+                    retryCount: 1,
+                ),
+            ).thenAnswer((_) async => _response(
+                _loginForm(action: action, formHash: 'unsafe-final-uri'),
+                AuthRepository.loginUri,
+                finalUri: entry.value,
+            ));
+
+            final AuthState state = await repository.login(
+                username: 'must-not-send',
+                password: 'secret',
+            );
+
+            expect(state.status, AuthStatus.unauthenticated);
+            expect(state.webFallbackAvailable, isTrue);
+            verifyNever(
+                () => client.postForm(
+                    any(),
+                    fields: any(named: 'fields'),
+                    referer: any(named: 'referer'),
+                ),
+            );
+        });
+    }
+
+    test('登录页拒绝外域表单 action 且不会提交凭据', () async
+    {
+        final Uri action = Uri.parse(
+            'https://evil.example/member.php?mod=logging&action=login&mobile=2',
+        );
+        when(
+            () => client.getText(
+                AuthRepository.loginUri,
+                retryCount: 1,
+            ),
+        ).thenAnswer((_) async => _response(
+            _loginForm(action: action, formHash: 'unsafe-action'),
+            AuthRepository.loginUri,
+        ));
+
+        final AuthState state = await repository.login(
+            username: 'must-not-send',
+            password: 'secret',
+        );
+
+        expect(state.status, AuthStatus.unauthenticated);
+        expect(state.webFallbackAvailable, isTrue);
+        verifyNever(
+            () => client.postForm(
+                any(),
+                fields: any(named: 'fields'),
+                referer: any(named: 'referer'),
+            ),
+        );
+    });
+
+    test('登录页拒绝外域验证码且不会请求图片或提交凭据', () async
+    {
+        final Uri action = ForumClient.baseUri.resolve(
+            'member.php?mod=logging&action=login&mobile=2',
+        );
+        final Uri image = Uri.parse(
+            'https://evil.example/misc.php?mod=seccode',
+        );
+        when(
+            () => client.getText(
+                AuthRepository.loginUri,
+                retryCount: 1,
+            ),
+        ).thenAnswer((_) async => _response(
+            _captchaForm(
+                action: action,
+                formHash: 'unsafe-captcha',
+                image: image,
+            ),
+            AuthRepository.loginUri,
+        ));
+
+        final AuthState state = await repository.login(
+            username: 'must-not-send',
+            password: 'secret',
+        );
+
+        expect(state.status, AuthStatus.unauthenticated);
+        expect(state.webFallbackAvailable, isTrue);
+        verifyNever(
+            () => client.getBytes(
+                any(),
+                referer: any(named: 'referer'),
+            ),
+        );
+        verifyNever(
+            () => client.postForm(
+                any(),
+                fields: any(named: 'fields'),
+                referer: any(named: 'referer'),
             ),
         );
     });
@@ -178,6 +376,100 @@ void main()
 
         expect(state.status, AuthStatus.authenticated);
         expect(state.avatarUri, isNotNull);
+        verify(
+            () => client.activateAccount(
+                471581,
+                migrateCurrentCookies: true,
+            ),
+        ).called(1);
+    });
+
+    test('验证页外域最终跳转不能用伪造 uid 建立登录态', () async
+    {
+        when(
+            () => client.getText(
+                AuthRepository.verificationUri,
+                retryCount: 1,
+            ),
+        ).thenAnswer((_) async => _response(
+            '''
+                <html><head>
+                    <script>var discuz_uid = '471581';</script>
+                </head><body id="forum" class="pg_forumdisplay"></body></html>
+            ''',
+            AuthRepository.verificationUri,
+            finalUri: Uri.parse(
+                'https://evil.example/forum.php?mod=forumdisplay&fid=30&mobile=2',
+            ),
+        ));
+
+        await expectLater(
+            repository.completeWebLogin(),
+            throwsA(isA<ForumParseException>()),
+        );
+        verifyNever(
+            () => client.activateAccount(
+                any(),
+                migrateCurrentCookies: any(named: 'migrateCurrentCookies'),
+            ),
+        );
+    });
+
+    test('WebView 切换账号后清除另一账号的已保存密码', () async
+    {
+        when(credentials.read).thenAnswer(
+            (_) async => const StoredCredentials(
+                username: 'account-a',
+                password: 'secret-a',
+                userId: 101,
+            ),
+        );
+        when(
+            () => client.getText(
+                AuthRepository.verificationUri,
+                retryCount: 1,
+            ),
+        ).thenAnswer((_) async => _response(
+            '''
+            <html><head><script>var discuz_uid = '202';</script></head>
+            <body id="forum" class="pg_forumdisplay"></body></html>
+            ''',
+            AuthRepository.verificationUri,
+        ));
+
+        final AuthState state = await repository.completeWebLogin();
+
+        expect(state.userId, 202);
+        verify(() => credentials.clear()).called(1);
+        verifyNever(() => credentials.write(any()));
+    });
+
+    test('账号桶激活失败时不返回已登录状态', () async
+    {
+        when(
+            () => client.getText(
+                AuthRepository.verificationUri,
+                retryCount: 1,
+            ),
+        ).thenAnswer((_) async => _response(
+            '''
+                <html><head>
+                    <script>var discuz_uid = '471581';</script>
+                </head><body id="forum" class="pg_forumdisplay"></body></html>
+            ''',
+            AuthRepository.verificationUri,
+        ));
+        when(
+            () => client.activateAccount(
+                471581,
+                migrateCurrentCookies: true,
+            ),
+        ).thenThrow(StateError('无法切换账号桶'));
+
+        await expectLater(
+            repository.completeWebLogin(),
+            throwsA(isA<StateError>()),
+        );
     });
 
     test('WebView 登录状态未同步时显示精简提示', () async
@@ -196,6 +488,8 @@ void main()
 
         expect(state.status, AuthStatus.unauthenticated);
         expect(state.message, '未检测到登录状态，请重试');
+        verify(credentials.clear).called(1);
+        verify(client.clearSession).called(1);
     });
 
     test('账号密码错误后只提交一次且不保存凭据', () async
@@ -328,7 +622,9 @@ void main()
                 referer: AuthRepository.loginUri.toString(),
             ),
         ).thenAnswer((_) async => _response(
-            '<html><body>'
+            '<html><head>'
+            '<script>var discuz_uid = \'471581\';</script>'
+            '</head><body>'
             '<a href="member.php?mod=logging&action=logout">退出</a>'
             '</body></html>',
             action,
@@ -344,11 +640,18 @@ void main()
         ).captured.single as StoredCredentials;
         expect(stored.username, 'saved-user');
         expect(stored.password, 'saved-password');
+        expect(stored.userId, 471581);
         verify(
             () => client.postForm(
                 action,
                 fields: any(named: 'fields'),
                 referer: AuthRepository.loginUri.toString(),
+            ),
+        ).called(1);
+        verify(
+            () => client.activateAccount(
+                471581,
+                migrateCurrentCookies: true,
             ),
         ).called(1);
     });
@@ -367,11 +670,16 @@ void main()
     });
 }
 
-Response<String> _response(String html, Uri uri)
+Response<String> _response(String html, Uri uri, {Uri? finalUri})
 {
     return Response<String>(
         requestOptions: RequestOptions(path: uri.toString()),
         data: html,
+        redirects: finalUri == null
+            ? const <RedirectRecord>[]
+            : <RedirectRecord>[
+                RedirectRecord(302, 'GET', finalUri),
+            ],
     );
 }
 
@@ -379,7 +687,7 @@ String _loginForm({required Uri action, required String formHash})
 {
     return '''
         <html><body>
-            <form id="loginform" action="$action">
+            <form id="loginform" method="post" action="$action">
                 <input type="hidden" name="formhash" value="$formHash" />
                 <input type="text" name="username" />
                 <input type="password" name="password" />
@@ -396,7 +704,7 @@ String _captchaForm({
 {
     return '''
         <html><body>
-            <form id="loginform" action="$action">
+            <form id="loginform" method="post" action="$action">
                 <input type="hidden" name="formhash" value="$formHash" />
                 <input type="hidden" name="seccodehash" value="challenge" />
                 <input type="text" name="username" />

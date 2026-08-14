@@ -60,6 +60,26 @@ class WorkIndexRepository
         return loadByCanonicalKey(source.canonicalKey, kind);
     }
 
+    Future<WorkIndexRecord?> loadAnyBySourceTid(int tid) async
+    {
+        final WorkIndexSource? source =
+                await (_database.select(_database.workIndexSources)
+                            ..where((WorkIndexSources table) => table.tid.equals(tid)))
+                        .getSingleOrNull();
+        if (source == null)
+        {
+            return null;
+        }
+        final WorkIndex? row =
+                await (_database.select(_database.workIndexes)..where(
+                            (WorkIndexes table) =>
+                                    table.canonicalKey.equals(source.canonicalKey) &
+                                    table.resolverVersion.equals(currentResolverVersion),
+                        ))
+                        .getSingleOrNull();
+        return _decode(row);
+    }
+
     Future<WorkIndexRecord?> loadByWorkId(String workId, LibraryKind kind) async
     {
         final WorkIndex? row =

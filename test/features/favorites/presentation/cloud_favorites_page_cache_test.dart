@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,8 @@ import 'package:x300/features/favorites/data/favorite_cache_repository.dart';
 import 'package:x300/features/favorites/data/forum_favorite_repository.dart';
 import 'package:x300/features/favorites/domain/favorite_models.dart';
 import 'package:x300/features/favorites/presentation/cloud_favorites_page.dart';
+import 'package:x300/features/forum/data/forum_submission_tombstone_repository.dart';
+import 'package:x300/features/forum/domain/forum_action_models.dart';
 import 'package:x300/features/library/data/cover_repository.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 
@@ -52,6 +56,7 @@ void main()
         final AppDatabase database = AppDatabase(NativeDatabase.memory());
         final FavoriteCacheRepository cache = FavoriteCacheRepository(
             database,
+            101,
         );
         final FavoriteWork favorite = _favorite();
         await cache.save(
@@ -66,6 +71,7 @@ void main()
             ProviderScope(
                 overrides: [
                     appDatabaseProvider.overrideWithValue(database),
+                    favoriteCacheRepositoryProvider.overrideWithValue(cache),
                     forumFavoriteRepositoryProvider.overrideWithValue(forum),
                     coverRepositoryProvider.overrideWithValue(
                         _EmptyCoverRepository(),
@@ -94,6 +100,7 @@ void main()
         final AppDatabase database = AppDatabase(NativeDatabase.memory());
         final FavoriteCacheRepository cache = FavoriteCacheRepository(
             database,
+            101,
         );
         await cache.save(<FavoriteWork>[
             _favorite(),
@@ -107,6 +114,7 @@ void main()
             ProviderScope(
                 overrides: [
                     appDatabaseProvider.overrideWithValue(database),
+                    favoriteCacheRepositoryProvider.overrideWithValue(cache),
                     forumFavoriteRepositoryProvider.overrideWithValue(forum),
                     coverRepositoryProvider.overrideWithValue(
                         _EmptyCoverRepository(),
@@ -134,6 +142,10 @@ void main()
     ) async
     {
         final AppDatabase database = AppDatabase(NativeDatabase.memory());
+        final FavoriteCacheRepository cache = FavoriteCacheRepository(
+            database,
+            101,
+        );
         final _MockForumFavoriteRepository forum =
                 _MockForumFavoriteRepository();
         final CloudFavoriteEntry first = _entry(
@@ -177,6 +189,7 @@ void main()
             ProviderScope(
                 overrides: [
                     appDatabaseProvider.overrideWithValue(database),
+                    favoriteCacheRepositoryProvider.overrideWithValue(cache),
                     forumFavoriteRepositoryProvider.overrideWithValue(forum),
                     coverRepositoryProvider.overrideWithValue(
                         _EmptyCoverRepository(),
@@ -204,6 +217,10 @@ void main()
     ) async
     {
         final AppDatabase database = AppDatabase(NativeDatabase.memory());
+        final FavoriteCacheRepository cache = FavoriteCacheRepository(
+            database,
+            101,
+        );
         final _MockForumFavoriteRepository forum =
                 _MockForumFavoriteRepository();
         final CloudFavoriteEntry first = _entry(
@@ -257,6 +274,7 @@ void main()
             ProviderScope(
                 overrides: [
                     appDatabaseProvider.overrideWithValue(database),
+                    favoriteCacheRepositoryProvider.overrideWithValue(cache),
                     forumFavoriteRepositoryProvider.overrideWithValue(forum),
                     coverRepositoryProvider.overrideWithValue(
                         _EmptyCoverRepository(),
@@ -298,8 +316,18 @@ void main()
 
         expect(find.text('测试作品 第1章'), findsWidgets);
         expect(find.text('测试作品 第2章'), findsWidgets);
-        await tester.tap(find.byTooltip('取消收藏').first);
-        await tester.pumpAndSettle();
+        final Finder removeTooltip = find.byTooltip('取消收藏').first;
+        final IconButton removeButton = tester.widget<IconButton>(
+            find.ancestor(
+                of: removeTooltip,
+                matching: find.byType(IconButton),
+            ).first,
+        );
+        removeButton.onPressed!();
+        removeButton.onPressed!();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byType(AlertDialog), findsOneWidget);
         await tester.tap(find.text('确定'));
         await tester.pumpAndSettle();
 
@@ -316,6 +344,261 @@ void main()
         await tester.pump();
         await database.close();
     });
+
+    testWidgets('取消收藏结果未知时回读后人工解除不重提且 busy 释放', (
+        WidgetTester tester,
+    ) async
+    {
+        final AppDatabase database = AppDatabase(NativeDatabase.memory());
+        final FavoriteCacheRepository cache = FavoriteCacheRepository(
+            database,
+            101,
+        );
+        final _MockForumFavoriteRepository forum =
+            _MockForumFavoriteRepository();
+        final CloudFavoriteEntry entry = _entry(
+            tid: 600101,
+            title: '待核对收藏',
+        );
+        final FavoriteWork item = _favoriteFromEntry(entry);
+        final CloudFavoritePage page = CloudFavoritePage(
+            entries: <CloudFavoriteEntry>[entry],
+            ignoredCount: 0,
+            currentPage: 1,
+            totalPages: 1,
+        );
+        final ForumUnresolvedSubmission blocked =
+            _blockedRemoval(entry.record);
+        when(() => forum.loadInitial()).thenAnswer((_) async => page);
+        when(() => forum.aggregateEntries(any())).thenReturn(
+            <FavoriteWork>[item],
+        );
+        when(() => forum.removeWork(any(), any())).thenThrow(
+            ForumSubmissionBlockedException(blocked),
+        );
+        when(
+            () => forum.readbackUnresolved(blocked, any()),
+        ).thenAnswer(
+            (_) async => ForumFavoriteReadbackResult(
+                records: <CloudFavoriteRecord>[entry.record],
+                trustedOutcomeConfirmed: false,
+            ),
+        );
+        when(() => forum.acknowledgeUnresolved(blocked)).thenAnswer(
+            (_) async {},
+        );
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appDatabaseProvider.overrideWithValue(database),
+                    favoriteCacheRepositoryProvider.overrideWithValue(cache),
+                    forumFavoriteRepositoryProvider.overrideWithValue(forum),
+                    coverRepositoryProvider.overrideWithValue(
+                        _EmptyCoverRepository(),
+                    ),
+                ],
+                child: const MaterialApp(home: CloudFavoritesPage()),
+            ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('取消收藏'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+        expect(find.text('取消收藏结果待核对'), findsOneWidget);
+        await tester.tap(
+            find.byKey(const ValueKey<String>('cloud-favorite-readback')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('仍无法确认取消结果'), findsOneWidget);
+        await tester.tap(
+            find.byKey(
+                const ValueKey<String>(
+                    'cloud-favorite-confirm-acknowledge',
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+
+        verify(() => forum.removeWork(any(), any())).called(1);
+        verify(() => forum.readbackUnresolved(blocked, any())).called(1);
+        verify(() => forum.acknowledgeUnresolved(blocked)).called(1);
+        final IconButton removeButton = tester.widget<IconButton>(
+            find.ancestor(
+                of: find.byTooltip('取消收藏'),
+                matching: find.byType(IconButton),
+            ),
+        );
+        expect(removeButton.onPressed, isNotNull);
+        expect(find.textContaining('本次未发起新提交'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        await database.close();
+    });
+
+    testWidgets('刷新旧响应晚返回时不覆盖新页面或新缓存', (
+        WidgetTester tester,
+    ) async
+    {
+        final AppDatabase database = AppDatabase(NativeDatabase.memory());
+        final FavoriteCacheRepository cache = FavoriteCacheRepository(
+            database,
+            101,
+        );
+        final _MockForumFavoriteRepository forum =
+            _MockForumFavoriteRepository();
+        final Completer<CloudFavoritePage> stale =
+            Completer<CloudFavoritePage>();
+        final Completer<CloudFavoritePage> current =
+            Completer<CloudFavoritePage>();
+        var calls = 0;
+        when(() => forum.loadInitial()).thenAnswer((_) =>
+            calls++ == 0 ? stale.future : current.future,
+        );
+        when(() => forum.aggregateEntries(any())).thenAnswer(
+            (Invocation invocation) =>
+                (invocation.positionalArguments.first
+                        as List<CloudFavoriteEntry>)
+                    .map(_favoriteFromEntry)
+                    .toList(growable: false),
+        );
+        final CloudFavoritesPageController controller =
+            CloudFavoritesPageController();
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    favoriteCacheRepositoryProvider.overrideWithValue(cache),
+                    forumFavoriteRepositoryProvider.overrideWithValue(forum),
+                    coverRepositoryProvider.overrideWithValue(
+                        _EmptyCoverRepository(),
+                    ),
+                ],
+                child: MaterialApp(
+                    home: CloudFavoritesPage(controller: controller),
+                ),
+            ),
+        );
+        await tester.pump();
+        final Future<void> refresh = controller.scrollToTopAndRefresh();
+        await tester.pump();
+        current.complete(_page(202, '新刷新结果'));
+        await refresh;
+        await tester.pumpAndSettle();
+
+        expect(find.text('新刷新结果'), findsWidgets);
+        stale.complete(_page(201, '过期刷新结果'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('新刷新结果'), findsWidgets);
+        expect(find.text('过期刷新结果'), findsNothing);
+        final FavoriteCacheSnapshot? snapshot = await cache.load();
+        expect(snapshot?.works.single.work.title, '新刷新结果');
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        await database.close();
+    });
+
+    testWidgets('加载下一页与刷新交错时旧分页不追加也不写回缓存', (
+        WidgetTester tester,
+    ) async
+    {
+        final AppDatabase database = AppDatabase(NativeDatabase.memory());
+        final FavoriteCacheRepository cache = FavoriteCacheRepository(
+            database,
+            101,
+        );
+        final _MockForumFavoriteRepository forum =
+            _MockForumFavoriteRepository();
+        final Completer<CloudFavoritePage> staleNext =
+            Completer<CloudFavoritePage>();
+        final List<CloudFavoriteEntry> initialEntries =
+            List<CloudFavoriteEntry>.generate(
+                30,
+                (int index) => _entry(
+                    tid: 3000 + index,
+                    title: '旧列表 $index',
+                ),
+            );
+        final CloudFavoritePage initial = CloudFavoritePage(
+            entries: initialEntries,
+            ignoredCount: 0,
+            currentPage: 1,
+            totalPages: 2,
+            nextPageUri: Uri.parse(
+                'https://bbs.yamibo.com/home.php?mod=space&do=favorite&'
+                'type=thread&page=2&mobile=2',
+            ),
+        );
+        var initialCalls = 0;
+        when(() => forum.loadInitial()).thenAnswer((_) async =>
+            initialCalls++ == 0 ? initial : _page(9001, '刷新后的唯一结果'),
+        );
+        when(() => forum.loadNext(initial)).thenAnswer((_) => staleNext.future);
+        when(() => forum.aggregateEntries(any())).thenAnswer(
+            (Invocation invocation) =>
+                (invocation.positionalArguments.first
+                        as List<CloudFavoriteEntry>)
+                    .map(_favoriteFromEntry)
+                    .toList(growable: false),
+        );
+        final CloudFavoritesPageController controller =
+            CloudFavoritesPageController();
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    favoriteCacheRepositoryProvider.overrideWithValue(cache),
+                    forumFavoriteRepositoryProvider.overrideWithValue(forum),
+                    coverRepositoryProvider.overrideWithValue(
+                        _EmptyCoverRepository(),
+                    ),
+                ],
+                child: MaterialApp(
+                    home: CloudFavoritesPage(controller: controller),
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+        final ListView list = tester.widget<ListView>(find.byType(ListView));
+        list.controller!.jumpTo(list.controller!.position.maxScrollExtent);
+        await tester.pump();
+        verify(() => forum.loadNext(initial)).called(1);
+
+        final Future<void> refresh = controller.scrollToTopAndRefresh();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        await refresh;
+        await tester.pump();
+        expect(find.text('刷新后的唯一结果'), findsWidgets);
+
+        staleNext.complete(_page(9002, '过期分页结果'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('刷新后的唯一结果'), findsWidgets);
+        expect(find.text('过期分页结果'), findsNothing);
+        final FavoriteCacheSnapshot? snapshot = await cache.load();
+        expect(snapshot?.works.single.work.title, '刷新后的唯一结果');
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        await database.close();
+    });
+}
+
+CloudFavoritePage _page(int tid, String title)
+{
+    return CloudFavoritePage(
+        entries: <CloudFavoriteEntry>[_entry(tid: tid, title: title)],
+        ignoredCount: 0,
+        currentPage: 1,
+        totalPages: 1,
+    );
 }
 
 CloudFavoriteEntry _entry({required int tid, required String title})
@@ -363,6 +646,36 @@ FavoriteWork _favoriteFromEntry(CloudFavoriteEntry entry)
             ],
         ),
         records: <CloudFavoriteRecord>[entry.record],
+    );
+}
+
+ForumUnresolvedSubmission _blockedRemoval(CloudFavoriteRecord record)
+{
+    final ForumActionTarget target = ForumActionTarget(
+        threadId: record.threadId,
+        favoriteId: record.favoriteId,
+    );
+    final Uri readback = Uri.parse(
+        'https://bbs.yamibo.com/home.php?mod=space&do=favorite&view=me&'
+        'type=thread&mobile=2',
+    );
+    return ForumUnresolvedSubmission(
+        attemptId: 'legacy-remove-attempt',
+        userId: 101,
+        request: ForumActionRequest(
+            kind: ForumActionKind.removeFavorite,
+            target: target,
+            entryUri: record.deleteDialogUri,
+            readbackUri: readback,
+        ),
+        readback: ForumReadbackDescriptor(
+            kind: ForumReadbackKind.threadFavorites,
+            uri: readback,
+            target: target,
+            description: '回读收藏列表',
+        ),
+        status: ForumSubmissionTombstoneStatus.attempted,
+        recordedAt: DateTime.utc(2026, 8, 13),
     );
 }
 

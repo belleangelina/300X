@@ -16,10 +16,12 @@ class StoredCredentials
     const StoredCredentials({
         required this.username,
         required this.password,
+        this.userId = 0,
     });
 
     final String username;
     final String password;
+    final int userId;
 }
 
 abstract interface class CredentialStore
@@ -39,6 +41,7 @@ class SecureCredentialStore implements CredentialStore
 
     static const String _usernameKey = 'forum_username';
     static const String _passwordKey = 'forum_password';
+    static const String _userIdKey = 'forum_user_id';
 
     final FlutterSecureStorage _storage;
 
@@ -47,6 +50,10 @@ class SecureCredentialStore implements CredentialStore
     {
         final String? username = await _storage.read(key: _usernameKey);
         final String? password = await _storage.read(key: _passwordKey);
+        final int userId = int.tryParse(
+                await _storage.read(key: _userIdKey) ?? '',
+            ) ??
+            0;
         if (username == null ||
             username.trim().isEmpty ||
             password == null ||
@@ -57,6 +64,7 @@ class SecureCredentialStore implements CredentialStore
         return StoredCredentials(
             username: username,
             password: password,
+            userId: userId,
         );
     }
 
@@ -71,6 +79,10 @@ class SecureCredentialStore implements CredentialStore
             key: _passwordKey,
             value: credentials.password,
         );
+        await _storage.write(
+            key: _userIdKey,
+            value: credentials.userId.toString(),
+        );
     }
 
     @override
@@ -78,5 +90,6 @@ class SecureCredentialStore implements CredentialStore
     {
         await _storage.delete(key: _usernameKey);
         await _storage.delete(key: _passwordKey);
+        await _storage.delete(key: _userIdKey);
     }
 }

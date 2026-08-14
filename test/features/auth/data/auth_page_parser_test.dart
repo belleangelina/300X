@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:x300/core/network/forum_exceptions.dart';
 import 'package:x300/features/auth/data/auth_page_parser.dart';
 
 void main()
@@ -47,7 +48,8 @@ void main()
                 <html>
                 <body>
                     <div class="tip"><div class="message">请输入验证码</div></div>
-                    <form id="loginform" method="post" action="member.php?mod=logging">
+                    <form id="loginform" method="post"
+                        action="member.php?mod=logging&amp;action=login&amp;mobile=2">
                         <input type="hidden" name="formhash" value="newhash" />
                         <input type="hidden" name="seccodehash" value="codehash" />
                         <input type="text" name="username" />
@@ -69,6 +71,87 @@ void main()
             expect(
                 page.form!.captchaImage.toString(),
                 contains('misc.php?mod=seccode'),
+            );
+        });
+
+        test('拒绝外域、HTTP 降级和错误语义的登录表单地址', ()
+        {
+            for (final String action in <String>[
+                'https://evil.example/member.php?mod=logging&action=login&mobile=2',
+                'http://bbs.yamibo.com/member.php?mod=logging&action=login&mobile=2',
+                'https://bbs.yamibo.com/home.php?mod=logging&action=login&mobile=2',
+                'https://bbs.yamibo.com/member.php?mod=logging&action=logout&mobile=2',
+            ])
+            {
+                final String html = '''
+                    <html><body>
+                        <form id="loginform" method="post" action="$action">
+                            <input type="text" name="username" />
+                            <input type="password" name="password" />
+                        </form>
+                    </body></html>
+                ''';
+
+                expect(
+                    () => parser.parse(html, loginUri),
+                    throwsA(isA<ForumParseException>()),
+                    reason: action,
+                );
+            }
+        });
+
+        test('拒绝外域、HTTP 降级和错误语义的验证码地址', ()
+        {
+            for (final String image in <String>[
+                'https://evil.example/misc.php?mod=seccode',
+                'http://bbs.yamibo.com/misc.php?mod=seccode',
+                'https://bbs.yamibo.com/member.php?mod=seccode',
+                'https://bbs.yamibo.com/misc.php?mod=avatar',
+            ])
+            {
+                final String html = '''
+                    <html><body>
+                        <form id="loginform" method="post"
+                            action="member.php?mod=logging&amp;action=login&amp;mobile=2">
+                            <input type="text" name="username" />
+                            <input type="password" name="password" />
+                            <input type="text" name="seccodeverify" />
+                            <img src="$image" />
+                        </form>
+                    </body></html>
+                ''';
+
+                expect(
+                    () => parser.parse(html, loginUri),
+                    throwsA(isA<ForumParseException>()),
+                    reason: image,
+                );
+            }
+        });
+
+        test('拒绝不可信的认证页面来源', ()
+        {
+            const String html = '<html><body>登录成功</body></html>';
+
+            expect(
+                () => parser.parse(
+                    html,
+                    Uri.parse(
+                        'https://evil.example/member.php?mod=logging&'
+                        'action=login&mobile=2',
+                    ),
+                ),
+                throwsA(isA<ForumParseException>()),
+            );
+            expect(
+                () => parser.parse(
+                    html,
+                    Uri.parse(
+                        'http://bbs.yamibo.com/member.php?mod=logging&'
+                        'action=login&mobile=2',
+                    ),
+                ),
+                throwsA(isA<ForumParseException>()),
             );
         });
 

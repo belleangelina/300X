@@ -9,6 +9,8 @@ import 'package:x300/features/downloads/data/download_repository.dart';
 import 'package:x300/features/downloads/domain/download_models.dart';
 import 'package:x300/features/favorites/data/forum_favorite_repository.dart';
 import 'package:x300/features/favorites/domain/favorite_models.dart';
+import 'package:x300/features/forum/data/forum_submission_tombstone_repository.dart';
+import 'package:x300/features/forum/domain/forum_action_models.dart';
 import 'package:x300/features/history/data/reading_history_repository.dart';
 import 'package:x300/features/history/domain/reading_history_models.dart';
 import 'package:x300/features/library/application/work_index_coordinator.dart';
@@ -835,10 +837,94 @@ void main()
         await tester.pumpAndSettle();
 
         expect(find.text('收藏'), findsOneWidget);
-        await tester.tap(find.text('收藏'));
+        final TextButton favoriteButton = tester.widget<TextButton>(
+            find.widgetWithText(TextButton, '收藏'),
+        );
+        favoriteButton.onPressed!();
+        favoriteButton.onPressed!();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.byType(AlertDialog), findsOneWidget);
+        expect(find.textContaining('2 条论坛收藏'), findsOneWidget);
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+        verify(
+            () => favoriteRepository.removeWork(any(), any()),
+        ).called(1);
+    });
+
+    testWidgets('收藏结果未知时先回读再人工解除，解除不重提且 busy 释放', (
+        WidgetTester tester,
+    ) async
+    {
+        final ForumUnresolvedSubmission blocked =
+            _blockedFavoriteSubmission(work);
+        when(() => favoriteRepository.addWork(any())).thenThrow(
+            ForumSubmissionBlockedException(blocked),
+        );
+        when(
+            () => favoriteRepository.readbackUnresolved(blocked, any()),
+        ).thenAnswer(
+            (_) async => const ForumFavoriteReadbackResult(
+                records: <CloudFavoriteRecord>[],
+                trustedOutcomeConfirmed: false,
+            ),
+        );
+        when(
+            () => favoriteRepository.acknowledgeUnresolved(blocked),
+        ).thenAnswer((_) async {});
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                    coverRepositoryProvider.overrideWithValue(coverRepository),
+                    forumFavoriteRepositoryProvider.overrideWithValue(
+                        favoriteRepository,
+                    ),
+                    readingHistoryRepositoryProvider.overrideWithValue(
+                        historyRepository,
+                    ),
+                    workIndexCoordinatorProvider.overrideWithValue(
+                        indexCoordinator,
+                    ),
+                ],
+                child: MaterialApp(home: WorkDetailPage(work: work)),
+            ),
+        );
         await tester.pumpAndSettle();
 
-        expect(find.textContaining('2 条论坛收藏'), findsOneWidget);
+        await tester.tap(find.widgetWithText(TextButton, '收藏'));
+        await tester.pumpAndSettle();
+        expect(find.text('收藏操作结果待核对'), findsOneWidget);
+        await tester.tap(
+            find.byKey(const ValueKey<String>('work-favorite-readback')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('仍无法确认操作结果'), findsOneWidget);
+        await tester.tap(
+            find.byKey(
+                const ValueKey<String>(
+                    'work-favorite-confirm-acknowledge',
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+
+        verify(() => favoriteRepository.addWork(any())).called(1);
+        verify(
+            () => favoriteRepository.readbackUnresolved(blocked, any()),
+        ).called(1);
+        verify(
+            () => favoriteRepository.acknowledgeUnresolved(blocked),
+        ).called(1);
+        final TextButton favoriteButton = tester.widget<TextButton>(
+            find.widgetWithText(TextButton, '收藏'),
+        );
+        expect(favoriteButton.onPressed, isNotNull);
+        expect(find.textContaining('本次未发起新提交'), findsOneWidget);
     });
 
     testWidgets('正式详情长按封面可主动重新解析且保留当前视觉', (
@@ -977,6 +1063,37 @@ CloudFavoriteRecord _favoriteRecord(int favoriteId, int threadId)
             'https://bbs.yamibo.com/home.php?mod=spacecp&ac=favorite&'
             'op=delete&favid=$favoriteId',
         ),
+    );
+}
+
+ForumUnresolvedSubmission _blockedFavoriteSubmission(Work work)
+{
+    final int threadId = work.sourceThreads.first.tid;
+    final ForumActionTarget target = ForumActionTarget(threadId: threadId);
+    final Uri readback = Uri.parse(
+        'https://bbs.yamibo.com/home.php?mod=space&do=favorite&view=me&'
+        'type=thread&mobile=2',
+    );
+    return ForumUnresolvedSubmission(
+        attemptId: 'legacy-favorite-attempt',
+        userId: 42,
+        request: ForumActionRequest(
+            kind: ForumActionKind.favoriteThread,
+            target: target,
+            entryUri: Uri.parse(
+                'https://bbs.yamibo.com/home.php?mod=spacecp&ac=favorite&'
+                'type=thread&id=$threadId&mobile=2',
+            ),
+            readbackUri: readback,
+        ),
+        readback: ForumReadbackDescriptor(
+            kind: ForumReadbackKind.threadFavorites,
+            uri: readback,
+            target: target,
+            description: '回读收藏列表',
+        ),
+        status: ForumSubmissionTombstoneStatus.attempted,
+        recordedAt: DateTime.utc(2026, 8, 13),
     );
 }
 

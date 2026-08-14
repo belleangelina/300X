@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:x300/core/network/forum_webview_cookie_session.dart';
 
 const String forumUserAgent =
     'Mozilla/5.0 (Linux; Android 13) '
@@ -209,7 +210,7 @@ class _LinuxWafChallengeSolver implements WafChallengeSolver
         }
         final String domain = fields[2];
         final int expiresAt = int.tryParse(fields[4]) ?? 0;
-        if (fields[0] != 'nox_jst_v1' ||
+        if (fields[0] != forumWafCookieName ||
             value.isEmpty ||
             domain.replaceFirst(RegExp(r'^\.'), '') != forumUri.host ||
             expiresAt <= 0)
@@ -236,14 +237,35 @@ class _MobileWafChallengeSolver implements WafChallengeSolver
     const _MobileWafChallengeSolver();
 
     @override
-    Future<WafChallengeCookie> solve(Uri forumUri) async
+    Future<WafChallengeCookie> solve(Uri forumUri)
     {
-        final WebViewCookieManager cookieManager = WebViewCookieManager();
+        return forumWebViewCookieSession.runExclusive(() async
+        {
+            final WebViewCookieManager cookieManager =
+                WebViewCookieManager();
+            return runWithForumWafCookieRecovery<WafChallengeCookie>(
+                forumUri: forumUri,
+                readCookies: (Uri uri) =>
+                    cookieManager.getCookies(domain: uri),
+                writeCookie: cookieManager.setCookie,
+                operation: () => _solveWithWebView(
+                    forumUri,
+                    cookieManager,
+                ),
+            );
+        });
+    }
+
+    Future<WafChallengeCookie> _solveWithWebView(
+        Uri forumUri,
+        WebViewCookieManager cookieManager,
+    ) async
+    {
         final Completer<void> completed = Completer<void>();
-        late final WebViewController controller;
-        controller = WebViewController()
-            ..setJavaScriptMode(JavaScriptMode.unrestricted)
-            ..setNavigationDelegate(NavigationDelegate(
+        bool verificationPending = false;
+        final WebViewController controller = WebViewController();
+        await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+        await controller.setNavigationDelegate(NavigationDelegate(
                 onPageFinished: (String url) async
                 {
                     if (completed.isCompleted)
@@ -255,13 +277,42 @@ class _MobileWafChallengeSolver implements WafChallengeSolver
                         final Object result =
                             await controller.runJavaScriptReturningResult(
                                 '''
-                                document.cookie.includes('nox_jst_v1=') &&
-                                !document.documentElement.innerHTML.includes(
-                                    '__noxExpire'
-                                )
+                                (() => {
+                                    if (document.documentElement.innerHTML
+                                        .includes('__noxExpire')) {
+                                        return 1;
+                                    }
+                                    const hasCookie = document.cookie
+                                        .split(';')
+                                        .some((item) => {
+                                            const value = item.trim();
+                                            return value.startsWith(
+                                                'nox_jst_v1='
+                                            ) && value.length >
+                                                'nox_jst_v1='.length;
+                                        });
+                                    return hasCookie ? 2 : 0;
+                                })()
                                 ''',
                             );
-                        if (result == true || result.toString() == 'true')
+                        final String state = result.toString()
+                            .replaceAll('"', '');
+                        if (state == '1')
+                        {
+                            verificationPending = false;
+                            return;
+                        }
+                        if (state != '2')
+                        {
+                            return;
+                        }
+                        if (!verificationPending)
+                        {
+                            verificationPending = true;
+                            await controller.reload();
+                            return;
+                        }
+                        if (!completed.isCompleted)
                         {
                             completed.complete();
                         }
@@ -273,7 +324,6 @@ class _MobileWafChallengeSolver implements WafChallengeSolver
                 },
             ));
         await controller.setUserAgent(forumUserAgent);
-        await cookieManager.clearCookies();
         final _MobileWafChallengeRequest request =
             _MobileWafChallengeRequest(controller);
         _mobileWafChallengeRequest.value = request;
@@ -292,7 +342,9 @@ class _MobileWafChallengeSolver implements WafChallengeSolver
             final WebViewCookie? cookie = cookies
                 .cast<WebViewCookie?>()
                 .firstWhere(
-                    (WebViewCookie? value) => value?.name == 'nox_jst_v1',
+                    (WebViewCookie? value) =>
+                        value?.name == forumWafCookieName &&
+                        value!.value.isNotEmpty,
                     orElse: () => null,
                 );
             if (cookie == null || cookie.value.isEmpty)

@@ -39,10 +39,14 @@ class AppDependencies
 
     static Future<AppDependencies> create() async
     {
+        const CredentialStore credentialStore = SecureCredentialStore();
+        final StoredCredentials? credentials = await credentialStore.read();
         final ForumClient client = await ForumClient.create(
             wafChallengeSolver: createPlatformWafChallengeSolver(),
+            userId: credentials != null && credentials.userId > 0
+                ? credentials.userId
+                : 0,
         );
-        const CredentialStore credentialStore = SecureCredentialStore();
         final AuthRepository authRepository = AuthRepository(
             client,
             credentialStore,

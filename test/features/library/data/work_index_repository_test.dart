@@ -58,6 +58,10 @@ void main()
         expect(byWorkId?.canonicalKey, byKey.canonicalKey);
         expect(bySource?.canonicalKey, byKey.canonicalKey);
         expect(byLinkedChapter?.canonicalKey, byKey.canonicalKey);
+        expect(
+            (await repository.loadAnyBySourceTid(101))?.work.kind,
+            LibraryKind.novel,
+        );
         expect(byKey.work.summary, isEmpty);
         expect(byKey.work.sourceThreads.single.summary, isEmpty);
         expect(byKey.work.chapters.first.sourcePid, 201);
@@ -227,6 +231,7 @@ void main()
             await repository.loadBySourceTid(101, LibraryKind.novel),
             isNull,
         );
+        expect(await repository.loadAnyBySourceTid(101), isNull);
         expect(
             await repository.loadByWorkId(work.id, LibraryKind.novel),
             isNull,

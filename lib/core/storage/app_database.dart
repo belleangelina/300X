@@ -46,6 +46,8 @@ class SearchCaches extends Table
 
 class FavoriteCaches extends Table
 {
+    IntColumn get userId => integer()();
+
     TextColumn get workId => text()();
 
     TextColumn get workJson => text()();
@@ -55,7 +57,7 @@ class FavoriteCaches extends Table
     DateTimeColumn get updatedAt => dateTime()();
 
     @override
-    Set<Column<Object>> get primaryKey => <Column<Object>>{workId};
+    Set<Column<Object>> get primaryKey => <Column<Object>>{userId, workId};
 }
 
 class DownloadTasks extends Table
@@ -179,6 +181,106 @@ class WorkIndexSources extends Table
     Set<Column<Object>> get primaryKey => <Column<Object>>{tid};
 }
 
+class ForumCaches extends Table
+{
+    TextColumn get accountKey => text()();
+
+    TextColumn get cacheKey => text()();
+
+    TextColumn get payloadJson => text()();
+
+    DateTimeColumn get updatedAt => dateTime()();
+
+    @override
+    Set<Column<Object>> get primaryKey => <Column<Object>>{
+        accountKey,
+        cacheKey,
+    };
+}
+
+class ForumDrafts extends Table
+{
+    TextColumn get draftId => text()();
+
+    TextColumn get accountKey => text()();
+
+    TextColumn get action => text()();
+
+    IntColumn get fid => integer().nullable()();
+
+    IntColumn get tid => integer().nullable()();
+
+    IntColumn get pid => integer().nullable()();
+
+    TextColumn get subject => text()();
+
+    TextColumn get message => text()();
+
+    TextColumn get attachmentsJson => text()();
+
+    DateTimeColumn get updatedAt => dateTime()();
+
+    @override
+    Set<Column<Object>> get primaryKey => <Column<Object>>{
+        accountKey,
+        draftId,
+    };
+}
+
+class ForumReadAnchors extends Table
+{
+    TextColumn get accountKey => text()();
+
+    IntColumn get tid => integer()();
+
+    IntColumn get pid => integer().nullable()();
+
+    IntColumn get page => integer()();
+
+    IntColumn get floor => integer()();
+
+    DateTimeColumn get updatedAt => dateTime()();
+
+    @override
+    Set<Column<Object>> get primaryKey => <Column<Object>>{
+        accountKey,
+        tid,
+    };
+}
+
+class ForumActionTombstones extends Table
+{
+    TextColumn get accountKey => text()();
+
+    TextColumn get contextKey => text()();
+
+    TextColumn get attemptId => text()();
+
+    TextColumn get action => text()();
+
+    IntColumn get fid => integer().nullable()();
+
+    IntColumn get tid => integer().nullable()();
+
+    IntColumn get pid => integer().nullable()();
+
+    IntColumn get favoriteId => integer().nullable()();
+
+    TextColumn get draftContext => text()();
+
+    TextColumn get status => text()();
+
+    DateTimeColumn get createdAt => dateTime()();
+
+    DateTimeColumn get updatedAt => dateTime()();
+
+    @override
+    Set<Column<Object>> get primaryKey => <Column<Object>>{
+        accountKey,
+        contextKey,
+    };
+}
+
 @DriftDatabase(
     tables: <Type>[
         ReadingStates,
@@ -190,6 +292,10 @@ class WorkIndexSources extends Table
         CoverAliases,
         WorkIndexes,
         WorkIndexSources,
+        ForumCaches,
+        ForumDrafts,
+        ForumReadAnchors,
+        ForumActionTombstones,
     ],
 )
 class AppDatabase extends _$AppDatabase
@@ -198,7 +304,7 @@ class AppDatabase extends _$AppDatabase
         : super(executor ?? driftDatabase(name: 'x300'));
 
     @override
-    int get schemaVersion => 6;
+    int get schemaVersion => 9;
 
     @override
     MigrationStrategy get migration => MigrationStrategy(
@@ -231,6 +337,41 @@ class AppDatabase extends _$AppDatabase
             {
                 await migrator.createTable(coverEntries);
                 await migrator.createTable(coverAliases);
+            }
+            if (from < 7)
+            {
+                await migrator.createTable(forumCaches);
+                await migrator.createTable(forumDrafts);
+                await migrator.createTable(forumReadAnchors);
+            }
+            if (from >= 2 && from < 8)
+            {
+                await customStatement(
+                    'ALTER TABLE favorite_caches '
+                    'RENAME TO favorite_caches_v1',
+                );
+                await migrator.createTable(favoriteCaches);
+                await customStatement('''
+                    INSERT INTO favorite_caches (
+                        user_id,
+                        work_id,
+                        work_json,
+                        records_json,
+                        updated_at
+                    )
+                    SELECT
+                        0,
+                        work_id,
+                        work_json,
+                        records_json,
+                        updated_at
+                    FROM favorite_caches_v1
+                ''');
+                await migrator.deleteTable('favorite_caches_v1');
+            }
+            if (from < 9)
+            {
+                await migrator.createTable(forumActionTombstones);
             }
         },
     );

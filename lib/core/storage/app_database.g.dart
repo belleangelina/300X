@@ -960,6 +960,15 @@ class $FavoriteCachesTable extends FavoriteCaches
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $FavoriteCachesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _workIdMeta = const VerificationMeta('workId');
   @override
   late final GeneratedColumn<String> workId = GeneratedColumn<String>(
@@ -1004,6 +1013,7 @@ class $FavoriteCachesTable extends FavoriteCaches
   );
   @override
   List<GeneratedColumn> get $columns => [
+    userId,
     workId,
     workJson,
     recordsJson,
@@ -1021,6 +1031,14 @@ class $FavoriteCachesTable extends FavoriteCaches
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
     if (data.containsKey('work_id')) {
       context.handle(
         _workIdMeta,
@@ -1060,11 +1078,15 @@ class $FavoriteCachesTable extends FavoriteCaches
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {workId};
+  Set<GeneratedColumn> get $primaryKey => {userId, workId};
   @override
   FavoriteCache map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return FavoriteCache(
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}user_id'],
+      )!,
       workId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}work_id'],
@@ -1091,11 +1113,13 @@ class $FavoriteCachesTable extends FavoriteCaches
 }
 
 class FavoriteCache extends DataClass implements Insertable<FavoriteCache> {
+  final int userId;
   final String workId;
   final String workJson;
   final String recordsJson;
   final DateTime updatedAt;
   const FavoriteCache({
+    required this.userId,
     required this.workId,
     required this.workJson,
     required this.recordsJson,
@@ -1104,6 +1128,7 @@ class FavoriteCache extends DataClass implements Insertable<FavoriteCache> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    map['user_id'] = Variable<int>(userId);
     map['work_id'] = Variable<String>(workId);
     map['work_json'] = Variable<String>(workJson);
     map['records_json'] = Variable<String>(recordsJson);
@@ -1113,6 +1138,7 @@ class FavoriteCache extends DataClass implements Insertable<FavoriteCache> {
 
   FavoriteCachesCompanion toCompanion(bool nullToAbsent) {
     return FavoriteCachesCompanion(
+      userId: Value(userId),
       workId: Value(workId),
       workJson: Value(workJson),
       recordsJson: Value(recordsJson),
@@ -1126,6 +1152,7 @@ class FavoriteCache extends DataClass implements Insertable<FavoriteCache> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return FavoriteCache(
+      userId: serializer.fromJson<int>(json['userId']),
       workId: serializer.fromJson<String>(json['workId']),
       workJson: serializer.fromJson<String>(json['workJson']),
       recordsJson: serializer.fromJson<String>(json['recordsJson']),
@@ -1136,6 +1163,7 @@ class FavoriteCache extends DataClass implements Insertable<FavoriteCache> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'userId': serializer.toJson<int>(userId),
       'workId': serializer.toJson<String>(workId),
       'workJson': serializer.toJson<String>(workJson),
       'recordsJson': serializer.toJson<String>(recordsJson),
@@ -1144,11 +1172,13 @@ class FavoriteCache extends DataClass implements Insertable<FavoriteCache> {
   }
 
   FavoriteCache copyWith({
+    int? userId,
     String? workId,
     String? workJson,
     String? recordsJson,
     DateTime? updatedAt,
   }) => FavoriteCache(
+    userId: userId ?? this.userId,
     workId: workId ?? this.workId,
     workJson: workJson ?? this.workJson,
     recordsJson: recordsJson ?? this.recordsJson,
@@ -1156,6 +1186,7 @@ class FavoriteCache extends DataClass implements Insertable<FavoriteCache> {
   );
   FavoriteCache copyWithCompanion(FavoriteCachesCompanion data) {
     return FavoriteCache(
+      userId: data.userId.present ? data.userId.value : this.userId,
       workId: data.workId.present ? data.workId.value : this.workId,
       workJson: data.workJson.present ? data.workJson.value : this.workJson,
       recordsJson: data.recordsJson.present
@@ -1168,6 +1199,7 @@ class FavoriteCache extends DataClass implements Insertable<FavoriteCache> {
   @override
   String toString() {
     return (StringBuffer('FavoriteCache(')
+          ..write('userId: $userId, ')
           ..write('workId: $workId, ')
           ..write('workJson: $workJson, ')
           ..write('recordsJson: $recordsJson, ')
@@ -1177,11 +1209,13 @@ class FavoriteCache extends DataClass implements Insertable<FavoriteCache> {
   }
 
   @override
-  int get hashCode => Object.hash(workId, workJson, recordsJson, updatedAt);
+  int get hashCode =>
+      Object.hash(userId, workId, workJson, recordsJson, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is FavoriteCache &&
+          other.userId == this.userId &&
           other.workId == this.workId &&
           other.workJson == this.workJson &&
           other.recordsJson == this.recordsJson &&
@@ -1189,12 +1223,14 @@ class FavoriteCache extends DataClass implements Insertable<FavoriteCache> {
 }
 
 class FavoriteCachesCompanion extends UpdateCompanion<FavoriteCache> {
+  final Value<int> userId;
   final Value<String> workId;
   final Value<String> workJson;
   final Value<String> recordsJson;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const FavoriteCachesCompanion({
+    this.userId = const Value.absent(),
     this.workId = const Value.absent(),
     this.workJson = const Value.absent(),
     this.recordsJson = const Value.absent(),
@@ -1202,16 +1238,19 @@ class FavoriteCachesCompanion extends UpdateCompanion<FavoriteCache> {
     this.rowid = const Value.absent(),
   });
   FavoriteCachesCompanion.insert({
+    required int userId,
     required String workId,
     required String workJson,
     required String recordsJson,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
-  }) : workId = Value(workId),
+  }) : userId = Value(userId),
+       workId = Value(workId),
        workJson = Value(workJson),
        recordsJson = Value(recordsJson),
        updatedAt = Value(updatedAt);
   static Insertable<FavoriteCache> custom({
+    Expression<int>? userId,
     Expression<String>? workId,
     Expression<String>? workJson,
     Expression<String>? recordsJson,
@@ -1219,6 +1258,7 @@ class FavoriteCachesCompanion extends UpdateCompanion<FavoriteCache> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (userId != null) 'user_id': userId,
       if (workId != null) 'work_id': workId,
       if (workJson != null) 'work_json': workJson,
       if (recordsJson != null) 'records_json': recordsJson,
@@ -1228,6 +1268,7 @@ class FavoriteCachesCompanion extends UpdateCompanion<FavoriteCache> {
   }
 
   FavoriteCachesCompanion copyWith({
+    Value<int>? userId,
     Value<String>? workId,
     Value<String>? workJson,
     Value<String>? recordsJson,
@@ -1235,6 +1276,7 @@ class FavoriteCachesCompanion extends UpdateCompanion<FavoriteCache> {
     Value<int>? rowid,
   }) {
     return FavoriteCachesCompanion(
+      userId: userId ?? this.userId,
       workId: workId ?? this.workId,
       workJson: workJson ?? this.workJson,
       recordsJson: recordsJson ?? this.recordsJson,
@@ -1246,6 +1288,9 @@ class FavoriteCachesCompanion extends UpdateCompanion<FavoriteCache> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
     if (workId.present) {
       map['work_id'] = Variable<String>(workId.value);
     }
@@ -1267,6 +1312,7 @@ class FavoriteCachesCompanion extends UpdateCompanion<FavoriteCache> {
   @override
   String toString() {
     return (StringBuffer('FavoriteCachesCompanion(')
+          ..write('userId: $userId, ')
           ..write('workId: $workId, ')
           ..write('workJson: $workJson, ')
           ..write('recordsJson: $recordsJson, ')
@@ -3872,6 +3918,2059 @@ class WorkIndexSourcesCompanion extends UpdateCompanion<WorkIndexSource> {
   }
 }
 
+class $ForumCachesTable extends ForumCaches
+    with TableInfo<$ForumCachesTable, ForumCache> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ForumCachesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountKeyMeta = const VerificationMeta(
+    'accountKey',
+  );
+  @override
+  late final GeneratedColumn<String> accountKey = GeneratedColumn<String>(
+    'account_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _cacheKeyMeta = const VerificationMeta(
+    'cacheKey',
+  );
+  @override
+  late final GeneratedColumn<String> cacheKey = GeneratedColumn<String>(
+    'cache_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _payloadJsonMeta = const VerificationMeta(
+    'payloadJson',
+  );
+  @override
+  late final GeneratedColumn<String> payloadJson = GeneratedColumn<String>(
+    'payload_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountKey,
+    cacheKey,
+    payloadJson,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'forum_caches';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ForumCache> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_key')) {
+      context.handle(
+        _accountKeyMeta,
+        accountKey.isAcceptableOrUnknown(data['account_key']!, _accountKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountKeyMeta);
+    }
+    if (data.containsKey('cache_key')) {
+      context.handle(
+        _cacheKeyMeta,
+        cacheKey.isAcceptableOrUnknown(data['cache_key']!, _cacheKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_cacheKeyMeta);
+    }
+    if (data.containsKey('payload_json')) {
+      context.handle(
+        _payloadJsonMeta,
+        payloadJson.isAcceptableOrUnknown(
+          data['payload_json']!,
+          _payloadJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_payloadJsonMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountKey, cacheKey};
+  @override
+  ForumCache map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ForumCache(
+      accountKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_key'],
+      )!,
+      cacheKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cache_key'],
+      )!,
+      payloadJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload_json'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ForumCachesTable createAlias(String alias) {
+    return $ForumCachesTable(attachedDatabase, alias);
+  }
+}
+
+class ForumCache extends DataClass implements Insertable<ForumCache> {
+  final String accountKey;
+  final String cacheKey;
+  final String payloadJson;
+  final DateTime updatedAt;
+  const ForumCache({
+    required this.accountKey,
+    required this.cacheKey,
+    required this.payloadJson,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_key'] = Variable<String>(accountKey);
+    map['cache_key'] = Variable<String>(cacheKey);
+    map['payload_json'] = Variable<String>(payloadJson);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ForumCachesCompanion toCompanion(bool nullToAbsent) {
+    return ForumCachesCompanion(
+      accountKey: Value(accountKey),
+      cacheKey: Value(cacheKey),
+      payloadJson: Value(payloadJson),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ForumCache.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ForumCache(
+      accountKey: serializer.fromJson<String>(json['accountKey']),
+      cacheKey: serializer.fromJson<String>(json['cacheKey']),
+      payloadJson: serializer.fromJson<String>(json['payloadJson']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountKey': serializer.toJson<String>(accountKey),
+      'cacheKey': serializer.toJson<String>(cacheKey),
+      'payloadJson': serializer.toJson<String>(payloadJson),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ForumCache copyWith({
+    String? accountKey,
+    String? cacheKey,
+    String? payloadJson,
+    DateTime? updatedAt,
+  }) => ForumCache(
+    accountKey: accountKey ?? this.accountKey,
+    cacheKey: cacheKey ?? this.cacheKey,
+    payloadJson: payloadJson ?? this.payloadJson,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ForumCache copyWithCompanion(ForumCachesCompanion data) {
+    return ForumCache(
+      accountKey: data.accountKey.present
+          ? data.accountKey.value
+          : this.accountKey,
+      cacheKey: data.cacheKey.present ? data.cacheKey.value : this.cacheKey,
+      payloadJson: data.payloadJson.present
+          ? data.payloadJson.value
+          : this.payloadJson,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ForumCache(')
+          ..write('accountKey: $accountKey, ')
+          ..write('cacheKey: $cacheKey, ')
+          ..write('payloadJson: $payloadJson, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(accountKey, cacheKey, payloadJson, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ForumCache &&
+          other.accountKey == this.accountKey &&
+          other.cacheKey == this.cacheKey &&
+          other.payloadJson == this.payloadJson &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ForumCachesCompanion extends UpdateCompanion<ForumCache> {
+  final Value<String> accountKey;
+  final Value<String> cacheKey;
+  final Value<String> payloadJson;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const ForumCachesCompanion({
+    this.accountKey = const Value.absent(),
+    this.cacheKey = const Value.absent(),
+    this.payloadJson = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ForumCachesCompanion.insert({
+    required String accountKey,
+    required String cacheKey,
+    required String payloadJson,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : accountKey = Value(accountKey),
+       cacheKey = Value(cacheKey),
+       payloadJson = Value(payloadJson),
+       updatedAt = Value(updatedAt);
+  static Insertable<ForumCache> custom({
+    Expression<String>? accountKey,
+    Expression<String>? cacheKey,
+    Expression<String>? payloadJson,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountKey != null) 'account_key': accountKey,
+      if (cacheKey != null) 'cache_key': cacheKey,
+      if (payloadJson != null) 'payload_json': payloadJson,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ForumCachesCompanion copyWith({
+    Value<String>? accountKey,
+    Value<String>? cacheKey,
+    Value<String>? payloadJson,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return ForumCachesCompanion(
+      accountKey: accountKey ?? this.accountKey,
+      cacheKey: cacheKey ?? this.cacheKey,
+      payloadJson: payloadJson ?? this.payloadJson,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountKey.present) {
+      map['account_key'] = Variable<String>(accountKey.value);
+    }
+    if (cacheKey.present) {
+      map['cache_key'] = Variable<String>(cacheKey.value);
+    }
+    if (payloadJson.present) {
+      map['payload_json'] = Variable<String>(payloadJson.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ForumCachesCompanion(')
+          ..write('accountKey: $accountKey, ')
+          ..write('cacheKey: $cacheKey, ')
+          ..write('payloadJson: $payloadJson, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ForumDraftsTable extends ForumDrafts
+    with TableInfo<$ForumDraftsTable, ForumDraft> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ForumDraftsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _draftIdMeta = const VerificationMeta(
+    'draftId',
+  );
+  @override
+  late final GeneratedColumn<String> draftId = GeneratedColumn<String>(
+    'draft_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _accountKeyMeta = const VerificationMeta(
+    'accountKey',
+  );
+  @override
+  late final GeneratedColumn<String> accountKey = GeneratedColumn<String>(
+    'account_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _actionMeta = const VerificationMeta('action');
+  @override
+  late final GeneratedColumn<String> action = GeneratedColumn<String>(
+    'action',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fidMeta = const VerificationMeta('fid');
+  @override
+  late final GeneratedColumn<int> fid = GeneratedColumn<int>(
+    'fid',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _tidMeta = const VerificationMeta('tid');
+  @override
+  late final GeneratedColumn<int> tid = GeneratedColumn<int>(
+    'tid',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _pidMeta = const VerificationMeta('pid');
+  @override
+  late final GeneratedColumn<int> pid = GeneratedColumn<int>(
+    'pid',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _subjectMeta = const VerificationMeta(
+    'subject',
+  );
+  @override
+  late final GeneratedColumn<String> subject = GeneratedColumn<String>(
+    'subject',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _messageMeta = const VerificationMeta(
+    'message',
+  );
+  @override
+  late final GeneratedColumn<String> message = GeneratedColumn<String>(
+    'message',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _attachmentsJsonMeta = const VerificationMeta(
+    'attachmentsJson',
+  );
+  @override
+  late final GeneratedColumn<String> attachmentsJson = GeneratedColumn<String>(
+    'attachments_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    draftId,
+    accountKey,
+    action,
+    fid,
+    tid,
+    pid,
+    subject,
+    message,
+    attachmentsJson,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'forum_drafts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ForumDraft> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('draft_id')) {
+      context.handle(
+        _draftIdMeta,
+        draftId.isAcceptableOrUnknown(data['draft_id']!, _draftIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_draftIdMeta);
+    }
+    if (data.containsKey('account_key')) {
+      context.handle(
+        _accountKeyMeta,
+        accountKey.isAcceptableOrUnknown(data['account_key']!, _accountKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountKeyMeta);
+    }
+    if (data.containsKey('action')) {
+      context.handle(
+        _actionMeta,
+        action.isAcceptableOrUnknown(data['action']!, _actionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_actionMeta);
+    }
+    if (data.containsKey('fid')) {
+      context.handle(
+        _fidMeta,
+        fid.isAcceptableOrUnknown(data['fid']!, _fidMeta),
+      );
+    }
+    if (data.containsKey('tid')) {
+      context.handle(
+        _tidMeta,
+        tid.isAcceptableOrUnknown(data['tid']!, _tidMeta),
+      );
+    }
+    if (data.containsKey('pid')) {
+      context.handle(
+        _pidMeta,
+        pid.isAcceptableOrUnknown(data['pid']!, _pidMeta),
+      );
+    }
+    if (data.containsKey('subject')) {
+      context.handle(
+        _subjectMeta,
+        subject.isAcceptableOrUnknown(data['subject']!, _subjectMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_subjectMeta);
+    }
+    if (data.containsKey('message')) {
+      context.handle(
+        _messageMeta,
+        message.isAcceptableOrUnknown(data['message']!, _messageMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageMeta);
+    }
+    if (data.containsKey('attachments_json')) {
+      context.handle(
+        _attachmentsJsonMeta,
+        attachmentsJson.isAcceptableOrUnknown(
+          data['attachments_json']!,
+          _attachmentsJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_attachmentsJsonMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountKey, draftId};
+  @override
+  ForumDraft map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ForumDraft(
+      draftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}draft_id'],
+      )!,
+      accountKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_key'],
+      )!,
+      action: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}action'],
+      )!,
+      fid: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}fid'],
+      ),
+      tid: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tid'],
+      ),
+      pid: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pid'],
+      ),
+      subject: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}subject'],
+      )!,
+      message: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message'],
+      )!,
+      attachmentsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}attachments_json'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ForumDraftsTable createAlias(String alias) {
+    return $ForumDraftsTable(attachedDatabase, alias);
+  }
+}
+
+class ForumDraft extends DataClass implements Insertable<ForumDraft> {
+  final String draftId;
+  final String accountKey;
+  final String action;
+  final int? fid;
+  final int? tid;
+  final int? pid;
+  final String subject;
+  final String message;
+  final String attachmentsJson;
+  final DateTime updatedAt;
+  const ForumDraft({
+    required this.draftId,
+    required this.accountKey,
+    required this.action,
+    this.fid,
+    this.tid,
+    this.pid,
+    required this.subject,
+    required this.message,
+    required this.attachmentsJson,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['draft_id'] = Variable<String>(draftId);
+    map['account_key'] = Variable<String>(accountKey);
+    map['action'] = Variable<String>(action);
+    if (!nullToAbsent || fid != null) {
+      map['fid'] = Variable<int>(fid);
+    }
+    if (!nullToAbsent || tid != null) {
+      map['tid'] = Variable<int>(tid);
+    }
+    if (!nullToAbsent || pid != null) {
+      map['pid'] = Variable<int>(pid);
+    }
+    map['subject'] = Variable<String>(subject);
+    map['message'] = Variable<String>(message);
+    map['attachments_json'] = Variable<String>(attachmentsJson);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ForumDraftsCompanion toCompanion(bool nullToAbsent) {
+    return ForumDraftsCompanion(
+      draftId: Value(draftId),
+      accountKey: Value(accountKey),
+      action: Value(action),
+      fid: fid == null && nullToAbsent ? const Value.absent() : Value(fid),
+      tid: tid == null && nullToAbsent ? const Value.absent() : Value(tid),
+      pid: pid == null && nullToAbsent ? const Value.absent() : Value(pid),
+      subject: Value(subject),
+      message: Value(message),
+      attachmentsJson: Value(attachmentsJson),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ForumDraft.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ForumDraft(
+      draftId: serializer.fromJson<String>(json['draftId']),
+      accountKey: serializer.fromJson<String>(json['accountKey']),
+      action: serializer.fromJson<String>(json['action']),
+      fid: serializer.fromJson<int?>(json['fid']),
+      tid: serializer.fromJson<int?>(json['tid']),
+      pid: serializer.fromJson<int?>(json['pid']),
+      subject: serializer.fromJson<String>(json['subject']),
+      message: serializer.fromJson<String>(json['message']),
+      attachmentsJson: serializer.fromJson<String>(json['attachmentsJson']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'draftId': serializer.toJson<String>(draftId),
+      'accountKey': serializer.toJson<String>(accountKey),
+      'action': serializer.toJson<String>(action),
+      'fid': serializer.toJson<int?>(fid),
+      'tid': serializer.toJson<int?>(tid),
+      'pid': serializer.toJson<int?>(pid),
+      'subject': serializer.toJson<String>(subject),
+      'message': serializer.toJson<String>(message),
+      'attachmentsJson': serializer.toJson<String>(attachmentsJson),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ForumDraft copyWith({
+    String? draftId,
+    String? accountKey,
+    String? action,
+    Value<int?> fid = const Value.absent(),
+    Value<int?> tid = const Value.absent(),
+    Value<int?> pid = const Value.absent(),
+    String? subject,
+    String? message,
+    String? attachmentsJson,
+    DateTime? updatedAt,
+  }) => ForumDraft(
+    draftId: draftId ?? this.draftId,
+    accountKey: accountKey ?? this.accountKey,
+    action: action ?? this.action,
+    fid: fid.present ? fid.value : this.fid,
+    tid: tid.present ? tid.value : this.tid,
+    pid: pid.present ? pid.value : this.pid,
+    subject: subject ?? this.subject,
+    message: message ?? this.message,
+    attachmentsJson: attachmentsJson ?? this.attachmentsJson,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ForumDraft copyWithCompanion(ForumDraftsCompanion data) {
+    return ForumDraft(
+      draftId: data.draftId.present ? data.draftId.value : this.draftId,
+      accountKey: data.accountKey.present
+          ? data.accountKey.value
+          : this.accountKey,
+      action: data.action.present ? data.action.value : this.action,
+      fid: data.fid.present ? data.fid.value : this.fid,
+      tid: data.tid.present ? data.tid.value : this.tid,
+      pid: data.pid.present ? data.pid.value : this.pid,
+      subject: data.subject.present ? data.subject.value : this.subject,
+      message: data.message.present ? data.message.value : this.message,
+      attachmentsJson: data.attachmentsJson.present
+          ? data.attachmentsJson.value
+          : this.attachmentsJson,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ForumDraft(')
+          ..write('draftId: $draftId, ')
+          ..write('accountKey: $accountKey, ')
+          ..write('action: $action, ')
+          ..write('fid: $fid, ')
+          ..write('tid: $tid, ')
+          ..write('pid: $pid, ')
+          ..write('subject: $subject, ')
+          ..write('message: $message, ')
+          ..write('attachmentsJson: $attachmentsJson, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    draftId,
+    accountKey,
+    action,
+    fid,
+    tid,
+    pid,
+    subject,
+    message,
+    attachmentsJson,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ForumDraft &&
+          other.draftId == this.draftId &&
+          other.accountKey == this.accountKey &&
+          other.action == this.action &&
+          other.fid == this.fid &&
+          other.tid == this.tid &&
+          other.pid == this.pid &&
+          other.subject == this.subject &&
+          other.message == this.message &&
+          other.attachmentsJson == this.attachmentsJson &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ForumDraftsCompanion extends UpdateCompanion<ForumDraft> {
+  final Value<String> draftId;
+  final Value<String> accountKey;
+  final Value<String> action;
+  final Value<int?> fid;
+  final Value<int?> tid;
+  final Value<int?> pid;
+  final Value<String> subject;
+  final Value<String> message;
+  final Value<String> attachmentsJson;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const ForumDraftsCompanion({
+    this.draftId = const Value.absent(),
+    this.accountKey = const Value.absent(),
+    this.action = const Value.absent(),
+    this.fid = const Value.absent(),
+    this.tid = const Value.absent(),
+    this.pid = const Value.absent(),
+    this.subject = const Value.absent(),
+    this.message = const Value.absent(),
+    this.attachmentsJson = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ForumDraftsCompanion.insert({
+    required String draftId,
+    required String accountKey,
+    required String action,
+    this.fid = const Value.absent(),
+    this.tid = const Value.absent(),
+    this.pid = const Value.absent(),
+    required String subject,
+    required String message,
+    required String attachmentsJson,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : draftId = Value(draftId),
+       accountKey = Value(accountKey),
+       action = Value(action),
+       subject = Value(subject),
+       message = Value(message),
+       attachmentsJson = Value(attachmentsJson),
+       updatedAt = Value(updatedAt);
+  static Insertable<ForumDraft> custom({
+    Expression<String>? draftId,
+    Expression<String>? accountKey,
+    Expression<String>? action,
+    Expression<int>? fid,
+    Expression<int>? tid,
+    Expression<int>? pid,
+    Expression<String>? subject,
+    Expression<String>? message,
+    Expression<String>? attachmentsJson,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (draftId != null) 'draft_id': draftId,
+      if (accountKey != null) 'account_key': accountKey,
+      if (action != null) 'action': action,
+      if (fid != null) 'fid': fid,
+      if (tid != null) 'tid': tid,
+      if (pid != null) 'pid': pid,
+      if (subject != null) 'subject': subject,
+      if (message != null) 'message': message,
+      if (attachmentsJson != null) 'attachments_json': attachmentsJson,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ForumDraftsCompanion copyWith({
+    Value<String>? draftId,
+    Value<String>? accountKey,
+    Value<String>? action,
+    Value<int?>? fid,
+    Value<int?>? tid,
+    Value<int?>? pid,
+    Value<String>? subject,
+    Value<String>? message,
+    Value<String>? attachmentsJson,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return ForumDraftsCompanion(
+      draftId: draftId ?? this.draftId,
+      accountKey: accountKey ?? this.accountKey,
+      action: action ?? this.action,
+      fid: fid ?? this.fid,
+      tid: tid ?? this.tid,
+      pid: pid ?? this.pid,
+      subject: subject ?? this.subject,
+      message: message ?? this.message,
+      attachmentsJson: attachmentsJson ?? this.attachmentsJson,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (draftId.present) {
+      map['draft_id'] = Variable<String>(draftId.value);
+    }
+    if (accountKey.present) {
+      map['account_key'] = Variable<String>(accountKey.value);
+    }
+    if (action.present) {
+      map['action'] = Variable<String>(action.value);
+    }
+    if (fid.present) {
+      map['fid'] = Variable<int>(fid.value);
+    }
+    if (tid.present) {
+      map['tid'] = Variable<int>(tid.value);
+    }
+    if (pid.present) {
+      map['pid'] = Variable<int>(pid.value);
+    }
+    if (subject.present) {
+      map['subject'] = Variable<String>(subject.value);
+    }
+    if (message.present) {
+      map['message'] = Variable<String>(message.value);
+    }
+    if (attachmentsJson.present) {
+      map['attachments_json'] = Variable<String>(attachmentsJson.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ForumDraftsCompanion(')
+          ..write('draftId: $draftId, ')
+          ..write('accountKey: $accountKey, ')
+          ..write('action: $action, ')
+          ..write('fid: $fid, ')
+          ..write('tid: $tid, ')
+          ..write('pid: $pid, ')
+          ..write('subject: $subject, ')
+          ..write('message: $message, ')
+          ..write('attachmentsJson: $attachmentsJson, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ForumReadAnchorsTable extends ForumReadAnchors
+    with TableInfo<$ForumReadAnchorsTable, ForumReadAnchor> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ForumReadAnchorsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountKeyMeta = const VerificationMeta(
+    'accountKey',
+  );
+  @override
+  late final GeneratedColumn<String> accountKey = GeneratedColumn<String>(
+    'account_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tidMeta = const VerificationMeta('tid');
+  @override
+  late final GeneratedColumn<int> tid = GeneratedColumn<int>(
+    'tid',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pidMeta = const VerificationMeta('pid');
+  @override
+  late final GeneratedColumn<int> pid = GeneratedColumn<int>(
+    'pid',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _pageMeta = const VerificationMeta('page');
+  @override
+  late final GeneratedColumn<int> page = GeneratedColumn<int>(
+    'page',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _floorMeta = const VerificationMeta('floor');
+  @override
+  late final GeneratedColumn<int> floor = GeneratedColumn<int>(
+    'floor',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountKey,
+    tid,
+    pid,
+    page,
+    floor,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'forum_read_anchors';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ForumReadAnchor> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_key')) {
+      context.handle(
+        _accountKeyMeta,
+        accountKey.isAcceptableOrUnknown(data['account_key']!, _accountKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountKeyMeta);
+    }
+    if (data.containsKey('tid')) {
+      context.handle(
+        _tidMeta,
+        tid.isAcceptableOrUnknown(data['tid']!, _tidMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tidMeta);
+    }
+    if (data.containsKey('pid')) {
+      context.handle(
+        _pidMeta,
+        pid.isAcceptableOrUnknown(data['pid']!, _pidMeta),
+      );
+    }
+    if (data.containsKey('page')) {
+      context.handle(
+        _pageMeta,
+        page.isAcceptableOrUnknown(data['page']!, _pageMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pageMeta);
+    }
+    if (data.containsKey('floor')) {
+      context.handle(
+        _floorMeta,
+        floor.isAcceptableOrUnknown(data['floor']!, _floorMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_floorMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountKey, tid};
+  @override
+  ForumReadAnchor map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ForumReadAnchor(
+      accountKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_key'],
+      )!,
+      tid: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tid'],
+      )!,
+      pid: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pid'],
+      ),
+      page: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}page'],
+      )!,
+      floor: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}floor'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ForumReadAnchorsTable createAlias(String alias) {
+    return $ForumReadAnchorsTable(attachedDatabase, alias);
+  }
+}
+
+class ForumReadAnchor extends DataClass implements Insertable<ForumReadAnchor> {
+  final String accountKey;
+  final int tid;
+  final int? pid;
+  final int page;
+  final int floor;
+  final DateTime updatedAt;
+  const ForumReadAnchor({
+    required this.accountKey,
+    required this.tid,
+    this.pid,
+    required this.page,
+    required this.floor,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_key'] = Variable<String>(accountKey);
+    map['tid'] = Variable<int>(tid);
+    if (!nullToAbsent || pid != null) {
+      map['pid'] = Variable<int>(pid);
+    }
+    map['page'] = Variable<int>(page);
+    map['floor'] = Variable<int>(floor);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ForumReadAnchorsCompanion toCompanion(bool nullToAbsent) {
+    return ForumReadAnchorsCompanion(
+      accountKey: Value(accountKey),
+      tid: Value(tid),
+      pid: pid == null && nullToAbsent ? const Value.absent() : Value(pid),
+      page: Value(page),
+      floor: Value(floor),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ForumReadAnchor.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ForumReadAnchor(
+      accountKey: serializer.fromJson<String>(json['accountKey']),
+      tid: serializer.fromJson<int>(json['tid']),
+      pid: serializer.fromJson<int?>(json['pid']),
+      page: serializer.fromJson<int>(json['page']),
+      floor: serializer.fromJson<int>(json['floor']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountKey': serializer.toJson<String>(accountKey),
+      'tid': serializer.toJson<int>(tid),
+      'pid': serializer.toJson<int?>(pid),
+      'page': serializer.toJson<int>(page),
+      'floor': serializer.toJson<int>(floor),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ForumReadAnchor copyWith({
+    String? accountKey,
+    int? tid,
+    Value<int?> pid = const Value.absent(),
+    int? page,
+    int? floor,
+    DateTime? updatedAt,
+  }) => ForumReadAnchor(
+    accountKey: accountKey ?? this.accountKey,
+    tid: tid ?? this.tid,
+    pid: pid.present ? pid.value : this.pid,
+    page: page ?? this.page,
+    floor: floor ?? this.floor,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ForumReadAnchor copyWithCompanion(ForumReadAnchorsCompanion data) {
+    return ForumReadAnchor(
+      accountKey: data.accountKey.present
+          ? data.accountKey.value
+          : this.accountKey,
+      tid: data.tid.present ? data.tid.value : this.tid,
+      pid: data.pid.present ? data.pid.value : this.pid,
+      page: data.page.present ? data.page.value : this.page,
+      floor: data.floor.present ? data.floor.value : this.floor,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ForumReadAnchor(')
+          ..write('accountKey: $accountKey, ')
+          ..write('tid: $tid, ')
+          ..write('pid: $pid, ')
+          ..write('page: $page, ')
+          ..write('floor: $floor, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(accountKey, tid, pid, page, floor, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ForumReadAnchor &&
+          other.accountKey == this.accountKey &&
+          other.tid == this.tid &&
+          other.pid == this.pid &&
+          other.page == this.page &&
+          other.floor == this.floor &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ForumReadAnchorsCompanion extends UpdateCompanion<ForumReadAnchor> {
+  final Value<String> accountKey;
+  final Value<int> tid;
+  final Value<int?> pid;
+  final Value<int> page;
+  final Value<int> floor;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const ForumReadAnchorsCompanion({
+    this.accountKey = const Value.absent(),
+    this.tid = const Value.absent(),
+    this.pid = const Value.absent(),
+    this.page = const Value.absent(),
+    this.floor = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ForumReadAnchorsCompanion.insert({
+    required String accountKey,
+    required int tid,
+    this.pid = const Value.absent(),
+    required int page,
+    required int floor,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : accountKey = Value(accountKey),
+       tid = Value(tid),
+       page = Value(page),
+       floor = Value(floor),
+       updatedAt = Value(updatedAt);
+  static Insertable<ForumReadAnchor> custom({
+    Expression<String>? accountKey,
+    Expression<int>? tid,
+    Expression<int>? pid,
+    Expression<int>? page,
+    Expression<int>? floor,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountKey != null) 'account_key': accountKey,
+      if (tid != null) 'tid': tid,
+      if (pid != null) 'pid': pid,
+      if (page != null) 'page': page,
+      if (floor != null) 'floor': floor,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ForumReadAnchorsCompanion copyWith({
+    Value<String>? accountKey,
+    Value<int>? tid,
+    Value<int?>? pid,
+    Value<int>? page,
+    Value<int>? floor,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return ForumReadAnchorsCompanion(
+      accountKey: accountKey ?? this.accountKey,
+      tid: tid ?? this.tid,
+      pid: pid ?? this.pid,
+      page: page ?? this.page,
+      floor: floor ?? this.floor,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountKey.present) {
+      map['account_key'] = Variable<String>(accountKey.value);
+    }
+    if (tid.present) {
+      map['tid'] = Variable<int>(tid.value);
+    }
+    if (pid.present) {
+      map['pid'] = Variable<int>(pid.value);
+    }
+    if (page.present) {
+      map['page'] = Variable<int>(page.value);
+    }
+    if (floor.present) {
+      map['floor'] = Variable<int>(floor.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ForumReadAnchorsCompanion(')
+          ..write('accountKey: $accountKey, ')
+          ..write('tid: $tid, ')
+          ..write('pid: $pid, ')
+          ..write('page: $page, ')
+          ..write('floor: $floor, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ForumActionTombstonesTable extends ForumActionTombstones
+    with TableInfo<$ForumActionTombstonesTable, ForumActionTombstone> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ForumActionTombstonesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountKeyMeta = const VerificationMeta(
+    'accountKey',
+  );
+  @override
+  late final GeneratedColumn<String> accountKey = GeneratedColumn<String>(
+    'account_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contextKeyMeta = const VerificationMeta(
+    'contextKey',
+  );
+  @override
+  late final GeneratedColumn<String> contextKey = GeneratedColumn<String>(
+    'context_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _attemptIdMeta = const VerificationMeta(
+    'attemptId',
+  );
+  @override
+  late final GeneratedColumn<String> attemptId = GeneratedColumn<String>(
+    'attempt_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _actionMeta = const VerificationMeta('action');
+  @override
+  late final GeneratedColumn<String> action = GeneratedColumn<String>(
+    'action',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fidMeta = const VerificationMeta('fid');
+  @override
+  late final GeneratedColumn<int> fid = GeneratedColumn<int>(
+    'fid',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _tidMeta = const VerificationMeta('tid');
+  @override
+  late final GeneratedColumn<int> tid = GeneratedColumn<int>(
+    'tid',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _pidMeta = const VerificationMeta('pid');
+  @override
+  late final GeneratedColumn<int> pid = GeneratedColumn<int>(
+    'pid',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _favoriteIdMeta = const VerificationMeta(
+    'favoriteId',
+  );
+  @override
+  late final GeneratedColumn<int> favoriteId = GeneratedColumn<int>(
+    'favorite_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _draftContextMeta = const VerificationMeta(
+    'draftContext',
+  );
+  @override
+  late final GeneratedColumn<String> draftContext = GeneratedColumn<String>(
+    'draft_context',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountKey,
+    contextKey,
+    attemptId,
+    action,
+    fid,
+    tid,
+    pid,
+    favoriteId,
+    draftContext,
+    status,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'forum_action_tombstones';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ForumActionTombstone> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_key')) {
+      context.handle(
+        _accountKeyMeta,
+        accountKey.isAcceptableOrUnknown(data['account_key']!, _accountKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountKeyMeta);
+    }
+    if (data.containsKey('context_key')) {
+      context.handle(
+        _contextKeyMeta,
+        contextKey.isAcceptableOrUnknown(data['context_key']!, _contextKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_contextKeyMeta);
+    }
+    if (data.containsKey('attempt_id')) {
+      context.handle(
+        _attemptIdMeta,
+        attemptId.isAcceptableOrUnknown(data['attempt_id']!, _attemptIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_attemptIdMeta);
+    }
+    if (data.containsKey('action')) {
+      context.handle(
+        _actionMeta,
+        action.isAcceptableOrUnknown(data['action']!, _actionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_actionMeta);
+    }
+    if (data.containsKey('fid')) {
+      context.handle(
+        _fidMeta,
+        fid.isAcceptableOrUnknown(data['fid']!, _fidMeta),
+      );
+    }
+    if (data.containsKey('tid')) {
+      context.handle(
+        _tidMeta,
+        tid.isAcceptableOrUnknown(data['tid']!, _tidMeta),
+      );
+    }
+    if (data.containsKey('pid')) {
+      context.handle(
+        _pidMeta,
+        pid.isAcceptableOrUnknown(data['pid']!, _pidMeta),
+      );
+    }
+    if (data.containsKey('favorite_id')) {
+      context.handle(
+        _favoriteIdMeta,
+        favoriteId.isAcceptableOrUnknown(data['favorite_id']!, _favoriteIdMeta),
+      );
+    }
+    if (data.containsKey('draft_context')) {
+      context.handle(
+        _draftContextMeta,
+        draftContext.isAcceptableOrUnknown(
+          data['draft_context']!,
+          _draftContextMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_draftContextMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountKey, contextKey};
+  @override
+  ForumActionTombstone map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ForumActionTombstone(
+      accountKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_key'],
+      )!,
+      contextKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}context_key'],
+      )!,
+      attemptId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}attempt_id'],
+      )!,
+      action: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}action'],
+      )!,
+      fid: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}fid'],
+      ),
+      tid: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tid'],
+      ),
+      pid: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}pid'],
+      ),
+      favoriteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}favorite_id'],
+      ),
+      draftContext: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}draft_context'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ForumActionTombstonesTable createAlias(String alias) {
+    return $ForumActionTombstonesTable(attachedDatabase, alias);
+  }
+}
+
+class ForumActionTombstone extends DataClass
+    implements Insertable<ForumActionTombstone> {
+  final String accountKey;
+  final String contextKey;
+  final String attemptId;
+  final String action;
+  final int? fid;
+  final int? tid;
+  final int? pid;
+  final int? favoriteId;
+  final String draftContext;
+  final String status;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const ForumActionTombstone({
+    required this.accountKey,
+    required this.contextKey,
+    required this.attemptId,
+    required this.action,
+    this.fid,
+    this.tid,
+    this.pid,
+    this.favoriteId,
+    required this.draftContext,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_key'] = Variable<String>(accountKey);
+    map['context_key'] = Variable<String>(contextKey);
+    map['attempt_id'] = Variable<String>(attemptId);
+    map['action'] = Variable<String>(action);
+    if (!nullToAbsent || fid != null) {
+      map['fid'] = Variable<int>(fid);
+    }
+    if (!nullToAbsent || tid != null) {
+      map['tid'] = Variable<int>(tid);
+    }
+    if (!nullToAbsent || pid != null) {
+      map['pid'] = Variable<int>(pid);
+    }
+    if (!nullToAbsent || favoriteId != null) {
+      map['favorite_id'] = Variable<int>(favoriteId);
+    }
+    map['draft_context'] = Variable<String>(draftContext);
+    map['status'] = Variable<String>(status);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ForumActionTombstonesCompanion toCompanion(bool nullToAbsent) {
+    return ForumActionTombstonesCompanion(
+      accountKey: Value(accountKey),
+      contextKey: Value(contextKey),
+      attemptId: Value(attemptId),
+      action: Value(action),
+      fid: fid == null && nullToAbsent ? const Value.absent() : Value(fid),
+      tid: tid == null && nullToAbsent ? const Value.absent() : Value(tid),
+      pid: pid == null && nullToAbsent ? const Value.absent() : Value(pid),
+      favoriteId: favoriteId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(favoriteId),
+      draftContext: Value(draftContext),
+      status: Value(status),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ForumActionTombstone.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ForumActionTombstone(
+      accountKey: serializer.fromJson<String>(json['accountKey']),
+      contextKey: serializer.fromJson<String>(json['contextKey']),
+      attemptId: serializer.fromJson<String>(json['attemptId']),
+      action: serializer.fromJson<String>(json['action']),
+      fid: serializer.fromJson<int?>(json['fid']),
+      tid: serializer.fromJson<int?>(json['tid']),
+      pid: serializer.fromJson<int?>(json['pid']),
+      favoriteId: serializer.fromJson<int?>(json['favoriteId']),
+      draftContext: serializer.fromJson<String>(json['draftContext']),
+      status: serializer.fromJson<String>(json['status']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountKey': serializer.toJson<String>(accountKey),
+      'contextKey': serializer.toJson<String>(contextKey),
+      'attemptId': serializer.toJson<String>(attemptId),
+      'action': serializer.toJson<String>(action),
+      'fid': serializer.toJson<int?>(fid),
+      'tid': serializer.toJson<int?>(tid),
+      'pid': serializer.toJson<int?>(pid),
+      'favoriteId': serializer.toJson<int?>(favoriteId),
+      'draftContext': serializer.toJson<String>(draftContext),
+      'status': serializer.toJson<String>(status),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ForumActionTombstone copyWith({
+    String? accountKey,
+    String? contextKey,
+    String? attemptId,
+    String? action,
+    Value<int?> fid = const Value.absent(),
+    Value<int?> tid = const Value.absent(),
+    Value<int?> pid = const Value.absent(),
+    Value<int?> favoriteId = const Value.absent(),
+    String? draftContext,
+    String? status,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => ForumActionTombstone(
+    accountKey: accountKey ?? this.accountKey,
+    contextKey: contextKey ?? this.contextKey,
+    attemptId: attemptId ?? this.attemptId,
+    action: action ?? this.action,
+    fid: fid.present ? fid.value : this.fid,
+    tid: tid.present ? tid.value : this.tid,
+    pid: pid.present ? pid.value : this.pid,
+    favoriteId: favoriteId.present ? favoriteId.value : this.favoriteId,
+    draftContext: draftContext ?? this.draftContext,
+    status: status ?? this.status,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ForumActionTombstone copyWithCompanion(ForumActionTombstonesCompanion data) {
+    return ForumActionTombstone(
+      accountKey: data.accountKey.present
+          ? data.accountKey.value
+          : this.accountKey,
+      contextKey: data.contextKey.present
+          ? data.contextKey.value
+          : this.contextKey,
+      attemptId: data.attemptId.present ? data.attemptId.value : this.attemptId,
+      action: data.action.present ? data.action.value : this.action,
+      fid: data.fid.present ? data.fid.value : this.fid,
+      tid: data.tid.present ? data.tid.value : this.tid,
+      pid: data.pid.present ? data.pid.value : this.pid,
+      favoriteId: data.favoriteId.present
+          ? data.favoriteId.value
+          : this.favoriteId,
+      draftContext: data.draftContext.present
+          ? data.draftContext.value
+          : this.draftContext,
+      status: data.status.present ? data.status.value : this.status,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ForumActionTombstone(')
+          ..write('accountKey: $accountKey, ')
+          ..write('contextKey: $contextKey, ')
+          ..write('attemptId: $attemptId, ')
+          ..write('action: $action, ')
+          ..write('fid: $fid, ')
+          ..write('tid: $tid, ')
+          ..write('pid: $pid, ')
+          ..write('favoriteId: $favoriteId, ')
+          ..write('draftContext: $draftContext, ')
+          ..write('status: $status, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    accountKey,
+    contextKey,
+    attemptId,
+    action,
+    fid,
+    tid,
+    pid,
+    favoriteId,
+    draftContext,
+    status,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ForumActionTombstone &&
+          other.accountKey == this.accountKey &&
+          other.contextKey == this.contextKey &&
+          other.attemptId == this.attemptId &&
+          other.action == this.action &&
+          other.fid == this.fid &&
+          other.tid == this.tid &&
+          other.pid == this.pid &&
+          other.favoriteId == this.favoriteId &&
+          other.draftContext == this.draftContext &&
+          other.status == this.status &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ForumActionTombstonesCompanion
+    extends UpdateCompanion<ForumActionTombstone> {
+  final Value<String> accountKey;
+  final Value<String> contextKey;
+  final Value<String> attemptId;
+  final Value<String> action;
+  final Value<int?> fid;
+  final Value<int?> tid;
+  final Value<int?> pid;
+  final Value<int?> favoriteId;
+  final Value<String> draftContext;
+  final Value<String> status;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const ForumActionTombstonesCompanion({
+    this.accountKey = const Value.absent(),
+    this.contextKey = const Value.absent(),
+    this.attemptId = const Value.absent(),
+    this.action = const Value.absent(),
+    this.fid = const Value.absent(),
+    this.tid = const Value.absent(),
+    this.pid = const Value.absent(),
+    this.favoriteId = const Value.absent(),
+    this.draftContext = const Value.absent(),
+    this.status = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ForumActionTombstonesCompanion.insert({
+    required String accountKey,
+    required String contextKey,
+    required String attemptId,
+    required String action,
+    this.fid = const Value.absent(),
+    this.tid = const Value.absent(),
+    this.pid = const Value.absent(),
+    this.favoriteId = const Value.absent(),
+    required String draftContext,
+    required String status,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : accountKey = Value(accountKey),
+       contextKey = Value(contextKey),
+       attemptId = Value(attemptId),
+       action = Value(action),
+       draftContext = Value(draftContext),
+       status = Value(status),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<ForumActionTombstone> custom({
+    Expression<String>? accountKey,
+    Expression<String>? contextKey,
+    Expression<String>? attemptId,
+    Expression<String>? action,
+    Expression<int>? fid,
+    Expression<int>? tid,
+    Expression<int>? pid,
+    Expression<int>? favoriteId,
+    Expression<String>? draftContext,
+    Expression<String>? status,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountKey != null) 'account_key': accountKey,
+      if (contextKey != null) 'context_key': contextKey,
+      if (attemptId != null) 'attempt_id': attemptId,
+      if (action != null) 'action': action,
+      if (fid != null) 'fid': fid,
+      if (tid != null) 'tid': tid,
+      if (pid != null) 'pid': pid,
+      if (favoriteId != null) 'favorite_id': favoriteId,
+      if (draftContext != null) 'draft_context': draftContext,
+      if (status != null) 'status': status,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ForumActionTombstonesCompanion copyWith({
+    Value<String>? accountKey,
+    Value<String>? contextKey,
+    Value<String>? attemptId,
+    Value<String>? action,
+    Value<int?>? fid,
+    Value<int?>? tid,
+    Value<int?>? pid,
+    Value<int?>? favoriteId,
+    Value<String>? draftContext,
+    Value<String>? status,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return ForumActionTombstonesCompanion(
+      accountKey: accountKey ?? this.accountKey,
+      contextKey: contextKey ?? this.contextKey,
+      attemptId: attemptId ?? this.attemptId,
+      action: action ?? this.action,
+      fid: fid ?? this.fid,
+      tid: tid ?? this.tid,
+      pid: pid ?? this.pid,
+      favoriteId: favoriteId ?? this.favoriteId,
+      draftContext: draftContext ?? this.draftContext,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountKey.present) {
+      map['account_key'] = Variable<String>(accountKey.value);
+    }
+    if (contextKey.present) {
+      map['context_key'] = Variable<String>(contextKey.value);
+    }
+    if (attemptId.present) {
+      map['attempt_id'] = Variable<String>(attemptId.value);
+    }
+    if (action.present) {
+      map['action'] = Variable<String>(action.value);
+    }
+    if (fid.present) {
+      map['fid'] = Variable<int>(fid.value);
+    }
+    if (tid.present) {
+      map['tid'] = Variable<int>(tid.value);
+    }
+    if (pid.present) {
+      map['pid'] = Variable<int>(pid.value);
+    }
+    if (favoriteId.present) {
+      map['favorite_id'] = Variable<int>(favoriteId.value);
+    }
+    if (draftContext.present) {
+      map['draft_context'] = Variable<String>(draftContext.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ForumActionTombstonesCompanion(')
+          ..write('accountKey: $accountKey, ')
+          ..write('contextKey: $contextKey, ')
+          ..write('attemptId: $attemptId, ')
+          ..write('action: $action, ')
+          ..write('fid: $fid, ')
+          ..write('tid: $tid, ')
+          ..write('pid: $pid, ')
+          ..write('favoriteId: $favoriteId, ')
+          ..write('draftContext: $draftContext, ')
+          ..write('status: $status, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3886,6 +5985,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $WorkIndexSourcesTable workIndexSources = $WorkIndexSourcesTable(
     this,
   );
+  late final $ForumCachesTable forumCaches = $ForumCachesTable(this);
+  late final $ForumDraftsTable forumDrafts = $ForumDraftsTable(this);
+  late final $ForumReadAnchorsTable forumReadAnchors = $ForumReadAnchorsTable(
+    this,
+  );
+  late final $ForumActionTombstonesTable forumActionTombstones =
+      $ForumActionTombstonesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3900,6 +6006,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     coverAliases,
     workIndexes,
     workIndexSources,
+    forumCaches,
+    forumDrafts,
+    forumReadAnchors,
+    forumActionTombstones,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -4406,6 +6516,7 @@ typedef $$SearchCachesTableProcessedTableManager =
     >;
 typedef $$FavoriteCachesTableCreateCompanionBuilder =
     FavoriteCachesCompanion Function({
+      required int userId,
       required String workId,
       required String workJson,
       required String recordsJson,
@@ -4414,6 +6525,7 @@ typedef $$FavoriteCachesTableCreateCompanionBuilder =
     });
 typedef $$FavoriteCachesTableUpdateCompanionBuilder =
     FavoriteCachesCompanion Function({
+      Value<int> userId,
       Value<String> workId,
       Value<String> workJson,
       Value<String> recordsJson,
@@ -4430,6 +6542,11 @@ class $$FavoriteCachesTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnFilters<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get workId => $composableBuilder(
     column: $table.workId,
     builder: (column) => ColumnFilters(column),
@@ -4460,6 +6577,11 @@ class $$FavoriteCachesTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnOrderings<int> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get workId => $composableBuilder(
     column: $table.workId,
     builder: (column) => ColumnOrderings(column),
@@ -4490,6 +6612,9 @@ class $$FavoriteCachesTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  GeneratedColumn<int> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
   GeneratedColumn<String> get workId =>
       $composableBuilder(column: $table.workId, builder: (column) => column);
 
@@ -4538,12 +6663,14 @@ class $$FavoriteCachesTableTableManager
               $$FavoriteCachesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
+                Value<int> userId = const Value.absent(),
                 Value<String> workId = const Value.absent(),
                 Value<String> workJson = const Value.absent(),
                 Value<String> recordsJson = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FavoriteCachesCompanion(
+                userId: userId,
                 workId: workId,
                 workJson: workJson,
                 recordsJson: recordsJson,
@@ -4552,12 +6679,14 @@ class $$FavoriteCachesTableTableManager
               ),
           createCompanionCallback:
               ({
+                required int userId,
                 required String workId,
                 required String workJson,
                 required String recordsJson,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => FavoriteCachesCompanion.insert(
+                userId: userId,
                 workId: workId,
                 workJson: workJson,
                 recordsJson: recordsJson,
@@ -6404,6 +8533,1077 @@ typedef $$WorkIndexSourcesTableProcessedTableManager =
       WorkIndexSource,
       PrefetchHooks Function({bool canonicalKey})
     >;
+typedef $$ForumCachesTableCreateCompanionBuilder =
+    ForumCachesCompanion Function({
+      required String accountKey,
+      required String cacheKey,
+      required String payloadJson,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$ForumCachesTableUpdateCompanionBuilder =
+    ForumCachesCompanion Function({
+      Value<String> accountKey,
+      Value<String> cacheKey,
+      Value<String> payloadJson,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$ForumCachesTableFilterComposer
+    extends Composer<_$AppDatabase, $ForumCachesTable> {
+  $$ForumCachesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cacheKey => $composableBuilder(
+    column: $table.cacheKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ForumCachesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ForumCachesTable> {
+  $$ForumCachesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cacheKey => $composableBuilder(
+    column: $table.cacheKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ForumCachesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ForumCachesTable> {
+  $$ForumCachesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get cacheKey =>
+      $composableBuilder(column: $table.cacheKey, builder: (column) => column);
+
+  GeneratedColumn<String> get payloadJson => $composableBuilder(
+    column: $table.payloadJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ForumCachesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ForumCachesTable,
+          ForumCache,
+          $$ForumCachesTableFilterComposer,
+          $$ForumCachesTableOrderingComposer,
+          $$ForumCachesTableAnnotationComposer,
+          $$ForumCachesTableCreateCompanionBuilder,
+          $$ForumCachesTableUpdateCompanionBuilder,
+          (
+            ForumCache,
+            BaseReferences<_$AppDatabase, $ForumCachesTable, ForumCache>,
+          ),
+          ForumCache,
+          PrefetchHooks Function()
+        > {
+  $$ForumCachesTableTableManager(_$AppDatabase db, $ForumCachesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ForumCachesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ForumCachesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ForumCachesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> accountKey = const Value.absent(),
+                Value<String> cacheKey = const Value.absent(),
+                Value<String> payloadJson = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ForumCachesCompanion(
+                accountKey: accountKey,
+                cacheKey: cacheKey,
+                payloadJson: payloadJson,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountKey,
+                required String cacheKey,
+                required String payloadJson,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ForumCachesCompanion.insert(
+                accountKey: accountKey,
+                cacheKey: cacheKey,
+                payloadJson: payloadJson,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ForumCachesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ForumCachesTable,
+      ForumCache,
+      $$ForumCachesTableFilterComposer,
+      $$ForumCachesTableOrderingComposer,
+      $$ForumCachesTableAnnotationComposer,
+      $$ForumCachesTableCreateCompanionBuilder,
+      $$ForumCachesTableUpdateCompanionBuilder,
+      (
+        ForumCache,
+        BaseReferences<_$AppDatabase, $ForumCachesTable, ForumCache>,
+      ),
+      ForumCache,
+      PrefetchHooks Function()
+    >;
+typedef $$ForumDraftsTableCreateCompanionBuilder =
+    ForumDraftsCompanion Function({
+      required String draftId,
+      required String accountKey,
+      required String action,
+      Value<int?> fid,
+      Value<int?> tid,
+      Value<int?> pid,
+      required String subject,
+      required String message,
+      required String attachmentsJson,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$ForumDraftsTableUpdateCompanionBuilder =
+    ForumDraftsCompanion Function({
+      Value<String> draftId,
+      Value<String> accountKey,
+      Value<String> action,
+      Value<int?> fid,
+      Value<int?> tid,
+      Value<int?> pid,
+      Value<String> subject,
+      Value<String> message,
+      Value<String> attachmentsJson,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$ForumDraftsTableFilterComposer
+    extends Composer<_$AppDatabase, $ForumDraftsTable> {
+  $$ForumDraftsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get draftId => $composableBuilder(
+    column: $table.draftId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get action => $composableBuilder(
+    column: $table.action,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fid => $composableBuilder(
+    column: $table.fid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tid => $composableBuilder(
+    column: $table.tid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pid => $composableBuilder(
+    column: $table.pid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subject => $composableBuilder(
+    column: $table.subject,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get message => $composableBuilder(
+    column: $table.message,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get attachmentsJson => $composableBuilder(
+    column: $table.attachmentsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ForumDraftsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ForumDraftsTable> {
+  $$ForumDraftsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get draftId => $composableBuilder(
+    column: $table.draftId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get action => $composableBuilder(
+    column: $table.action,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fid => $composableBuilder(
+    column: $table.fid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get tid => $composableBuilder(
+    column: $table.tid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pid => $composableBuilder(
+    column: $table.pid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get subject => $composableBuilder(
+    column: $table.subject,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get message => $composableBuilder(
+    column: $table.message,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get attachmentsJson => $composableBuilder(
+    column: $table.attachmentsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ForumDraftsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ForumDraftsTable> {
+  $$ForumDraftsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get draftId =>
+      $composableBuilder(column: $table.draftId, builder: (column) => column);
+
+  GeneratedColumn<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get action =>
+      $composableBuilder(column: $table.action, builder: (column) => column);
+
+  GeneratedColumn<int> get fid =>
+      $composableBuilder(column: $table.fid, builder: (column) => column);
+
+  GeneratedColumn<int> get tid =>
+      $composableBuilder(column: $table.tid, builder: (column) => column);
+
+  GeneratedColumn<int> get pid =>
+      $composableBuilder(column: $table.pid, builder: (column) => column);
+
+  GeneratedColumn<String> get subject =>
+      $composableBuilder(column: $table.subject, builder: (column) => column);
+
+  GeneratedColumn<String> get message =>
+      $composableBuilder(column: $table.message, builder: (column) => column);
+
+  GeneratedColumn<String> get attachmentsJson => $composableBuilder(
+    column: $table.attachmentsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ForumDraftsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ForumDraftsTable,
+          ForumDraft,
+          $$ForumDraftsTableFilterComposer,
+          $$ForumDraftsTableOrderingComposer,
+          $$ForumDraftsTableAnnotationComposer,
+          $$ForumDraftsTableCreateCompanionBuilder,
+          $$ForumDraftsTableUpdateCompanionBuilder,
+          (
+            ForumDraft,
+            BaseReferences<_$AppDatabase, $ForumDraftsTable, ForumDraft>,
+          ),
+          ForumDraft,
+          PrefetchHooks Function()
+        > {
+  $$ForumDraftsTableTableManager(_$AppDatabase db, $ForumDraftsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ForumDraftsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ForumDraftsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ForumDraftsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> draftId = const Value.absent(),
+                Value<String> accountKey = const Value.absent(),
+                Value<String> action = const Value.absent(),
+                Value<int?> fid = const Value.absent(),
+                Value<int?> tid = const Value.absent(),
+                Value<int?> pid = const Value.absent(),
+                Value<String> subject = const Value.absent(),
+                Value<String> message = const Value.absent(),
+                Value<String> attachmentsJson = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ForumDraftsCompanion(
+                draftId: draftId,
+                accountKey: accountKey,
+                action: action,
+                fid: fid,
+                tid: tid,
+                pid: pid,
+                subject: subject,
+                message: message,
+                attachmentsJson: attachmentsJson,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String draftId,
+                required String accountKey,
+                required String action,
+                Value<int?> fid = const Value.absent(),
+                Value<int?> tid = const Value.absent(),
+                Value<int?> pid = const Value.absent(),
+                required String subject,
+                required String message,
+                required String attachmentsJson,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ForumDraftsCompanion.insert(
+                draftId: draftId,
+                accountKey: accountKey,
+                action: action,
+                fid: fid,
+                tid: tid,
+                pid: pid,
+                subject: subject,
+                message: message,
+                attachmentsJson: attachmentsJson,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ForumDraftsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ForumDraftsTable,
+      ForumDraft,
+      $$ForumDraftsTableFilterComposer,
+      $$ForumDraftsTableOrderingComposer,
+      $$ForumDraftsTableAnnotationComposer,
+      $$ForumDraftsTableCreateCompanionBuilder,
+      $$ForumDraftsTableUpdateCompanionBuilder,
+      (
+        ForumDraft,
+        BaseReferences<_$AppDatabase, $ForumDraftsTable, ForumDraft>,
+      ),
+      ForumDraft,
+      PrefetchHooks Function()
+    >;
+typedef $$ForumReadAnchorsTableCreateCompanionBuilder =
+    ForumReadAnchorsCompanion Function({
+      required String accountKey,
+      required int tid,
+      Value<int?> pid,
+      required int page,
+      required int floor,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$ForumReadAnchorsTableUpdateCompanionBuilder =
+    ForumReadAnchorsCompanion Function({
+      Value<String> accountKey,
+      Value<int> tid,
+      Value<int?> pid,
+      Value<int> page,
+      Value<int> floor,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$ForumReadAnchorsTableFilterComposer
+    extends Composer<_$AppDatabase, $ForumReadAnchorsTable> {
+  $$ForumReadAnchorsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tid => $composableBuilder(
+    column: $table.tid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pid => $composableBuilder(
+    column: $table.pid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get page => $composableBuilder(
+    column: $table.page,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get floor => $composableBuilder(
+    column: $table.floor,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ForumReadAnchorsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ForumReadAnchorsTable> {
+  $$ForumReadAnchorsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get tid => $composableBuilder(
+    column: $table.tid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pid => $composableBuilder(
+    column: $table.pid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get page => $composableBuilder(
+    column: $table.page,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get floor => $composableBuilder(
+    column: $table.floor,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ForumReadAnchorsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ForumReadAnchorsTable> {
+  $$ForumReadAnchorsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get tid =>
+      $composableBuilder(column: $table.tid, builder: (column) => column);
+
+  GeneratedColumn<int> get pid =>
+      $composableBuilder(column: $table.pid, builder: (column) => column);
+
+  GeneratedColumn<int> get page =>
+      $composableBuilder(column: $table.page, builder: (column) => column);
+
+  GeneratedColumn<int> get floor =>
+      $composableBuilder(column: $table.floor, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ForumReadAnchorsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ForumReadAnchorsTable,
+          ForumReadAnchor,
+          $$ForumReadAnchorsTableFilterComposer,
+          $$ForumReadAnchorsTableOrderingComposer,
+          $$ForumReadAnchorsTableAnnotationComposer,
+          $$ForumReadAnchorsTableCreateCompanionBuilder,
+          $$ForumReadAnchorsTableUpdateCompanionBuilder,
+          (
+            ForumReadAnchor,
+            BaseReferences<
+              _$AppDatabase,
+              $ForumReadAnchorsTable,
+              ForumReadAnchor
+            >,
+          ),
+          ForumReadAnchor,
+          PrefetchHooks Function()
+        > {
+  $$ForumReadAnchorsTableTableManager(
+    _$AppDatabase db,
+    $ForumReadAnchorsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ForumReadAnchorsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ForumReadAnchorsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ForumReadAnchorsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> accountKey = const Value.absent(),
+                Value<int> tid = const Value.absent(),
+                Value<int?> pid = const Value.absent(),
+                Value<int> page = const Value.absent(),
+                Value<int> floor = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ForumReadAnchorsCompanion(
+                accountKey: accountKey,
+                tid: tid,
+                pid: pid,
+                page: page,
+                floor: floor,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountKey,
+                required int tid,
+                Value<int?> pid = const Value.absent(),
+                required int page,
+                required int floor,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ForumReadAnchorsCompanion.insert(
+                accountKey: accountKey,
+                tid: tid,
+                pid: pid,
+                page: page,
+                floor: floor,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ForumReadAnchorsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ForumReadAnchorsTable,
+      ForumReadAnchor,
+      $$ForumReadAnchorsTableFilterComposer,
+      $$ForumReadAnchorsTableOrderingComposer,
+      $$ForumReadAnchorsTableAnnotationComposer,
+      $$ForumReadAnchorsTableCreateCompanionBuilder,
+      $$ForumReadAnchorsTableUpdateCompanionBuilder,
+      (
+        ForumReadAnchor,
+        BaseReferences<_$AppDatabase, $ForumReadAnchorsTable, ForumReadAnchor>,
+      ),
+      ForumReadAnchor,
+      PrefetchHooks Function()
+    >;
+typedef $$ForumActionTombstonesTableCreateCompanionBuilder =
+    ForumActionTombstonesCompanion Function({
+      required String accountKey,
+      required String contextKey,
+      required String attemptId,
+      required String action,
+      Value<int?> fid,
+      Value<int?> tid,
+      Value<int?> pid,
+      Value<int?> favoriteId,
+      required String draftContext,
+      required String status,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$ForumActionTombstonesTableUpdateCompanionBuilder =
+    ForumActionTombstonesCompanion Function({
+      Value<String> accountKey,
+      Value<String> contextKey,
+      Value<String> attemptId,
+      Value<String> action,
+      Value<int?> fid,
+      Value<int?> tid,
+      Value<int?> pid,
+      Value<int?> favoriteId,
+      Value<String> draftContext,
+      Value<String> status,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$ForumActionTombstonesTableFilterComposer
+    extends Composer<_$AppDatabase, $ForumActionTombstonesTable> {
+  $$ForumActionTombstonesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contextKey => $composableBuilder(
+    column: $table.contextKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get attemptId => $composableBuilder(
+    column: $table.attemptId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get action => $composableBuilder(
+    column: $table.action,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fid => $composableBuilder(
+    column: $table.fid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tid => $composableBuilder(
+    column: $table.tid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pid => $composableBuilder(
+    column: $table.pid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get favoriteId => $composableBuilder(
+    column: $table.favoriteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get draftContext => $composableBuilder(
+    column: $table.draftContext,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ForumActionTombstonesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ForumActionTombstonesTable> {
+  $$ForumActionTombstonesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get contextKey => $composableBuilder(
+    column: $table.contextKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get attemptId => $composableBuilder(
+    column: $table.attemptId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get action => $composableBuilder(
+    column: $table.action,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fid => $composableBuilder(
+    column: $table.fid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get tid => $composableBuilder(
+    column: $table.tid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pid => $composableBuilder(
+    column: $table.pid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get favoriteId => $composableBuilder(
+    column: $table.favoriteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get draftContext => $composableBuilder(
+    column: $table.draftContext,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ForumActionTombstonesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ForumActionTombstonesTable> {
+  $$ForumActionTombstonesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountKey => $composableBuilder(
+    column: $table.accountKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get contextKey => $composableBuilder(
+    column: $table.contextKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get attemptId =>
+      $composableBuilder(column: $table.attemptId, builder: (column) => column);
+
+  GeneratedColumn<String> get action =>
+      $composableBuilder(column: $table.action, builder: (column) => column);
+
+  GeneratedColumn<int> get fid =>
+      $composableBuilder(column: $table.fid, builder: (column) => column);
+
+  GeneratedColumn<int> get tid =>
+      $composableBuilder(column: $table.tid, builder: (column) => column);
+
+  GeneratedColumn<int> get pid =>
+      $composableBuilder(column: $table.pid, builder: (column) => column);
+
+  GeneratedColumn<int> get favoriteId => $composableBuilder(
+    column: $table.favoriteId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get draftContext => $composableBuilder(
+    column: $table.draftContext,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ForumActionTombstonesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ForumActionTombstonesTable,
+          ForumActionTombstone,
+          $$ForumActionTombstonesTableFilterComposer,
+          $$ForumActionTombstonesTableOrderingComposer,
+          $$ForumActionTombstonesTableAnnotationComposer,
+          $$ForumActionTombstonesTableCreateCompanionBuilder,
+          $$ForumActionTombstonesTableUpdateCompanionBuilder,
+          (
+            ForumActionTombstone,
+            BaseReferences<
+              _$AppDatabase,
+              $ForumActionTombstonesTable,
+              ForumActionTombstone
+            >,
+          ),
+          ForumActionTombstone,
+          PrefetchHooks Function()
+        > {
+  $$ForumActionTombstonesTableTableManager(
+    _$AppDatabase db,
+    $ForumActionTombstonesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ForumActionTombstonesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ForumActionTombstonesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ForumActionTombstonesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> accountKey = const Value.absent(),
+                Value<String> contextKey = const Value.absent(),
+                Value<String> attemptId = const Value.absent(),
+                Value<String> action = const Value.absent(),
+                Value<int?> fid = const Value.absent(),
+                Value<int?> tid = const Value.absent(),
+                Value<int?> pid = const Value.absent(),
+                Value<int?> favoriteId = const Value.absent(),
+                Value<String> draftContext = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ForumActionTombstonesCompanion(
+                accountKey: accountKey,
+                contextKey: contextKey,
+                attemptId: attemptId,
+                action: action,
+                fid: fid,
+                tid: tid,
+                pid: pid,
+                favoriteId: favoriteId,
+                draftContext: draftContext,
+                status: status,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountKey,
+                required String contextKey,
+                required String attemptId,
+                required String action,
+                Value<int?> fid = const Value.absent(),
+                Value<int?> tid = const Value.absent(),
+                Value<int?> pid = const Value.absent(),
+                Value<int?> favoriteId = const Value.absent(),
+                required String draftContext,
+                required String status,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ForumActionTombstonesCompanion.insert(
+                accountKey: accountKey,
+                contextKey: contextKey,
+                attemptId: attemptId,
+                action: action,
+                fid: fid,
+                tid: tid,
+                pid: pid,
+                favoriteId: favoriteId,
+                draftContext: draftContext,
+                status: status,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ForumActionTombstonesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ForumActionTombstonesTable,
+      ForumActionTombstone,
+      $$ForumActionTombstonesTableFilterComposer,
+      $$ForumActionTombstonesTableOrderingComposer,
+      $$ForumActionTombstonesTableAnnotationComposer,
+      $$ForumActionTombstonesTableCreateCompanionBuilder,
+      $$ForumActionTombstonesTableUpdateCompanionBuilder,
+      (
+        ForumActionTombstone,
+        BaseReferences<
+          _$AppDatabase,
+          $ForumActionTombstonesTable,
+          ForumActionTombstone
+        >,
+      ),
+      ForumActionTombstone,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6426,4 +9626,12 @@ class $AppDatabaseManager {
       $$WorkIndexesTableTableManager(_db, _db.workIndexes);
   $$WorkIndexSourcesTableTableManager get workIndexSources =>
       $$WorkIndexSourcesTableTableManager(_db, _db.workIndexSources);
+  $$ForumCachesTableTableManager get forumCaches =>
+      $$ForumCachesTableTableManager(_db, _db.forumCaches);
+  $$ForumDraftsTableTableManager get forumDrafts =>
+      $$ForumDraftsTableTableManager(_db, _db.forumDrafts);
+  $$ForumReadAnchorsTableTableManager get forumReadAnchors =>
+      $$ForumReadAnchorsTableTableManager(_db, _db.forumReadAnchors);
+  $$ForumActionTombstonesTableTableManager get forumActionTombstones =>
+      $$ForumActionTombstonesTableTableManager(_db, _db.forumActionTombstones);
 }

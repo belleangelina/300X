@@ -26,6 +26,7 @@ void main()
 
     setUpAll(()
     {
+        registerFallbackValue(LibraryKind.comic);
         registerFallbackValue(CatalogSection.updated);
         registerFallbackValue(NovelSourceFilter.all);
         registerFallbackValue(_work());
@@ -472,6 +473,89 @@ void main()
 
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
+    });
+
+    testWidgets('合并主页固定三个移动分区并按当前页签搜索', (
+        WidgetTester tester,
+    ) async
+    {
+        final _MockForumLibraryRepository repository =
+            _MockForumLibraryRepository();
+        final List<LibraryKind> searchedKinds = <LibraryKind>[];
+        when(
+            () => repository.loadCatalog(
+                kind: any(named: 'kind'),
+                section: any(named: 'section'),
+                novelSource: any(named: 'novelSource'),
+                page: any(named: 'page'),
+                typeId: any(named: 'typeId'),
+            ),
+        ).thenAnswer((Invocation invocation) async
+        {
+            final LibraryKind kind = invocation.namedArguments[#kind]
+                as LibraryKind;
+            final NovelSourceFilter source = invocation.namedArguments[
+                #novelSource
+            ] as NovelSourceFilter;
+            return _page(
+                kind == LibraryKind.comic
+                    ? ForumBoard.comic
+                    : source == NovelSourceFilter.literature
+                        ? ForumBoard.literature
+                        : ForumBoard.lightNovel,
+                typeId: 1,
+                category: '分类',
+            );
+        });
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    forumLibraryRepositoryProvider.overrideWithValue(repository),
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                ],
+                child: MaterialApp(
+                    home: LibraryHomePage(
+                        kind: LibraryKind.comic,
+                        combined: true,
+                        authState: const AuthState.authenticated('测试账号'),
+                        onLogin: _noop,
+                        onOpenWork: (Work work) {},
+                        onSearchForKind: searchedKinds.add,
+                    ),
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+
+        final List<String?> tabs = tester
+            .widgetList<Tab>(find.byType(Tab))
+            .map((Tab value) => value.text)
+            .toList(growable: false);
+        expect(tabs, <String?>['漫画区', '轻小说', '文学区']);
+
+        await tester.tap(find.text('文学区'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+            find
+                .byKey(const ValueKey<String>('catalog-search'))
+                .hitTestable(),
+        );
+        expect(searchedKinds, <LibraryKind>[LibraryKind.novel]);
+
+        await tester.tap(find.text('漫画区'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+            find
+                .byKey(const ValueKey<String>('catalog-search'))
+                .hitTestable(),
+        );
+        expect(
+            searchedKinds,
+            <LibraryKind>[LibraryKind.novel, LibraryKind.comic],
+        );
     });
 
     testWidgets('未登录时保留漫画区布局且不请求论坛目录', (

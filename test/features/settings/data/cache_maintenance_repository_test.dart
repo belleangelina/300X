@@ -65,6 +65,14 @@ void main()
         final Directory directory = await Directory.systemTemp.createTemp(
             'page300_cache_maintenance_test_',
         );
+        final Directory attachmentRoot = Directory(
+            '${directory.path}/temporary',
+        );
+        final File attachmentFile = File(
+            '${attachmentRoot.path}/forum-attachments/uid-101/result/a.pdf',
+        );
+        await attachmentFile.parent.create(recursive: true);
+        await attachmentFile.writeAsBytes(<int>[7]);
         final File coverFile = File('${directory.path}/cover.jpg');
         await coverFile.writeAsBytes(<int>[1, 2, 3]);
         final File finalCoverFile = File('${directory.path}/final-cover.jpg');
@@ -81,6 +89,7 @@ void main()
         );
         await database.into(database.favoriteCaches).insert(
             FavoriteCachesCompanion.insert(
+                userId: 101,
                 workId: 'comic:1',
                 workJson: '{}',
                 recordsJson: '[]',
@@ -159,11 +168,18 @@ void main()
         );
 
         final CacheMaintenanceRepository repository =
-                CacheMaintenanceRepository(database);
+                CacheMaintenanceRepository(
+            database,
+            null,
+            null,
+            null,
+            () async => attachmentRoot,
+        );
         await repository.clearTemporaryCaches();
 
         expect(await database.select(database.searchCaches).get(), isEmpty);
         expect(await database.select(database.favoriteCaches).get(), isEmpty);
+        expect(await attachmentFile.exists(), isFalse);
         expect(await database.select(database.coverCaches).get(), hasLength(1));
         expect(await database.select(database.coverEntries).get(), hasLength(1));
         expect(await database.select(database.coverAliases).get(), hasLength(1));
@@ -186,5 +202,155 @@ void main()
         );
         await database.close();
         await directory.delete(recursive: true);
+    });
+
+    test('退出清当前账号缓存但保留防重封存', () async
+    {
+        final AppDatabase database = AppDatabase(NativeDatabase.memory());
+        final _MockReaderMediaRepository media =
+            _MockReaderMediaRepository();
+        when(media.clear).thenAnswer((_) async {});
+        final Directory attachmentRoot = await Directory.systemTemp.createTemp(
+            'page300_account_attachment_cache_test_',
+        );
+        final Directory user101Attachments = Directory(
+            '${attachmentRoot.path}/forum-attachments/uid-101/result-a',
+        );
+        final Directory user202Attachments = Directory(
+            '${attachmentRoot.path}/forum-attachments/uid-202/result-b',
+        );
+        await user101Attachments.create(recursive: true);
+        await user202Attachments.create(recursive: true);
+        await File('${user101Attachments.path}/a.pdf').writeAsBytes(<int>[1]);
+        await File('${user202Attachments.path}/b.pdf').writeAsBytes(<int>[2]);
+        final DateTime now = DateTime(2026, 8, 12);
+        for (final int userId in <int>[101, 202])
+        {
+            await database.into(database.favoriteCaches).insert(
+                FavoriteCachesCompanion.insert(
+                    userId: userId,
+                    workId: 'comic:$userId',
+                    workJson: '{}',
+                    recordsJson: '[]',
+                    updatedAt: now,
+                ),
+            );
+            await database.into(database.forumCaches).insert(
+                ForumCachesCompanion.insert(
+                    accountKey: 'uid:$userId',
+                    cacheKey: 'forum:v2:index',
+                    payloadJson: '{}',
+                    updatedAt: now,
+                ),
+            );
+            await database.into(database.forumReadAnchors).insert(
+                ForumReadAnchorsCompanion.insert(
+                    accountKey: 'uid:$userId',
+                    tid: userId,
+                    page: 1,
+                    floor: 1,
+                    updatedAt: now,
+                ),
+            );
+            await database.into(database.forumDrafts).insert(
+                ForumDraftsCompanion.insert(
+                    draftId: 'community-pm:conversation:$userId',
+                    accountKey: 'uid:$userId',
+                    action: 'communityPm:conversation',
+                    tid: Value<int?>(userId),
+                    subject: '用户$userId',
+                    message: '未发送草稿',
+                    attachmentsJson: '{}',
+                    updatedAt: now,
+                ),
+            );
+            await database.into(database.forumDrafts).insert(
+                ForumDraftsCompanion.insert(
+                    draftId: 'new-thread:$userId',
+                    accountKey: 'uid:$userId',
+                    action: 'newThread',
+                    subject: '未发送主题',
+                    message: '未发送正文 $userId',
+                    attachmentsJson: '[]',
+                    updatedAt: now,
+                ),
+            );
+            await database.into(database.forumActionTombstones).insert(
+                ForumActionTombstonesCompanion.insert(
+                    accountKey: 'uid:$userId',
+                    contextKey: 'new-thread:$userId',
+                    attemptId: 'attempt:$userId',
+                    action: 'newThread',
+                    draftContext: 'new-thread:$userId',
+                    status: 'attempted',
+                    createdAt: now,
+                    updatedAt: now,
+                ),
+            );
+        }
+        final CacheMaintenanceRepository repository =
+            CacheMaintenanceRepository(
+                database,
+                null,
+                media,
+                null,
+                () async => attachmentRoot,
+            );
+
+        await repository.clearAccountCaches(101);
+
+        expect(
+            (await database.select(database.favoriteCaches).get())
+                .single.userId,
+            202,
+        );
+        expect(
+            (await database.select(database.forumCaches).get())
+                .single.accountKey,
+            'uid:202',
+        );
+        expect(
+            (await database.select(database.forumReadAnchors).get())
+                .single.accountKey,
+            'uid:202',
+        );
+        final List<ForumDraft> remainingDrafts =
+            await database.select(database.forumDrafts).get();
+        expect(remainingDrafts, hasLength(2));
+        expect(
+            remainingDrafts.every(
+                (ForumDraft value) => value.accountKey == 'uid:202',
+            ),
+            isTrue,
+        );
+        expect(
+            remainingDrafts.map((ForumDraft value) => value.draftId),
+            containsAll(<String>[
+                'community-pm:conversation:202',
+                'new-thread:202',
+            ]),
+        );
+        expect(
+            (await database.select(database.forumActionTombstones).get())
+                .map((ForumActionTombstone value) => value.accountKey),
+            containsAll(<String>['uid:101', 'uid:202']),
+        );
+        final ForumActionTombstone retained =
+            (await database.select(database.forumActionTombstones).get())
+                .firstWhere(
+                    (ForumActionTombstone value) =>
+                        value.accountKey == 'uid:101',
+                );
+        expect(retained.draftContext, 'new-thread:101');
+        expect(retained.attemptId, 'attempt:101');
+        expect(await user101Attachments.exists(), isFalse);
+        expect(await user202Attachments.exists(), isTrue);
+        expect(
+            await File('${user202Attachments.path}/b.pdf').readAsBytes(),
+            <int>[2],
+        );
+        verify(media.clear).called(1);
+        await database.close();
+        await attachmentRoot.delete(recursive: true);
     });
 }

@@ -38,7 +38,7 @@ void main()
         );
     });
 
-    testWidgets('个人页小说漫画与设置在浅色和深色主题下都有独立卡片', (
+    testWidgets('个人页记录下载与设置在浅色和深色主题下都有独立卡片', (
         WidgetTester tester,
     ) async
     {
@@ -50,20 +50,8 @@ void main()
         expect(find.byKey(const Key('profile-novel-card')), findsOneWidget);
         expect(find.byKey(const Key('profile-comic-card')), findsOneWidget);
         expect(find.byKey(const Key('profile-settings-card')), findsOneWidget);
-        expect(
-            find.descendant(
-                of: find.byKey(const Key('profile-novel-card')),
-                matching: find.text('小说收藏'),
-            ),
-            findsOneWidget,
-        );
-        expect(
-            find.descendant(
-                of: find.byKey(const Key('profile-comic-card')),
-                matching: find.text('漫画收藏'),
-            ),
-            findsOneWidget,
-        );
+        expect(find.text('小说收藏'), findsNothing);
+        expect(find.text('漫画收藏'), findsNothing);
         expect(
             find.descendant(
                 of: find.byKey(const Key('profile-settings-card')),
@@ -110,10 +98,8 @@ void main()
 
         expect(find.text('跟随系统'), findsNothing);
         final List<Finder> entries = <Finder>[
-            _tileWithText('小说收藏'),
             _tileWithText('小说记录'),
             _tileWithText('小说下载'),
-            _tileWithText('漫画收藏'),
             _tileWithText('漫画记录'),
             _tileWithText('漫画下载'),
             _tileWithText('显示主题'),
@@ -185,7 +171,7 @@ void main()
         );
     });
 
-    testWidgets('未登录个人页点击头像和云收藏都请求登录', (
+    testWidgets('未登录个人页点击头像请求登录且不重复展示云收藏', (
         WidgetTester tester,
     ) async
     {
@@ -202,10 +188,10 @@ void main()
 
         expect(find.text('未登录'), findsOneWidget);
         await tester.tap(find.widgetWithText(ListTile, '未登录'));
-        await tester.tap(find.text('漫画收藏'));
 
-        expect(loginRequests, 2);
-        expect(find.text('漫画收藏'), findsOneWidget);
+        expect(loginRequests, 1);
+        expect(find.text('小说收藏'), findsNothing);
+        expect(find.text('漫画收藏'), findsNothing);
     });
 
     testWidgets('关于页合并免责声明且不重复展示开源和参考项目链接', (

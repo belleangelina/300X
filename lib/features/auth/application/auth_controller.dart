@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:x300/core/network/forum_client.dart';
 import 'package:x300/features/auth/data/auth_repository.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
 
@@ -54,12 +57,30 @@ class AuthController extends AsyncNotifier<AuthState>
         );
     }
 
-    Future<void> completeWebLogin() async
+    Future<AuthState> completeWebLogin({
+        List<Cookie>? cookies,
+        int? expectedIdentityGeneration,
+        ForumWebSessionTransitionReservation? reservation,
+    }) async
     {
         state = const AsyncLoading<AuthState>();
-        state = await AsyncValue.guard<AuthState>(
-            _repository.completeWebLogin,
-        );
+        try
+        {
+            final AuthState result = cookies == null
+                ? await _repository.completeWebLogin()
+                : await _repository.completeWebLogin(
+                    cookies: cookies,
+                    expectedIdentityGeneration: expectedIdentityGeneration,
+                    reservation: reservation,
+                );
+            state = AsyncData<AuthState>(result);
+            return result;
+        }
+        on Object catch (error, stackTrace)
+        {
+            state = AsyncError<AuthState>(error, stackTrace);
+            Error.throwWithStackTrace(error, stackTrace);
+        }
     }
 
     Future<void> logout() async

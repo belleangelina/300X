@@ -30,6 +30,7 @@ class ChapterReaderPage extends ConsumerStatefulWidget
         required this.chapter,
         this.chapters,
         this.restoreProgress = true,
+        this.onOpenDiscussion,
         super.key,
     });
 
@@ -37,6 +38,7 @@ class ChapterReaderPage extends ConsumerStatefulWidget
     final Chapter chapter;
     final List<Chapter>? chapters;
     final bool restoreProgress;
+    final VoidCallback? onOpenDiscussion;
 
     @override
     ConsumerState<ChapterReaderPage> createState()
@@ -1016,16 +1018,23 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
                                                         children: <Widget>[
                                                             Expanded(
                                                                 child: TextButton.icon(
-                                                                    key: const Key(
-                                                                        'reader-original-button',
+                                                                    key: Key(
+                                                                        widget.onOpenDiscussion == null
+                                                                                ? 'reader-original-button'
+                                                                                : 'reader-discussion-button',
                                                                     ),
                                                                     onPressed:
-                                                                        _confirmOpenOriginal,
-                                                                    icon: const Icon(
-                                                                        Icons.open_in_browser,
+                                                                        widget.onOpenDiscussion ??
+                                                                            _confirmOpenOriginal,
+                                                                    icon: Icon(
+                                                                        widget.onOpenDiscussion == null
+                                                                                ? Icons.open_in_browser
+                                                                                : Icons.forum_outlined,
                                                                     ),
-                                                                    label: const Text(
-                                                                        '原帖',
+                                                                    label: Text(
+                                                                        widget.onOpenDiscussion == null
+                                                                                ? '原帖'
+                                                                                : '讨论',
                                                                     ),
                                                                 ),
                                                             ),

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:x300/core/storage/app_database.dart';
+import 'package:x300/features/forum/data/forum_attachment_repository.dart';
 import 'package:x300/features/library/data/cover_repository.dart';
 import 'package:x300/features/reader/data/reader_media_repository.dart';
 import 'package:x300/features/search/data/search_cache_repository.dart';
@@ -34,12 +35,14 @@ class CacheMaintenanceRepository
         this._coverRepository,
         this._readerMediaRepository,
         this._searchCacheRepository,
+        this._forumAttachmentCacheDirectory,
     ]);
 
     final AppDatabase _database;
     final CoverRepository? _coverRepository;
     final ReaderMediaRepository? _readerMediaRepository;
     final SearchCacheRepository? _searchCacheRepository;
+    final ForumAttachmentCacheDirectory? _forumAttachmentCacheDirectory;
     bool _automaticMaintenanceStarted = false;
 
     Future<void> maintainAutomatically() async
@@ -74,6 +77,9 @@ class CacheMaintenanceRepository
             await _database.delete(_database.favoriteCaches).go();
         });
         await _readerMediaRepository?.clear();
+        await ForumAttachmentRepository.clearAllCaches(
+            cacheDirectory: _forumAttachmentCacheDirectory,
+        );
     }
 
     Future<void> clearCoverCaches() async
@@ -105,8 +111,49 @@ class CacheMaintenanceRepository
         });
     }
 
-    Future<void> clearAccountCaches() async
+    Future<void> clearAccountCaches([int? userId]) async
     {
+        if ((userId ?? 0) > 0)
+        {
+            final String accountKey = 'uid:$userId';
+            await _database.transaction(() async
+            {
+                await (
+                    _database.delete(_database.favoriteCaches)
+                        ..where(
+                            (FavoriteCaches table) =>
+                                table.userId.equals(userId!),
+                        )
+                ).go();
+                await (
+                    _database.delete(_database.forumCaches)
+                        ..where(
+                            (ForumCaches table) =>
+                                table.accountKey.equals(accountKey),
+                        )
+                ).go();
+                await (
+                    _database.delete(_database.forumDrafts)
+                        ..where(
+                            (ForumDrafts table) =>
+                                table.accountKey.equals(accountKey),
+                        )
+                ).go();
+                await (
+                    _database.delete(_database.forumReadAnchors)
+                        ..where(
+                            (ForumReadAnchors table) =>
+                                table.accountKey.equals(accountKey),
+                        )
+                ).go();
+            });
+            await _readerMediaRepository?.clear();
+            await ForumAttachmentRepository.clearAccountCache(
+                userId!,
+                cacheDirectory: _forumAttachmentCacheDirectory,
+            );
+            return;
+        }
         await clearTemporaryCaches();
         await clearCoverCaches();
     }
