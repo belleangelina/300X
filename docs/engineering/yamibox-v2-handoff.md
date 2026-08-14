@@ -1,6 +1,6 @@
 # 300X V2 开发交接状态
 
-> 最后同步：2026-08-14，Linux Debug 已接入按 Key 点击并实机试用成功。Android/iOS 发布门禁仍未做。本文只记录脱敏工程状态，不保存账号、Cookie、`formhash`、帖子正文或私信内容。每完成一个可验证节点都必须更新本文；新会话应先读本文，再读 `docs/spec/yamibox-v2.md`、`docs/spec/yamibox-v2-capabilities.md`。若要在 Linux 点界面，必读 `docs/engineering/linux-debug-ui.md`，不要用 xdotool。当前工作树为最终事实。
+> 最后同步：2026-08-14，已提交 `ae79258` 并打出 `1.0.5+9` 验证用 Android Release APK。这不是 V2 正式发布，Android/iOS 发布门禁仍未做。本文只记录脱敏工程状态，不保存账号、Cookie、`formhash`、帖子正文或私信内容。每完成一个可验证节点都必须更新本文；新会话应先读本文，再读 `docs/spec/yamibox-v2.md`、`docs/spec/yamibox-v2-capabilities.md`。若要在 Linux 点界面，必读 `docs/engineering/linux-debug-ui.md`，不要用 xdotool。当前工作树为最终事实。
 
 ## 当前目标与边界
 
@@ -14,7 +14,7 @@
 
 ## 当前节点
 
-目标：Linux Debug 按 Key 点击已可用，不是 V2 正式版。
+目标：已向用户提供 `1.0.5+9` Android Release 验证包，不是 V2 正式版。
 
 - Debug 包在 `kDebugMode` 下于 `127.0.0.1` 提供按 Flutter `Key` 的 find/wait/tap/enter/back；Release 不启动。
 - Linux 实机已用该入口完成：四主入口、论坛首页、管理版、本版搜索（只输入未提交）、社区菜单、本人资料、好友空列表、访客列表、打开主题。未再用 xdotool 点业务控件。
@@ -23,7 +23,7 @@
 
 Linux 上还可以补的只读路径（非发布门禁）：本人资料「收藏」列表、`findpost`、附件下载/打开、主题或多页版块的下一页、离线缓存、在线成员/足迹页签、他人资料、群组/日志/相册收藏页。不要做：任何写入、通知/私信正文、注销/切号、本版搜索提交（未授权）。
 
-下一动作：发布卡在用户 Android/iOS 和授权写入，不卡在 Linux。若继续 Linux 只读，用 `docs/engineering/linux-debug-ui.md`。齐备前不得跑 `build_release.sh`。
+下一动作：等用户用 `1.0.5+9` 验证包跑 Android 清单并回传结果。不要把本次构建当成 V2 发布。若继续 Linux 只读，用 `docs/engineering/linux-debug-ui.md`。
 
 ## 已完成的主要基础
 
@@ -69,6 +69,7 @@ Linux 上还可以补的只读路径（非发布门禁）：本人资料「收�
 
 ## 最近可信证据
 
+- 验证用 Android Release `1.0.5+9`（`--keep-version`，只加构建号）：`build/releases/X300-v1.0.5-android-arm64-v8a-release.apk`、`build/releases/X300-v1.0.5-android-universal-release.apk`。日志：`.artifacts/validation/logs/v2-android-release-1.0.5-build9.log`。不是正式发布。
 - Linux Debug 按 Key 点击：`docs/engineering/linux-debug-ui.md`；试跑 `.artifacts/validation/v2-debug-ui-linux/REPORT.md`。测试 `.artifacts/validation/logs/v2-debug-ui-and-key-regression.log`；构建 `.artifacts/validation/logs/v2-debug-ui-linux-debug-build.log`。
 - Linux 只读实机（xdotool 轮次）：`.artifacts/validation/v2-linux-readonly-2026-08-14/REPORT.md`。公告 URI 与跨版置顶修复测试：`.artifacts/validation/logs/v2-linux-announcement-uri-normalize-test.log`、`v2-linux-fid-sticky-and-announcement-test.log`。
 - 15.4 入口分类：删除/投票/举报明确不适用；点评/评分写入为 Android/iOS 受控原页；主题页定向测试见 `.artifacts/validation/logs/v2-original-action-classification-test.log`。
@@ -92,7 +93,7 @@ Linux 上还可以补的只读路径（非发布门禁）：本人资料「收�
 5. 上述 Android/iOS 证据齐备后，再用 `build_release.sh --platform <android|ios>` 打正式产物。
 6. 在此之前不要宣称 V2 完成，不要递增版本。
 
-首个执行命令：无新的 Linux 必做项。等用户 Android/iOS 结果；若用户要继续 Linux 只读，先读 `docs/engineering/linux-debug-ui.md` 再启动 Debug 包。
+首个执行命令：等用户安装 `1.0.5+9` 验证包并回传 Android 清单结果。
 
 ## 节点更新格式
 
