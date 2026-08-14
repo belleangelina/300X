@@ -1,16 +1,16 @@
 # 300X V2 开发交接状态
 
-> 最后同步：2026-08-14，已提交 `ae79258` 并打出 `1.0.5+9` 验证用 Android Release APK。这不是 V2 正式发布，Android/iOS 发布门禁仍未做。本文只记录脱敏工程状态，不保存账号、Cookie、`formhash`、帖子正文或私信内容。每完成一个可验证节点都必须更新本文；新会话应先读本文，再读 `docs/spec/yamibox-v2.md`、`docs/spec/yamibox-v2-capabilities.md`。若要在 Linux 点界面，必读 `docs/engineering/linux-debug-ui.md`，不要用 xdotool。当前工作树为最终事实。
+> 最后同步：2026-08-14。业务节点 `ae79258`，验证包版本记在 `fa332e1`（`1.0.5+9`）。其后若只有文档校正，以 `git log` 为准。这不是 V2 正式发布，Android/iOS 发布门禁仍未做。本文只记录脱敏工程状态，不保存账号、Cookie、`formhash`、帖子正文或私信内容。每完成一个可验证节点都必须更新本文；新会话应先读本文，再读 `docs/spec/yamibox-v2.md`、`docs/spec/yamibox-v2-capabilities.md`。若要在 Linux 点界面，必读 `docs/engineering/linux-debug-ui.md`，不要用 xdotool。当前工作树为最终事实。
 
 ## 当前目标与边界
 
-- 工作分支：当前检出 `feature/v2.0-bk`，与 `feature/v2.0` 同指向 `e7cad52` 之上的未提交收口改动。基于当前 V1 基线选择性实现 V2；禁止整体合并旧 `feature/full-forum`。
+- 工作分支：当前检出 `feature/v2.0-bk`，本地无远程跟踪。`feature/v2.0` 仍停在 `e7cad52`。基于当前 V1 基线选择性实现 V2；禁止整体合并旧 `feature/full-forum`。未经用户要求不要 push。
 - 权威规格：`docs/spec/yamibox-v2.md`；逐能力状态：`docs/spec/yamibox-v2-capabilities.md`；用户实测：`docs/validation/yamibox-v2-manual-checklist.md`。
 - 论坛结构、权限、动态字段和流程以真实移动网页为准，不使用电脑网页或旧分支扩大范围。
 - 未经本轮用户明确授权，禁止自动真实站探针、业务 POST、写操作入口、通知/私信正文、注销/切号。Linux 只读实机（启动已有会话的 Debug 包、按 Key 点击、截图）以本文「当前节点」和 `docs/engineering/linux-debug-ui.md` 为准，不要退回 xdotool。Android/iOS 实机仍由用户执行。
 - 子代理可用于只读勘察、缺陷审查和文件集合互不重叠的实现；同一文件同一时间只允许一个写入者。子代理不得做真实站请求、不得改文档结论、不得整文件覆盖平台桥。
 - 不可靠或未取得标准移动合同的写操作必须 fail closed，不得凭 URL、文案或桌面网页猜实现。
-- 工作树可能含未提交收口改动。不要覆盖、回退或格式化无关文件；修改前先检查 `git status`、近期文件时间和并行任务范围。
+- 业务改动已提交。工作树只应看到未跟踪的 Gradle `.uuid`（不要加入版本库）。不要覆盖、回退或格式化无关文件；修改前先检查 `git status`、近期文件时间和并行任务范围。
 
 ## 当前节点
 
