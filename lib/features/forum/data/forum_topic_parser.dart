@@ -46,12 +46,21 @@ class ForumTopicParser {
     }
 
     final int? documentBoardId = _documentBoardId(document, pageUri);
-    final int? boardId = expectedBoardId ?? documentBoardId;
-    if (boardId == null || boardId <= 0) {
-      throw const ForumParseException('主题页缺少 fid');
-    }
-    if (documentBoardId != null && documentBoardId != boardId) {
-      throw const ForumParseException('主题页 fid 不一致');
+    final int? boardId;
+    if (documentBoardId != null &&
+        expectedBoardId != null &&
+        documentBoardId != expectedBoardId &&
+        expectedThreadId != null &&
+        threadId == expectedThreadId) {
+      boardId = documentBoardId;
+    } else {
+      boardId = expectedBoardId ?? documentBoardId;
+      if (boardId == null || boardId <= 0) {
+        throw const ForumParseException('主题页缺少 fid');
+      }
+      if (documentBoardId != null && documentBoardId != boardId) {
+        throw const ForumParseException('主题页 fid 不一致');
+      }
     }
 
     final dom.Element titleElement = document.querySelector('.view_tit')!;

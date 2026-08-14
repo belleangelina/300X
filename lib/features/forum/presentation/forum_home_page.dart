@@ -6,6 +6,7 @@ import 'package:x300/core/network/forum_exceptions.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/community/presentation/community_pages.dart';
+import 'package:x300/features/favorites/domain/raw_favorite_models.dart';
 import 'package:x300/features/forum/data/forum_read_repository.dart';
 import 'package:x300/features/forum/domain/forum_models.dart'
     hide ForumBoardPage;
@@ -60,6 +61,9 @@ class ForumHomePage extends ConsumerStatefulWidget
         required this.onLogin,
         this.controller,
         this.onOpenBoard,
+        this.onOpenFavoriteThread,
+        this.onOpenFavoriteBoard,
+        this.onOpenFavoriteTarget,
         super.key,
     });
 
@@ -67,6 +71,9 @@ class ForumHomePage extends ConsumerStatefulWidget
     final VoidCallback onLogin;
     final ForumHomeController? controller;
     final ValueChanged<ForumBoardNode>? onOpenBoard;
+    final ValueChanged<RawFavoriteItem>? onOpenFavoriteThread;
+    final ValueChanged<RawFavoriteItem>? onOpenFavoriteBoard;
+    final ValueChanged<RawFavoriteItem>? onOpenFavoriteTarget;
 
     @override
     ConsumerState<ForumHomePage> createState()
@@ -159,6 +166,9 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
                                 <PopupMenuEntry<_CommunityDestination>>[
                                     if (_index?.navigation.noticesUri != null)
                                         PopupMenuItem<_CommunityDestination>(
+                                            key: const Key(
+                                                'forum-community-notices',
+                                            ),
                                             value: _CommunityDestination.notices,
                                             child: Text(
                                                 _index!.viewer.noticeCount > 0
@@ -168,6 +178,9 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
                                         ),
                                     if (_index?.navigation.messagesUri != null)
                                         PopupMenuItem<_CommunityDestination>(
+                                            key: const Key(
+                                                'forum-community-messages',
+                                            ),
                                             value: _CommunityDestination.messages,
                                             child: Text(
                                                 _index!.viewer
@@ -181,6 +194,9 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
                                         const PopupMenuItem<
                                             _CommunityDestination
                                         >(
+                                            key: Key(
+                                                'forum-community-profile',
+                                            ),
                                             value: _CommunityDestination.profile,
                                             child: Text('个人资料'),
                                         ),
@@ -189,6 +205,7 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
                         ),
                     if (_index?.navigation.searchUri != null)
                         IconButton(
+                            key: const Key('forum-home-search'),
                             tooltip: '搜索论坛',
                             onPressed: () => _openSearch(
                                 _index!.navigation.searchUri!,
@@ -439,6 +456,9 @@ class _ForumHomePageState extends ConsumerState<ForumHomePage>
                     widget.authState.userId > 0 => CommunityProfileScreen(
                 uri: index.navigation.profileUri!,
                 profileUserId: widget.authState.userId,
+                onOpenFavoriteThread: widget.onOpenFavoriteThread,
+                onOpenFavoriteBoard: widget.onOpenFavoriteBoard,
+                onOpenFavoriteTarget: widget.onOpenFavoriteTarget,
             ),
             _ => null,
         };

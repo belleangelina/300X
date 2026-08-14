@@ -105,6 +105,7 @@ class _ForumBoardPageState extends ConsumerState<ForumBoardPage>
                         ),
                     if (page?.searchUri != null)
                         IconButton(
+                            key: const Key('forum-board-search'),
                             tooltip: '搜索本版',
                             onPressed: () => _openSearch(page!.searchUri!),
                             icon: const Icon(Icons.search),

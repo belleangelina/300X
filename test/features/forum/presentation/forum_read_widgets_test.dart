@@ -204,6 +204,107 @@ void main() {
     expect(opened, isTrue);
   });
 
+  testWidgets('点评和评分只给绑定同一 uid 的资料 URI 独立入口', (
+    WidgetTester tester,
+  ) async {
+    final Uri trusted = Uri.parse(
+      'https://bbs.yamibo.com/home.php?mod=space&uid=8&mobile=2',
+    );
+    final List<(Uri, int)> opened = <(Uri, int)>[];
+    final ForumPost post = ForumPost(
+      id: 10,
+      threadId: 100,
+      floor: 1,
+      author: '作者',
+      timeLabel: '',
+      messageHtml: '',
+      uri: Uri.parse(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2#pid10',
+      ),
+      comments: <ForumPostComment>[
+        ForumPostComment(
+          id: 81,
+          threadId: 100,
+          postId: 10,
+          authorId: 8,
+          authorUri: trusted,
+          author: '点评用户',
+          timeLabel: '刚刚',
+          contentBlocks: const <ForumPostContentBlock>[
+            ForumPostParagraphBlock(
+              inlines: <ForumPostInline>[ForumPostTextInline(text: '点评正文')],
+            ),
+          ],
+        ),
+        const ForumPostComment(
+          id: 82,
+          threadId: 100,
+          postId: 10,
+          author: '无资料点评',
+          timeLabel: '',
+          contentBlocks: <ForumPostContentBlock>[
+            ForumPostParagraphBlock(
+              inlines: <ForumPostInline>[ForumPostTextInline(text: '无入口')],
+            ),
+          ],
+        ),
+      ],
+      ratingSummary: ForumPostRatingSummary(
+        participantCount: 2,
+        totals: const <ForumPostRatingScore>[
+          ForumPostRatingScore(credit: '积分', value: 5),
+        ],
+        entries: <ForumPostRatingEntry>[
+          ForumPostRatingEntry(
+            authorId: 9,
+            authorUri: Uri.parse(
+              'https://bbs.yamibo.com/home.php?mod=space&uid=9&mobile=2',
+            ),
+            author: '评分用户',
+            scores: const <ForumPostRatingScore>[
+              ForumPostRatingScore(credit: '积分', value: 5),
+            ],
+          ),
+          const ForumPostRatingEntry(
+            authorId: 0,
+            author: '无资料评分',
+            scores: <ForumPostRatingScore>[
+              ForumPostRatingScore(credit: '积分', value: 0),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ForumPostContent(
+              post: post,
+              onOpenAuthor: (Uri uri, int userId) => opened.add((uri, userId)),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey<String>('forum-comment-author-81')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('forum-comment-author-82')), findsNothing);
+    expect(find.byKey(const ValueKey<String>('forum-rating-author-9-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('forum-rating-author-0-1')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey<String>('forum-comment-author-81')));
+    await tester.tap(find.byKey(const ValueKey<String>('forum-rating-author-9-0')));
+    expect(opened, <(Uri, int)>[
+      (trusted, 8),
+      (
+        Uri.parse('https://bbs.yamibo.com/home.php?mod=space&uid=9&mobile=2'),
+        9,
+      ),
+    ]);
+  });
+
   testWidgets('模型附件显示原生进度、取消和失败重试，不影响图片正文路径', (WidgetTester tester) async {
     final Uri fileUri = Uri.parse(
       'https://bbs.yamibo.com/forum.php?mod=attachment&aid=7',

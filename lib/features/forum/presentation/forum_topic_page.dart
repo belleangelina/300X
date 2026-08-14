@@ -12,6 +12,7 @@ import 'package:x300/features/forum/data/forum_read_repository.dart';
 import 'package:x300/features/forum/data/forum_webview_policy.dart';
 import 'package:x300/features/forum/domain/forum_action_models.dart';
 import 'package:x300/features/forum/domain/forum_models.dart' as domain;
+import 'package:x300/features/community/presentation/community_pages.dart';
 import 'package:x300/features/forum/presentation/forum_action_page.dart';
 import 'package:x300/features/forum/presentation/forum_original_page.dart';
 import 'package:x300/features/forum/presentation/forum_read_widgets.dart';
@@ -23,10 +24,16 @@ import 'package:x300/shared/presentation/app_error_view.dart';
 import 'package:x300/shared/presentation/app_loading_view.dart';
 
 class ForumTopicPage extends ConsumerStatefulWidget {
-  const ForumTopicPage({required this.thread, this.focusedPostId, super.key});
+  const ForumTopicPage({
+    required this.thread,
+    this.focusedPostId,
+    this.onOpenAuthor,
+    super.key,
+  });
 
   final domain.ForumThreadSummary thread;
   final int? focusedPostId;
+  final void Function(Uri uri, int userId)? onOpenAuthor;
 
   @override
   ConsumerState<ForumTopicPage> createState() {
@@ -213,6 +220,7 @@ class _ForumTopicPageState extends ConsumerState<ForumTopicPage> {
                       ? null
                       : () => _openEditPost(post),
                   onOpenOriginalAction: _openOriginalAction,
+                  onOpenAuthor: _openAuthor,
                 ),
               ),
             _TopicPager(
@@ -517,6 +525,25 @@ class _ForumTopicPageState extends ConsumerState<ForumTopicPage> {
     }
   }
 
+  void _openAuthor(Uri uri, int userId) {
+    if (userId <= 0) {
+      return;
+    }
+    final void Function(Uri uri, int userId)? callback = widget.onOpenAuthor;
+    if (callback != null) {
+      callback(uri, userId);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => CommunityProfileScreen(
+          uri: uri,
+          profileUserId: userId,
+        ),
+      ),
+    );
+  }
+
   void _openPostLink(domain.ForumPostLinkInline link) {
     switch (link.kind) {
       case domain.ForumPostLinkKind.internalThread:
@@ -524,6 +551,8 @@ class _ForumTopicPageState extends ConsumerState<ForumTopicPage> {
         _openInternalPostLink(link);
         return;
       case domain.ForumPostLinkKind.download:
+        _openInlineAttachment(link);
+        return;
       case domain.ForumPostLinkKind.external:
         unawaited(_openExternalLink(link.uri));
         return;
@@ -589,6 +618,24 @@ class _ForumTopicPageState extends ConsumerState<ForumTopicPage> {
     }
     return uri.replace(
       queryParameters: <String, String>{...uri.queryParameters, 'mobile': '2'},
+    );
+  }
+
+  void _openInlineAttachment(domain.ForumPostLinkInline link) {
+    final domain.ForumThreadPage? page = _page;
+    if (page == null) {
+      return;
+    }
+    unawaited(
+      ref
+          .read(forumAttachmentDownloadControllerProvider.notifier)
+          .downloadAndOpen(
+            domain.ForumAttachment(
+              name: link.label.isEmpty ? '附件' : link.label,
+              uri: link.uri,
+            ),
+            topicSourceUri: page.cursor.sourceUri,
+          ),
     );
   }
 
@@ -949,6 +996,7 @@ class _PostView extends StatelessWidget {
     required this.onOpenQuoteAction,
     required this.onOpenEditAction,
     required this.onOpenOriginalAction,
+    required this.onOpenAuthor,
     super.key,
   });
 
@@ -965,6 +1013,7 @@ class _PostView extends StatelessWidget {
   final Future<void> Function()? onOpenQuoteAction;
   final Future<void> Function()? onOpenEditAction;
   final Future<void> Function(Uri uri, String label) onOpenOriginalAction;
+  final void Function(Uri uri, int userId) onOpenAuthor;
 
   @override
   Widget build(BuildContext context) {
@@ -981,6 +1030,23 @@ class _PostView extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
+              if (post.authorUri != null && (post.authorId ?? 0) > 0)
+                IconButton(
+                  key: ValueKey<String>('forum-topic-author-${post.id}'),
+                  tooltip: post.author.isEmpty
+                      ? '查看作者资料'
+                      : '查看 ${post.author}',
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 32,
+                    height: 32,
+                  ),
+                  padding: EdgeInsets.zero,
+                  iconSize: 20,
+                  onPressed: () =>
+                      onOpenAuthor(post.authorUri!, post.authorId!),
+                  icon: const Icon(Icons.account_circle_outlined),
+                ),
               Expanded(
                 child: Text(
                   post.author.isEmpty ? '匿名用户' : post.author,
@@ -1012,6 +1078,7 @@ class _PostView extends StatelessWidget {
             onOpenAttachment: onOpenAttachment,
             onCancelAttachment: onCancelAttachment,
             attachmentState: attachmentState,
+            onOpenAuthor: onOpenAuthor,
           ),
           if (onOpenQuoteAction != null ||
               onOpenEditAction != null ||
@@ -1138,6 +1205,7 @@ class _TopicPager extends StatelessWidget {
           children: <Widget>[
             Expanded(
               child: OutlinedButton(
+                key: const Key('forum-topic-prev'),
                 onPressed: onPrevious,
                 child: const Text('上一页'),
               ),
@@ -1151,6 +1219,7 @@ class _TopicPager extends StatelessWidget {
             ),
             Expanded(
               child: OutlinedButton(
+                key: const Key('forum-topic-next'),
                 onPressed: onNext,
                 child: const Text('下一页'),
               ),

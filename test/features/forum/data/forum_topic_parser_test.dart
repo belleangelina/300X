@@ -657,6 +657,34 @@ void main() {
     );
   });
 
+  test('同一 tid 的全站置顶允许从其他版块打开并采用页面真实 fid', () {
+    const String html = '''
+            <html><body id="forum" class="pg_viewthread">
+                <div class="header"><h2><a href="forum.php?mod=forumdisplay&amp;fid=2&amp;mobile=2">管理版</a></h2></div>
+                <div class="viewthread"><div class="view_tit">关于请不要发布政治及其相关敏感内容的公告</div>
+                    <div class="plc cl" id="pid100">
+                        <ul class="authi"><li class="mtit"><span class="y">1#</span></li></ul>
+                        <div class="message">置顶正文</div>
+                    </div>
+                </div>
+            </body></html>
+        ''';
+    final Uri uri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=55&mobile=2',
+    );
+
+    final ForumThreadPage page = parser.parse(
+      html,
+      uri,
+      expectedThreadId: 55,
+      expectedBoardId: 41,
+    );
+
+    expect(page.thread.id, 55);
+    expect(page.thread.boardId, 2);
+    expect(page.posts.single.messageHtml, contains('置顶正文'));
+  });
+
   test('可见楼层缺少正文或权限提示时拒绝残缺结果', () {
     const String html = '''
             <html><body id="forum" class="pg_viewthread">

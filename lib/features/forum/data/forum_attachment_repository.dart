@@ -51,7 +51,7 @@ class ForumAttachmentRepository {
     ForumAttachmentCacheDirectory? cacheDirectory,
     this.maximumBytes = defaultMaximumBytes,
     this.authParser = const AuthPageParser(),
-  }) : _cacheDirectory = cacheDirectory ?? getTemporaryDirectory;
+  }) : _cacheDirectory = cacheDirectory ?? getApplicationCacheDirectory;
 
   static const int defaultMaximumBytes = 256 * 1024 * 1024;
   static const Set<String> _sensitiveKeys = <String>{
@@ -172,7 +172,7 @@ class ForumAttachmentRepository {
     future =
         _performClearAccount(
           userId,
-          cacheDirectory ?? getTemporaryDirectory,
+          cacheDirectory ?? getApplicationCacheDirectory,
         ).whenComplete(() {
           if (identical(_accountClearTasks[userId], future)) {
             _accountClearTasks.remove(userId);
@@ -213,7 +213,7 @@ class ForumAttachmentRepository {
       return pending;
     }
     late final Future<void> future;
-    future = _performClearAll(cacheDirectory ?? getTemporaryDirectory)
+    future = _performClearAll(cacheDirectory ?? getApplicationCacheDirectory)
         .whenComplete(() {
           if (identical(_allClearTask, future)) {
             _allClearTask = null;
@@ -411,7 +411,8 @@ class ForumAttachmentRepository {
   }
 
   Uri _requireTopicUri(Uri uri) {
-    if (!_isForumUri(uri) || !_isTopicRoute(uri)) {
+    if (!_isForumUri(uri) ||
+        (!_isTopicRoute(uri) && !_isAnnouncementRoute(uri))) {
       throw const ForumAttachmentDownloadException('论坛附件来源页面不安全');
     }
     return uri.replace(fragment: '');
@@ -461,6 +462,21 @@ class ForumAttachmentRepository {
         (mobile == null || mobile == '2') &&
         uri.queryParametersAll.keys.every(
           (String key) => const <String>{'mod', 'aid', 'mobile'}.contains(key),
+        );
+  }
+
+  bool _isAnnouncementRoute(Uri uri) {
+    if (uri.fragment.isNotEmpty || uri.path.toLowerCase() != '/forum.php') {
+      return false;
+    }
+    final int? announcementId = int.tryParse(_single(uri, 'id') ?? '');
+    final String? mobile = _single(uri, 'mobile');
+    return _single(uri, 'mod')?.toLowerCase() == 'announcement' &&
+        announcementId != null &&
+        announcementId > 0 &&
+        (mobile == null || mobile == '2') &&
+        uri.queryParametersAll.keys.every(
+          const <String>{'mod', 'id', 'mobile'}.contains,
         );
   }
 

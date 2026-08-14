@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,17 +11,22 @@ import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/community/data/community_repository.dart';
 import 'package:x300/features/community/domain/community_models.dart';
 import 'package:x300/features/community/presentation/community_pages.dart';
+import 'package:x300/features/forum/data/forum_attachment_repository.dart';
 import 'package:x300/features/forum/data/forum_read_repository.dart';
 import 'package:x300/features/forum/domain/forum_announcement_models.dart';
 import 'package:x300/features/forum/domain/forum_models.dart' as domain;
 import 'package:x300/features/forum/presentation/forum_announcement_page.dart';
 import 'package:x300/features/forum/presentation/forum_board_page.dart';
 import 'package:x300/features/forum/presentation/forum_home_page.dart';
+import 'package:x300/features/forum/presentation/forum_original_page.dart';
 import 'package:x300/features/forum/presentation/forum_topic_page.dart';
 
 class _MockForumReadRepository extends Mock implements ForumReadRepository {}
 
 class _MockCommunityRepository extends Mock implements CommunityRepository {}
+
+class _MockAttachmentRepository extends Mock
+    implements ForumAttachmentRepository {}
 
 void main() {
   late _MockForumReadRepository repository;
@@ -32,6 +39,13 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(Uri.parse('https://bbs.yamibo.com/?mobile=2'));
+    registerFallbackValue(CancelToken());
+    registerFallbackValue(
+      domain.ForumAttachment(
+        name: 'fallback',
+        uri: Uri.parse('https://bbs.yamibo.com/forum.php?mod=attachment&aid=1'),
+      ),
+    );
     registerFallbackValue(
       _boardPage(
         board: _board(
@@ -490,6 +504,50 @@ void main() {
     expect(find.byKey(const Key('forum-original-reply')), findsNothing);
   });
 
+  testWidgets('点评评分仅在本平台可打开登记原页时显示，删除投票举报始终不可点', (
+    WidgetTester tester,
+  ) async {
+    final domain.ForumThreadPage page = _topicPage(
+      threadUri: threadUri,
+      posts: <domain.ForumPost>[
+        _post(
+          id: 201,
+          floor: 1,
+          threadUri: threadUri,
+          messageHtml: '<p>正文</p>',
+          commentUri: Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=misc&action=comment&tid=100&pid=201&mobile=2',
+          ),
+          rateUri: Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=misc&action=rate&tid=100&pid=201&mobile=2',
+          ),
+        ),
+      ],
+    );
+    when(
+      () => repository.loadThread(
+        any(),
+        expectedThreadId: any(named: 'expectedThreadId'),
+        expectedBoardId: any(named: 'expectedBoardId'),
+        focusedPostId: any(named: 'focusedPostId'),
+      ),
+    ).thenAnswer((_) async => page);
+
+    await tester.pumpWidget(
+      _app(repository, ForumTopicPage(thread: _thread(threadUri))),
+    );
+    await tester.pumpAndSettle();
+
+    final Matcher originalActionMatcher = forumOriginalPageSupported
+        ? findsOneWidget
+        : findsNothing;
+    expect(find.text('点评'), originalActionMatcher);
+    expect(find.text('评分'), originalActionMatcher);
+    expect(find.text('删除'), findsNothing);
+    expect(find.text('投票'), findsNothing);
+    expect(find.text('举报'), findsNothing);
+  });
+
   testWidgets('公告正文内链进入原生主题，外链仅交给系统应用', (WidgetTester tester) async {
     final Uri announcementUri = Uri.parse(
       'https://bbs.yamibo.com/forum.php?mod=announcement&id=9',
@@ -498,6 +556,25 @@ void main() {
       'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=200&mobile=2',
     );
     final Uri externalUri = Uri.parse('https://example.org/public');
+    final Uri downloadUri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=attachment&aid=9',
+    );
+    final _MockAttachmentRepository attachments = _MockAttachmentRepository();
+    when(
+      () => attachments.download(
+        any(),
+        topicSourceUri: any(named: 'topicSourceUri'),
+        onProgress: any(named: 'onProgress'),
+        cancelToken: any(named: 'cancelToken'),
+      ),
+    ).thenAnswer(
+      (_) async => ForumDownloadedAttachment(
+        file: File('/tmp/unused.pdf'),
+        fileName: '资料.pdf',
+        mimeType: 'application/pdf',
+        byteLength: 3,
+      ),
+    );
     when(
       () => repository.loadAnnouncement(
         announcementUri,
@@ -522,6 +599,12 @@ void main() {
                 label: '公开外链',
                 uri: externalUri,
                 kind: domain.ForumPostLinkKind.external,
+              ),
+              const domain.ForumPostTextInline(text: ' '),
+              domain.ForumPostLinkInline(
+                label: '公告附件',
+                uri: downloadUri,
+                kind: domain.ForumPostLinkKind.download,
               ),
             ],
           ),
@@ -567,13 +650,28 @@ void main() {
             targetKind: domain.ForumThreadTargetKind.announcement,
           ),
         ),
+        attachmentRepository: attachments,
       ),
     );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('公开外链'));
     await tester.pump();
+    await tester.tap(find.text('公告附件'));
+    await tester.pump();
     expect(launched, <String>[externalUri.toString()]);
+    final VerificationResult download = verify(
+      () => attachments.download(
+        captureAny(),
+        topicSourceUri: announcementUri,
+        onProgress: any(named: 'onProgress'),
+        cancelToken: any(named: 'cancelToken'),
+      ),
+    )..called(1);
+    expect(
+      (download.captured.single as domain.ForumAttachment).uri,
+      downloadUri,
+    );
     verifyNever(
       () => repository.loadThread(
         externalUri,
@@ -662,9 +760,25 @@ void main() {
     ).called(1);
   });
 
-  testWidgets('外链与下载交给系统应用且不经过论坛读取仓库', (WidgetTester tester) async {
+  testWidgets('外链交给系统应用，正文下载走认证附件仓库', (WidgetTester tester) async {
     final Uri externalUri = Uri.parse('https://example.org/public');
     final Uri downloadUri = threadUri.resolve('forum.php?mod=attachment&aid=9');
+    final _MockAttachmentRepository attachments = _MockAttachmentRepository();
+    when(
+      () => attachments.download(
+        any(),
+        topicSourceUri: any(named: 'topicSourceUri'),
+        onProgress: any(named: 'onProgress'),
+        cancelToken: any(named: 'cancelToken'),
+      ),
+    ).thenAnswer(
+      (_) async => ForumDownloadedAttachment(
+        file: File('/tmp/unused.pdf'),
+        fileName: '资料.pdf',
+        mimeType: 'application/pdf',
+        byteLength: 3,
+      ),
+    );
     final domain.ForumThreadPage page = _topicPage(
       threadUri: threadUri,
       posts: <domain.ForumPost>[
@@ -719,7 +833,11 @@ void main() {
     );
 
     await tester.pumpWidget(
-      _app(repository, ForumTopicPage(thread: _thread(threadUri))),
+      _app(
+        repository,
+        ForumTopicPage(thread: _thread(threadUri)),
+        attachmentRepository: attachments,
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('外部资料'));
@@ -727,7 +845,19 @@ void main() {
     await tester.tap(find.text('下载资料'));
     await tester.pump();
 
-    expect(launched, <String>[externalUri.toString(), downloadUri.toString()]);
+    expect(launched, <String>[externalUri.toString()]);
+    final VerificationResult download = verify(
+      () => attachments.download(
+        captureAny(),
+        topicSourceUri: threadUri,
+        onProgress: any(named: 'onProgress'),
+        cancelToken: any(named: 'cancelToken'),
+      ),
+    )..called(1);
+    final domain.ForumAttachment sent =
+        download.captured.single as domain.ForumAttachment;
+    expect(sent.uri, downloadUri);
+    expect(sent.name, '下载资料');
     verify(
       () => repository.loadThread(
         threadUri,
@@ -801,12 +931,17 @@ Widget _app(
   ForumReadRepository repository,
   Widget home, {
   CommunityRepository? communityRepository,
+  ForumAttachmentRepository? attachmentRepository,
 }) {
   return ProviderScope(
     overrides: [
       forumReadRepositoryProvider.overrideWithValue(repository),
       if (communityRepository != null)
         communityRepositoryProvider.overrideWithValue(communityRepository),
+      if (attachmentRepository != null)
+        forumAttachmentRepositoryProvider.overrideWithValue(
+          attachmentRepository,
+        ),
     ],
     child: MaterialApp(home: home),
   );
@@ -859,6 +994,8 @@ domain.ForumPost _post({
   List<domain.ForumPostContentBlock> contentBlocks =
       const <domain.ForumPostContentBlock>[],
   Uri? quoteUri,
+  Uri? commentUri,
+  Uri? rateUri,
 }) {
   return domain.ForumPost(
     id: id,
@@ -871,6 +1008,8 @@ domain.ForumPost _post({
     attachments: attachments,
     contentBlocks: contentBlocks,
     quoteUri: quoteUri,
+    commentUri: commentUri,
+    rateUri: rateUri,
     isOriginalPoster: originalPoster,
   );
 }

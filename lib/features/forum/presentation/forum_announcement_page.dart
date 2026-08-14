@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:x300/core/network/forum_exceptions.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
+import 'package:x300/features/forum/application/forum_attachment_download_controller.dart';
 import 'package:x300/features/forum/data/forum_read_repository.dart';
 import 'package:x300/features/forum/domain/forum_announcement_models.dart';
 import 'package:x300/features/forum/domain/forum_models.dart';
@@ -214,10 +215,30 @@ class _ForumAnnouncementPageState extends ConsumerState<ForumAnnouncementPage> {
         );
         return;
       case ForumPostLinkKind.download:
+        _openInlineAttachment(link);
+        return;
       case ForumPostLinkKind.external:
         unawaited(_openExternalLink(link.uri));
         return;
     }
+  }
+
+  void _openInlineAttachment(ForumPostLinkInline link) {
+    final ForumAnnouncement? announcement = _announcement;
+    if (announcement == null) {
+      return;
+    }
+    unawaited(
+      ref
+          .read(forumAttachmentDownloadControllerProvider.notifier)
+          .downloadAndOpen(
+            ForumAttachment(
+              name: link.label.isEmpty ? '附件' : link.label,
+              uri: link.uri,
+            ),
+            topicSourceUri: announcement.sourceUri,
+          ),
+    );
   }
 
   Future<void> _openExternalLink(Uri uri) async {

@@ -93,6 +93,42 @@ void main() {
     verify(() => client.getText(formUri)).called(1);
   });
 
+  test('当前版块搜索提交到 curforum action 且保留 srhfid', () async {
+    final Uri boardActionUri = Uri.parse(
+      'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=30',
+    );
+    when(
+      () => client.getText(formUri),
+    ).thenAnswer((_) async => _response(_curforumFormHtml(), formUri));
+    when(
+      () => client.postForm(
+        boardActionUri,
+        fields: any(named: 'fields'),
+        referer: formUri.toString(),
+      ),
+    ).thenAnswer((_) async => _response(_resultHtml(), resultUri));
+
+    final ForumThreadSearchPage page = await repository.search(
+      keyword: '百合',
+      formUri: formUri,
+    );
+
+    expect(page.boardId, 30);
+    expect(page.hits.single.threadId, 501);
+    final Map<String, dynamic> fields =
+        verify(
+              () => client.postForm(
+                boardActionUri,
+                fields: captureAny(named: 'fields'),
+                referer: formUri.toString(),
+              ),
+            ).captured.single
+            as Map<String, dynamic>;
+    expect(fields['srhfid'], '30');
+    expect(fields['srchtxt'], '百合');
+    expect(fields['searchsubmit'], 'yes');
+  });
+
   test('连接失败才回退同 uid 规范化缓存且缓存不含表单秘密', () async {
     when(
       () => client.getText(formUri),
@@ -257,6 +293,20 @@ Response<String> _response(String body, Uri uri) {
     data: body,
     statusCode: 200,
   );
+}
+
+String _curforumFormHtml() {
+  return '''
+        <html><head><script>var discuz_uid = '42';</script></head>
+        <body id="search" class="pg_curforum">
+            <form class="searchform" method="post" action="search.php?mod=curforum&amp;srhfid=30">
+                <input type="hidden" name="formhash" value="secret-hash">
+                <input type="hidden" name="srhfid" value="30">
+                <input type="hidden" name="searchsubmit" value="yes">
+                <input type="search" name="srchtxt">
+            </form>
+        </body></html>
+    ''';
 }
 
 String _formHtml() {

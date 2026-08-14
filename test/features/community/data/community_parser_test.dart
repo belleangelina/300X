@@ -114,8 +114,18 @@ void main() {
           CommunityProfileEntryKind.topics,
           CommunityProfileEntryKind.messages,
           CommunityProfileEntryKind.friends,
+          CommunityProfileEntryKind.favorites,
           CommunityProfileEntryKind.unknown,
         ]),
+      );
+      expect(
+        profile.entries
+            .singleWhere(
+              (CommunityProfileEntry value) =>
+                  value.kind == CommunityProfileEntryKind.favorites,
+            )
+            .canOpenFor(profileUserId: 42, viewerUserId: 42),
+        isTrue,
       );
       expect(profile.entries.last.supported, isFalse);
     });
@@ -367,6 +377,7 @@ final String _profileHtml = _shell('''
     <li><a href="home.php?mod=space&amp;do=thread&amp;view=me&amp;uid=42&amp;mobile=2">主题</a></li>
     <li><a href="home.php?mod=space&amp;do=pm&amp;mobile=2">私信</a></li>
     <li><a href="home.php?mod=space&amp;do=friend&amp;mobile=2">好友</a></li>
+    <li><a href="home.php?mod=space&amp;do=favorite&amp;uid=42&amp;mobile=2">收藏</a></li>
     <li><a href="plugin.php?id=redacted:entry&amp;mobile=2">扩展入口</a></li>
   </ul></div>
   <div class="myinfo_list"><ul><li>[已脱敏]资料</li></ul></div>

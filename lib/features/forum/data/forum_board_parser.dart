@@ -177,6 +177,19 @@ class ForumBoardParser {
         targetId <= 0) {
       return null;
     }
+    if (targetKind == ForumThreadTargetKind.announcement) {
+      targetUri = Uri(
+        scheme: targetUri.scheme,
+        host: targetUri.host,
+        port: targetUri.hasPort ? targetUri.port : null,
+        path: '/forum.php',
+        queryParameters: <String, String>{
+          'mod': 'announcement',
+          'id': '$targetId',
+          'mobile': '2',
+        },
+      );
+    }
     final String title = normalizeForumText(
       element.querySelector('.threadlist_tit em')?.text ??
           element.querySelector('.threadlist_tit')?.text ??

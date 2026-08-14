@@ -264,10 +264,25 @@ class ForumThreadSearchRepository {
   void _validateForm(ForumThreadSearchForm form) {
     _originPolicy.ensureAllowed(form.sourceUri);
     _originPolicy.ensureAllowed(form.actionUri);
-    if (form.actionUri.path != '/search.php' ||
-        form.actionUri.queryParameters['mod'] != 'forum') {
+    if (form.actionUri.path != '/search.php') {
       throw const ForumParseException('论坛搜索表单 action 无效');
     }
+    final String? mod = form.actionUri.queryParameters['mod'];
+    if (mod == 'forum') {
+      return;
+    }
+    if (mod == 'curforum') {
+      final int? actionBoardId = int.tryParse(
+        form.actionUri.queryParameters['srhfid'] ?? '',
+      );
+      if (actionBoardId == null ||
+          actionBoardId <= 0 ||
+          actionBoardId != form.boardId) {
+        throw const ForumParseException('当前版块搜索表单 action 与 srhfid 不一致');
+      }
+      return;
+    }
+    throw const ForumParseException('论坛搜索表单 action 无效');
   }
 
   void _ensureFormScope(ForumThreadSearchForm form, int? expectedBoardId) {

@@ -225,14 +225,22 @@ class CommunityProfileEntry {
   final Uri uri;
   final CommunityProfileEntryKind kind;
 
-  bool get supported => switch (kind) {
-    CommunityProfileEntryKind.topics ||
-    CommunityProfileEntryKind.replies ||
-    CommunityProfileEntryKind.messages ||
-    CommunityProfileEntryKind.friends => true,
-    CommunityProfileEntryKind.favorites ||
-    CommunityProfileEntryKind.unknown => false,
-  };
+  bool get supported => canOpenFor(profileUserId: 0, viewerUserId: 0);
+
+  bool canOpenFor({
+    required int profileUserId,
+    required int viewerUserId,
+  }) {
+    return switch (kind) {
+      CommunityProfileEntryKind.topics ||
+      CommunityProfileEntryKind.replies ||
+      CommunityProfileEntryKind.messages ||
+      CommunityProfileEntryKind.friends => true,
+      CommunityProfileEntryKind.favorites =>
+        profileUserId > 0 && profileUserId == viewerUserId,
+      CommunityProfileEntryKind.unknown => false,
+    };
+  }
 }
 
 class CommunityProfile {

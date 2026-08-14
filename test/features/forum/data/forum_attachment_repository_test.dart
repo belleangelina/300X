@@ -72,6 +72,45 @@ void main() {
     }
   });
 
+  test('公告来源页可作为附件 Referer，桌面页或外域来源失败关闭', () async {
+    final _AttachmentAdapter adapter = _AttachmentAdapter(
+      bodies: <int, List<List<int>>>{
+        7: <List<int>>[
+          <int>[1, 2, 3],
+        ],
+      },
+    );
+    final ForumClient client = await _client(adapter, root, userId: 101);
+    final ForumAttachmentRepository repository = ForumAttachmentRepository(
+      client,
+      101,
+      cacheDirectory: () async => root,
+    );
+    final Uri announcementUri = Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=announcement&id=9',
+    );
+
+    final ForumDownloadedAttachment result = await repository.download(
+      _attachment(7, name: '公告.pdf'),
+      topicSourceUri: announcementUri,
+    );
+    expect(await result.file.readAsBytes(), <int>[1, 2, 3]);
+    expect(
+      adapter.requests.skip(1).first.headers[HttpHeaders.refererHeader],
+      announcementUri.replace(fragment: '').toString(),
+    );
+
+    expect(
+      () => repository.download(
+        _attachment(7, name: '公告.pdf'),
+        topicSourceUri: Uri.parse(
+          'https://bbs.yamibo.com/forum.php?mod=announcement&id=9&extra=1',
+        ),
+      ),
+      throwsA(isA<ForumAttachmentDownloadException>()),
+    );
+  });
+
   test('外域、敏感参数、路径逃逸和附件 fragment 在网络前失败关闭', () async {
     final _AttachmentAdapter adapter = _AttachmentAdapter();
     final ForumClient client = await _client(adapter, root, userId: 101);

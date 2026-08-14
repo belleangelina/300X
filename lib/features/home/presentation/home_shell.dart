@@ -77,21 +77,25 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
   static const List<_Destination> _destinations = <_Destination>[
     _Destination(
+      id: 'library',
       label: '漫画/小说',
       icon: Remix.home_2_line,
       selectedIcon: Remix.home_2_fill,
     ),
     _Destination(
+      id: 'forum',
       label: '论坛',
       icon: Remix.chat_3_line,
       selectedIcon: Remix.chat_3_fill,
     ),
     _Destination(
+      id: 'favorites',
       label: '收藏',
       icon: Remix.bookmark_line,
       selectedIcon: Remix.bookmark_fill,
     ),
     _Destination(
+      id: 'profile',
       label: '我的',
       icon: Remix.user_3_line,
       selectedIcon: Remix.user_3_fill,
@@ -300,8 +304,14 @@ class _HomeShellState extends ConsumerState<HomeShell>
         items: _destinations
             .map(
               (_Destination destination) => BottomNavigationBarItem(
-                icon: Icon(destination.icon),
-                activeIcon: Icon(destination.selectedIcon),
+                icon: Icon(
+                  destination.icon,
+                  key: Key('home-tab-${destination.id}'),
+                ),
+                activeIcon: Icon(
+                  destination.selectedIcon,
+                  key: Key('home-tab-${destination.id}'),
+                ),
                 label: destination.label,
               ),
             )
@@ -321,8 +331,14 @@ class _HomeShellState extends ConsumerState<HomeShell>
             destinations: _destinations
                 .map(
                   (_Destination destination) => NavigationRailDestination(
-                    icon: Icon(destination.icon),
-                    selectedIcon: Icon(destination.selectedIcon),
+                    icon: Icon(
+                      destination.icon,
+                      key: Key('home-tab-${destination.id}'),
+                    ),
+                    selectedIcon: Icon(
+                      destination.selectedIcon,
+                      key: Key('home-tab-${destination.id}'),
+                    ),
                     label: Text(destination.label),
                   ),
                 )
@@ -372,6 +388,9 @@ class _HomeShellState extends ConsumerState<HomeShell>
               key: ValueKey<String>('favorite-profile-$profileUserId'),
               uri: targetUri,
               profileUserId: profileUserId,
+              onOpenFavoriteThread: _openFavoriteThread,
+              onOpenFavoriteBoard: _openFavoriteBoard,
+              onOpenFavoriteTarget: _openFavoriteTarget,
             )
           : FavoriteTargetPage(
               key: ValueKey<String>('favorite-target-${target.identityKey}'),
@@ -527,6 +546,9 @@ class _HomeShellState extends ConsumerState<HomeShell>
       onLogin: _openLogin,
       controller: _forumHomeController,
       onOpenBoard: _openForumBoard,
+      onOpenFavoriteThread: _openFavoriteThread,
+      onOpenFavoriteBoard: _openFavoriteBoard,
+      onOpenFavoriteTarget: _openFavoriteTarget,
     );
   }
 
@@ -684,6 +706,9 @@ class _HomeShellState extends ConsumerState<HomeShell>
           builder: (BuildContext context) => CommunityProfileScreen(
             uri: item.targetUri!,
             profileUserId: item.userId!,
+            onOpenFavoriteThread: _openFavoriteThread,
+            onOpenFavoriteBoard: _openFavoriteBoard,
+            onOpenFavoriteTarget: _openFavoriteTarget,
           ),
         ),
       );
@@ -771,11 +796,13 @@ bool usesWideHomeLayout(Size size) {
 
 class _Destination {
   const _Destination({
+    required this.id,
     required this.label,
     required this.icon,
     required this.selectedIcon,
   });
 
+  final String id;
   final String label;
   final IconData icon;
   final IconData selectedIcon;

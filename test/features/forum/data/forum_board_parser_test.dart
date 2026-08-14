@@ -31,7 +31,7 @@ void main()
                 <a href="home.php?mod=spacecp&amp;ac=favorite&amp;type=forum&amp;id=30&amp;handlekey=opaque-board-control&amp;mobile=2">收藏</a>
                 <div class="threadlist"><ul>
                     <li class="list_top">
-                        <a href="forum.php?mod=announcement&amp;id=7"><em>全站公告</em></a>
+                        <a href="forum.php?mod=announcement&amp;id=7&amp;fid=30&amp;page=1"><em>全站公告</em></a>
                     </li>
                     <li class="list_top">
                         <a href="forum.php?mod=viewthread&amp;tid=99&amp;mobile=2"><em>版规公告</em></a>
@@ -88,7 +88,13 @@ void main()
         expect(page.threads[0].targetKind, ForumThreadTargetKind.announcement);
         expect(page.threads[0].id, 7);
         expect(page.threads[0].threadId, isNull);
-        expect(page.threads[0].uri.queryParameters['mobile'], isNull);
+        expect(page.threads[0].uri.queryParameters['mod'], 'announcement');
+        expect(page.threads[0].uri.queryParameters['id'], '7');
+        expect(page.threads[0].uri.queryParameters['mobile'], '2');
+        expect(
+            page.threads[0].uri.queryParameters.keys.toSet(),
+            <String>{'mod', 'id', 'mobile'},
+        );
         expect(page.threads[1].targetKind, ForumThreadTargetKind.thread);
         expect(page.threads[1].threadId, 99);
         expect(page.threads[2].id, 123);

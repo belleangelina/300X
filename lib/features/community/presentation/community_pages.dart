@@ -8,6 +8,10 @@ import 'package:x300/features/community/data/community_repository.dart';
 import 'package:x300/features/community/domain/community_pm_action_models.dart';
 import 'package:x300/features/community/domain/community_models.dart';
 import 'package:x300/features/community/presentation/community_pm_send_page.dart';
+import 'package:x300/features/favorites/data/favorite_target_contract.dart';
+import 'package:x300/features/favorites/domain/raw_favorite_models.dart';
+import 'package:x300/features/favorites/presentation/raw_favorites_page.dart';
+import 'package:x300/features/forum/data/forum_origin_policy.dart';
 import 'package:x300/features/forum/domain/forum_models.dart';
 import 'package:x300/features/forum/presentation/forum_read_widgets.dart';
 import 'package:x300/features/forum/presentation/forum_topic_page.dart';
@@ -305,11 +309,17 @@ class CommunityProfileScreen extends ConsumerStatefulWidget {
   const CommunityProfileScreen({
     required this.uri,
     required this.profileUserId,
+    this.onOpenFavoriteThread,
+    this.onOpenFavoriteBoard,
+    this.onOpenFavoriteTarget,
     super.key,
   });
 
   final Uri uri;
   final int profileUserId;
+  final ValueChanged<RawFavoriteItem>? onOpenFavoriteThread;
+  final ValueChanged<RawFavoriteItem>? onOpenFavoriteBoard;
+  final ValueChanged<RawFavoriteItem>? onOpenFavoriteTarget;
 
   @override
   ConsumerState<CommunityProfileScreen> createState() =>
@@ -368,6 +378,8 @@ class _CommunityProfileScreenState
     if (profile == null) {
       return AppEmptyView(message: '暂无可见资料', onRefresh: _load);
     }
+    final int viewerUserId =
+        ref.watch(authControllerProvider).value?.userId ?? 0;
     final Widget list = RefreshIndicator(
       onRefresh: _load,
       child: ListView(
@@ -396,13 +408,27 @@ class _CommunityProfileScreenState
                 'community-profile-entry-${entry.kind.name}',
               ),
               title: Text(entry.label),
-              subtitle: entry.supported ? null : const Text('当前原生页不承载该入口'),
-              trailing: entry.supported
+              subtitle: entry.canOpenFor(
+                profileUserId: profile.userId,
+                viewerUserId: viewerUserId,
+              )
+                  ? null
+                  : const Text('当前原生页不承载该入口'),
+              trailing: entry.canOpenFor(
+                profileUserId: profile.userId,
+                viewerUserId: viewerUserId,
+              )
                   ? const Icon(Icons.chevron_right)
                   : null,
-              enabled: entry.supported,
-              onTap: entry.supported
-                  ? () => _openProfileEntry(context, profile, entry)
+              enabled: entry.canOpenFor(
+                profileUserId: profile.userId,
+                viewerUserId: viewerUserId,
+              ),
+              onTap: entry.canOpenFor(
+                profileUserId: profile.userId,
+                viewerUserId: viewerUserId,
+              )
+                  ? () => _handleProfileEntry(profile, entry)
                   : null,
             ),
           if (profile.details.isNotEmpty)
@@ -423,6 +449,80 @@ class _CommunityProfileScreenState
         ForumCacheBanner(updatedAt: profile.cacheUpdatedAt),
         Expanded(child: list),
       ],
+    );
+  }
+
+  void _handleProfileEntry(
+    CommunityProfile profile,
+    CommunityProfileEntry entry,
+  ) {
+    if (entry.kind == CommunityProfileEntryKind.favorites) {
+      _openOwnFavorites(entry);
+      return;
+    }
+    _openProfileEntry(context, profile, entry);
+  }
+
+  void _openOwnFavorites(CommunityProfileEntry entry) {
+    final int viewerUserId =
+        ref.read(authControllerProvider).value?.userId ?? 0;
+    if (!_isOwnFavoriteList(entry.uri, widget.profileUserId, viewerUserId)) {
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => Scaffold(
+          appBar: AppBar(title: const Text('收藏')),
+          body: RawFavoritesPage(
+            onOpenThread: widget.onOpenFavoriteThread ?? _openFavoriteThread,
+            onOpenBoard: widget.onOpenFavoriteBoard,
+            onOpenTarget: widget.onOpenFavoriteTarget ?? _openFavoriteUserSpace,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openFavoriteThread(RawFavoriteItem item) {
+    final int? threadId = item.threadId;
+    final Uri? uri = item.targetUri;
+    if (threadId == null || threadId <= 0 || uri == null) {
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => ForumTopicPage(
+          thread: ForumThreadSummary(
+            id: threadId,
+            boardId: item.boardId ?? 0,
+            title: item.title,
+            uri: uri,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openFavoriteUserSpace(RawFavoriteItem item) {
+    if (item.targetKind != RawFavoriteTargetKind.userSpace ||
+        item.targetUri == null ||
+        item.userId == null) {
+      return;
+    }
+    final FavoriteTargetDescriptor? descriptor =
+        const FavoriteTargetContract().describe(item.targetUri!);
+    if (descriptor == null ||
+        descriptor.kind != RawFavoriteTargetKind.userSpace ||
+        descriptor.targetId != item.userId) {
+      return;
+    }
+    _openProfileTarget(
+      context,
+      CommunityProfileTarget(
+        userId: item.userId!,
+        username: item.title,
+        uri: item.targetUri!,
+      ),
     );
   }
 
@@ -511,6 +611,7 @@ class CommunityActivityScreen extends ConsumerWidget {
                 tabs: <_CommunityTab>[
                   for (final CommunityProfileEntry entry in page.tabs)
                     _CommunityTab(
+                      keyName: 'community-activity-tab-${entry.kind.name}',
                       label: entry.label,
                       selected:
                           entry.kind == CommunityProfileEntryKind.topics &&
@@ -603,6 +704,7 @@ class CommunityPeopleScreen extends ConsumerWidget {
                 tabs: <_CommunityTab>[
                   for (final CommunityPeopleTab tab in page.tabs)
                     _CommunityTab(
+                      keyName: 'community-people-tab-${tab.kind.name}',
                       label: tab.label,
                       selected: tab.kind == kind,
                       onTap: () => _replacePeople(context, tab),
@@ -972,6 +1074,7 @@ class _CommunityTabs extends StatelessWidget {
         itemBuilder: (BuildContext context, int index) {
           final _CommunityTab tab = tabs[index];
           return ChoiceChip(
+            key: tab.keyName == null ? null : Key(tab.keyName!),
             label: Text(tab.label),
             selected: tab.selected,
             onSelected: tab.selected ? null : (_) => tab.onTap(),
@@ -987,8 +1090,10 @@ class _CommunityTab {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.keyName,
   });
 
+  final String? keyName;
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -1020,6 +1125,37 @@ void _openTopicTarget(BuildContext context, CommunityTopicTarget target) {
       ),
     ),
   );
+}
+
+bool _isOwnFavoriteList(Uri uri, int profileUserId, int viewerUserId) {
+  final List<String> mobileValues =
+      uri.queryParametersAll['mobile'] ?? const <String>[];
+  if (viewerUserId <= 0 ||
+      profileUserId != viewerUserId ||
+      !const ForumOriginPolicy().isAllowed(uri) ||
+      uri.path != '/home.php' ||
+      uri.fragment.isNotEmpty ||
+      uri.queryParameters['mod'] != 'space' ||
+      uri.queryParameters['do'] != 'favorite' ||
+      mobileValues.length != 1 ||
+      mobileValues.single != '2') {
+    return false;
+  }
+  final List<String> uidValues =
+      uri.queryParametersAll['uid'] ?? const <String>[];
+  if (uidValues.length > 1) {
+    return false;
+  }
+  if (uidValues.length == 1 &&
+      int.tryParse(uidValues.single) != viewerUserId) {
+    return false;
+  }
+  const Set<String> allowed = <String>{'mod', 'do', 'uid', 'mobile', 'view'};
+  if (!uri.queryParametersAll.keys.every(allowed.contains)) {
+    return false;
+  }
+  final String? view = uri.queryParameters['view'];
+  return view == null || view == 'me';
 }
 
 void _openProfileTarget(BuildContext context, CommunityProfileTarget target) {
@@ -1082,6 +1218,7 @@ Widget? _sectionTabs(BuildContext context, List<CommunitySectionLink>? links) {
     tabs: <_CommunityTab>[
       for (final CommunitySectionLink link in links)
         _CommunityTab(
+          keyName: 'community-section-tab-${link.kind.name}',
           label: link.label,
           selected: link.selected,
           onTap: () => _replaceCommunitySection(context, link),

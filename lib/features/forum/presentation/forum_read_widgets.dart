@@ -44,6 +44,7 @@ class ForumPostContent extends StatelessWidget {
     this.onOpenAttachment,
     this.onCancelAttachment,
     this.attachmentState,
+    this.onOpenAuthor,
     super.key,
   });
 
@@ -53,6 +54,7 @@ class ForumPostContent extends StatelessWidget {
   final ValueChanged<ForumAttachment>? onCancelAttachment;
   final ForumAttachmentDownloadState? Function(ForumAttachment attachment)?
   attachmentState;
+  final void Function(Uri uri, int userId)? onOpenAuthor;
 
   @override
   Widget build(BuildContext context) {
@@ -120,11 +122,15 @@ class ForumPostContent extends StatelessWidget {
             comments: post.comments,
             referer: post.uri.toString(),
             onOpenLink: onOpenLink,
+            onOpenAuthor: onOpenAuthor,
           ),
         ],
         if (post.ratingSummary != null) ...<Widget>[
           const SizedBox(height: 12),
-          ForumPostRatings(summary: post.ratingSummary!),
+          ForumPostRatings(
+            summary: post.ratingSummary!,
+            onOpenAuthor: onOpenAuthor,
+          ),
         ],
       ],
     );
@@ -136,12 +142,14 @@ class ForumPostComments extends StatelessWidget {
     required this.comments,
     required this.referer,
     this.onOpenLink,
+    this.onOpenAuthor,
     super.key,
   });
 
   final List<ForumPostComment> comments;
   final String referer;
   final ValueChanged<ForumPostLinkInline>? onOpenLink;
+  final void Function(Uri uri, int userId)? onOpenAuthor;
 
   @override
   Widget build(BuildContext context) {
@@ -155,6 +163,7 @@ class ForumPostComments extends StatelessWidget {
             comment: comments[index],
             referer: referer,
             onOpenLink: onOpenLink,
+            onOpenAuthor: onOpenAuthor,
           ),
         ],
       ],
@@ -163,10 +172,16 @@ class ForumPostComments extends StatelessWidget {
 }
 
 class ForumPostRatings extends StatelessWidget {
-  const ForumPostRatings({required this.summary, this.onViewAll, super.key});
+  const ForumPostRatings({
+    required this.summary,
+    this.onViewAll,
+    this.onOpenAuthor,
+    super.key,
+  });
 
   final ForumPostRatingSummary summary;
   final VoidCallback? onViewAll;
+  final void Function(Uri uri, int userId)? onOpenAuthor;
 
   @override
   Widget build(BuildContext context) {
@@ -185,14 +200,29 @@ class ForumPostRatings extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        for (final ForumPostRatingEntry entry in summary.entries) ...<Widget>[
+        for (int index = 0; index < summary.entries.length; index++) ...<Widget>[
           const SizedBox(height: 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              if (_canOpenAuthor(
+                summary.entries[index].authorUri,
+                summary.entries[index].authorId,
+                onOpenAuthor,
+              ))
+                _ForumAuthorButton(
+                  key: ValueKey<String>(
+                    'forum-rating-author-${summary.entries[index].authorId}-$index',
+                  ),
+                  author: summary.entries[index].author,
+                  onPressed: () => onOpenAuthor!(
+                    summary.entries[index].authorUri!,
+                    summary.entries[index].authorId!,
+                  ),
+                ),
               Expanded(
                 child: Text(
-                  entry.author,
+                  summary.entries[index].author,
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -200,7 +230,7 @@ class ForumPostRatings extends StatelessWidget {
                 ),
               ),
               Text(
-                entry.scores.map(_ratingText).join(' · '),
+                summary.entries[index].scores.map(_ratingText).join(' · '),
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.primary,
                   fontSize: 12,
@@ -208,11 +238,12 @@ class ForumPostRatings extends StatelessWidget {
               ),
             ],
           ),
-          if (entry.reason.isNotEmpty || entry.timeLabel.isNotEmpty)
+          if (summary.entries[index].reason.isNotEmpty ||
+              summary.entries[index].timeLabel.isNotEmpty)
             Text(
               <String>[
-                entry.reason,
-                entry.timeLabel,
+                summary.entries[index].reason,
+                summary.entries[index].timeLabel,
               ].where((String value) => value.isNotEmpty).join(' · '),
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -285,11 +316,13 @@ class _ForumCommentView extends StatelessWidget {
     required this.comment,
     required this.referer,
     required this.onOpenLink,
+    this.onOpenAuthor,
   });
 
   final ForumPostComment comment;
   final String referer;
   final ValueChanged<ForumPostLinkInline>? onOpenLink;
+  final void Function(Uri uri, int userId)? onOpenAuthor;
 
   @override
   Widget build(BuildContext context) {
@@ -320,15 +353,36 @@ class _ForumCommentView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Text(
-                <String>[
-                  comment.author.isEmpty ? '游客' : comment.author,
-                  comment.timeLabel,
-                ].where((String value) => value.isNotEmpty).join(' · '),
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 12,
-                ),
+              Row(
+                children: <Widget>[
+                  if (_canOpenAuthor(
+                    comment.authorUri,
+                    comment.authorId,
+                    onOpenAuthor,
+                  ))
+                    _ForumAuthorButton(
+                      key: ValueKey<String>(
+                        'forum-comment-author-${comment.id}',
+                      ),
+                      author: comment.author,
+                      onPressed: () => onOpenAuthor!(
+                        comment.authorUri!,
+                        comment.authorId!,
+                      ),
+                    ),
+                  Expanded(
+                    child: Text(
+                      <String>[
+                        comment.author.isEmpty ? '游客' : comment.author,
+                        comment.timeLabel,
+                      ].where((String value) => value.isNotEmpty).join(' · '),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 3),
               for (
@@ -671,6 +725,38 @@ class _ForumAttachmentView extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+bool _canOpenAuthor(
+  Uri? uri,
+  int? userId,
+  void Function(Uri uri, int userId)? onOpenAuthor,
+) {
+  return onOpenAuthor != null && uri != null && (userId ?? 0) > 0;
+}
+
+class _ForumAuthorButton extends StatelessWidget {
+  const _ForumAuthorButton({
+    required this.author,
+    required this.onPressed,
+    super.key,
+  });
+
+  final String author;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: author.isEmpty ? '查看作者资料' : '查看 $author',
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      padding: EdgeInsets.zero,
+      iconSize: 18,
+      onPressed: onPressed,
+      icon: const Icon(Icons.account_circle_outlined),
     );
   }
 }

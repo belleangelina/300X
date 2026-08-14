@@ -21,6 +21,8 @@ void main() {
   late ProviderContainer container;
   late ForumAttachment attachment;
   late Uri topicUri;
+  late Directory root;
+  late File downloadedFile;
   late ForumDownloadedAttachment downloaded;
 
   setUpAll(() {
@@ -59,12 +61,21 @@ void main() {
     topicUri = Uri.parse(
       'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9&mobile=2',
     );
+    root = Directory.systemTemp.createTempSync('x300_attachment_controller_');
+    downloadedFile = File('${root.path}/forum-attachments/uid-1/资料.pdf');
+    downloadedFile.parent.createSync(recursive: true);
+    downloadedFile.writeAsBytesSync(const <int>[1, 2, 3]);
     downloaded = ForumDownloadedAttachment(
-      file: File('/tmp/downloaded.pdf'),
+      file: downloadedFile,
       fileName: '资料.pdf',
       mimeType: 'application/pdf',
       byteLength: 131072,
     );
+    addTearDown(() {
+      if (root.existsSync()) {
+        root.deleteSync(recursive: true);
+      }
+    });
   });
 
   test('同目标只启动一次下载，进度完成后调用本地 opener', () async {
@@ -178,5 +189,33 @@ void main() {
     )[ForumAttachmentDownloadController.keyFor(attachment.uri)]!;
     expect(state.downloaded, downloaded);
     expect(state.message, contains('没有可用'));
+  });
+
+  test('本地文件被清理后点按会重新下载', () async {
+    when(
+      () => repository.download(
+        any(),
+        topicSourceUri: any(named: 'topicSourceUri'),
+        onProgress: any(named: 'onProgress'),
+        cancelToken: any(named: 'cancelToken'),
+      ),
+    ).thenAnswer((_) async => downloaded);
+    when(() => opener.open(any())).thenAnswer((_) async {});
+    final ForumAttachmentDownloadController controller = container.read(
+      forumAttachmentDownloadControllerProvider.notifier,
+    );
+
+    await controller.downloadAndOpen(attachment, topicSourceUri: topicUri);
+    await downloadedFile.delete();
+    await controller.downloadAndOpen(attachment, topicSourceUri: topicUri);
+
+    verify(
+      () => repository.download(
+        attachment,
+        topicSourceUri: topicUri,
+        onProgress: any(named: 'onProgress'),
+        cancelToken: any(named: 'cancelToken'),
+      ),
+    ).called(2);
   });
 }

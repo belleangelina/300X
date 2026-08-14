@@ -90,7 +90,7 @@ class ForumAttachmentDownloadController
     }
     final ForumAttachmentDownloadState? current = state[key];
     final ForumDownloadedAttachment? downloaded = current?.downloaded;
-    if (downloaded != null) {
+    if (downloaded != null && await downloaded.file.exists()) {
       await _open(key, downloaded);
       return;
     }

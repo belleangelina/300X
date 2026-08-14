@@ -47,7 +47,7 @@ class ForumDownloadedFileOpener {
     }
     final File file = attachment.file.absolute;
     final Directory root =
-        await (cacheDirectoryOverride ?? getTemporaryDirectory)();
+        await (cacheDirectoryOverride ?? getApplicationCacheDirectory)();
     try {
       final String cacheRoot = await root.resolveSymbolicLinks();
       final String attachmentRoot = await Directory(

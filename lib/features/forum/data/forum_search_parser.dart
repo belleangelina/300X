@@ -181,10 +181,22 @@ class ForumThreadSearchParser {
       throw const ForumParseException('论坛搜索表单地址无效');
     }
     _requireSearchUri(uri);
-    if (uri.queryParameters['mod'] != 'forum') {
-      throw const ForumParseException('论坛搜索表单 action 无效');
+    final String? mod = uri.queryParameters['mod'];
+    if (mod == 'forum') {
+      return uri;
     }
-    return uri;
+    if (mod == 'curforum') {
+      final int? actionBoardId = queryInt(uri, 'srhfid');
+      final int? entryBoardId = queryInt(pageUri, 'srhfid');
+      if (actionBoardId == null || actionBoardId <= 0) {
+        throw const ForumParseException('当前版块搜索表单 action 缺少 srhfid');
+      }
+      if (entryBoardId != null && entryBoardId != actionBoardId) {
+        throw const ForumParseException('当前版块搜索表单 action 与入口 fid 不一致');
+      }
+      return uri;
+    }
+    throw const ForumParseException('论坛搜索表单 action 无效');
   }
 
   List<ForumThreadSearchScopeOption> _parseScopeOptions(dom.Element form) {
@@ -560,13 +572,18 @@ class ForumThreadSearchParser {
 
   void _requireMobileTemplate(dom.Document document) {
     final dom.Element? body = document.body;
-    if (body?.id != 'search' || body?.classes.contains('pg_forum') != true) {
-      if (body?.id == 'nv_search' ||
-          body?.classes.contains('pg_search') == true) {
-        throw const ForumParseException('论坛返回了电脑版搜索页面');
-      }
-      throw const ForumParseException('论坛移动搜索模板已变更');
+    final bool mobileForumSearch =
+        body?.id == 'search' && body!.classes.contains('pg_forum');
+    final bool mobileBoardSearch =
+        body?.id == 'search' && body!.classes.contains('pg_curforum');
+    if (mobileForumSearch || mobileBoardSearch) {
+      return;
     }
+    if (body?.id == 'nv_search' ||
+        body?.classes.contains('pg_search') == true) {
+      throw const ForumParseException('论坛返回了电脑版搜索页面');
+    }
+    throw const ForumParseException('论坛移动搜索模板已变更');
   }
 
   void _throwIfSessionExpired(dom.Document document) {

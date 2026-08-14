@@ -88,6 +88,60 @@ void main() {
     );
   });
 
+  test('当前版块移动页使用 pg_curforum 和 curforum action', () {
+    const String html = '''
+            <html><head><meta name="viewport" content="width=device-width"></head>
+            <body id="search" class="pg_curforum">
+                <form class="searchform" method="post" action="search.php?mod=curforum&amp;srhfid=30">
+                    <input type="hidden" name="formhash" value="secret-hash">
+                    <input type="hidden" name="srhfid" value="30">
+                    <input type="hidden" name="searchsubmit" value="yes">
+                    <input type="search" name="srchtxt">
+                </form>
+            </body></html>
+        ''';
+
+    final ForumThreadSearchForm form = parser.parseForm(html, currentBoardUri);
+
+    expect(
+      form.actionUri,
+      Uri.parse(
+        'https://bbs.yamibo.com/search.php?mod=curforum&srhfid=30',
+      ),
+    );
+    expect(form.keywordFieldName, 'srchtxt');
+    expect(form.boardId, 30);
+    expect(form.hiddenFields['srhfid'], <String>['30']);
+  });
+
+  test('当前版块搜索拒绝错 fid 或缺少 srhfid 的 action', () {
+    const String wrongFid = '''
+            <html><body id="search" class="pg_curforum">
+                <form method="post" action="search.php?mod=curforum&amp;srhfid=99">
+                    <input type="hidden" name="srhfid" value="30">
+                    <input type="search" name="srchtxt">
+                </form>
+            </body></html>
+        ''';
+    const String missingFid = '''
+            <html><body id="search" class="pg_curforum">
+                <form method="post" action="search.php?mod=curforum">
+                    <input type="hidden" name="srhfid" value="30">
+                    <input type="search" name="srchtxt">
+                </form>
+            </body></html>
+        ''';
+
+    expect(
+      () => parser.parseForm(wrongFid, currentBoardUri),
+      throwsA(isA<ForumParseException>()),
+    );
+    expect(
+      () => parser.parseForm(missingFid, currentBoardUri),
+      throwsA(isA<ForumParseException>()),
+    );
+  });
+
   test('拒绝外站 action 和电脑版搜索模板', () {
     const String externalAction = '''
             <html><body id="search" class="pg_forum">

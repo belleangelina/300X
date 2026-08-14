@@ -1,9 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:x300/features/auth/application/auth_controller.dart';
+import 'package:x300/features/auth/data/auth_repository.dart';
+import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/community/data/community_repository.dart';
 import 'package:x300/features/community/domain/community_models.dart';
 import 'package:x300/features/community/presentation/community_pages.dart';
+import 'package:x300/features/favorites/data/raw_favorite_repository.dart';
+import 'package:x300/features/favorites/domain/raw_favorite_models.dart';
+import 'package:x300/features/favorites/presentation/raw_favorites_page.dart';
+
+class _MockAuthRepository extends Mock implements AuthRepository {}
+
+class _MockRawFavoriteRepository extends Mock
+    implements RawFavoriteRepository {}
 
 void main() {
   testWidgets('通知页提示已读副作用并按返回 URI 连续翻页', (WidgetTester tester) async {
@@ -261,6 +273,84 @@ void main() {
     expect(repository.activityRequests, <Uri>[topicsUri, repliesUri]);
   });
 
+  testWidgets('本人资料收藏入口打开原生全部收藏，他人收藏保持禁用', (
+    WidgetTester tester,
+  ) async {
+    final _FakeCommunityRepository repository = _FakeCommunityRepository();
+    final _MockRawFavoriteRepository favorites = _MockRawFavoriteRepository();
+    final Uri ownUri = _uri('home.php?mod=space&do=profile&uid=42&mobile=2');
+    final Uri otherUri = _uri('home.php?mod=space&do=profile&uid=77&mobile=2');
+    final Uri favoriteUri = _uri('home.php?mod=space&do=favorite&uid=42&mobile=2');
+    final Uri otherFavoriteUri = _uri(
+      'home.php?mod=space&do=favorite&uid=77&mobile=2',
+    );
+    repository.profiles[ownUri] = CommunityProfile(
+      userId: 42,
+      username: '用户B',
+      sourceUri: ownUri,
+      entries: <CommunityProfileEntry>[
+        CommunityProfileEntry(
+          label: '收藏',
+          uri: favoriteUri,
+          kind: CommunityProfileEntryKind.favorites,
+        ),
+      ],
+      details: const <String>[],
+    );
+    repository.profiles[otherUri] = CommunityProfile(
+      userId: 77,
+      username: '用户A',
+      sourceUri: otherUri,
+      entries: <CommunityProfileEntry>[
+        CommunityProfileEntry(
+          label: '收藏',
+          uri: otherFavoriteUri,
+          kind: CommunityProfileEntryKind.favorites,
+        ),
+      ],
+      details: const <String>[],
+    );
+    when(() => favorites.loadInitial()).thenAnswer(
+      (_) async => RawFavoritePage(
+        categories: const <RawFavoriteCategory>[],
+        items: const <RawFavoriteItem>[],
+        selectedCategoryKey: RawFavoriteRepository.allCategoryKey,
+        currentPage: 1,
+        totalPages: 1,
+        sourceUri: favoriteUri,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _app(
+        repository,
+        CommunityProfileScreen(uri: otherUri, profileUserId: 77),
+        rawFavorites: favorites,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final ListTile otherTile = tester.widget<ListTile>(
+      find.byKey(const ValueKey<String>('community-profile-entry-favorites')),
+    );
+    expect(otherTile.enabled, isFalse);
+    expect(otherTile.onTap, isNull);
+
+    await tester.pumpWidget(
+      _app(
+        repository,
+        CommunityProfileScreen(uri: ownUri, profileUserId: 42),
+        rawFavorites: favorites,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('community-profile-entry-favorites')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(RawFavoritesPage), findsOneWidget);
+    expect(find.text('收藏'), findsWidgets);
+  });
+
   testWidgets('好友页使用服务端分类 URI 切到在线成员和访客', (WidgetTester tester) async {
     final _FakeCommunityRepository repository = _FakeCommunityRepository();
     final Uri friendsUri = _uri('home.php?mod=space&do=friend&mobile=2');
@@ -380,9 +470,23 @@ void main() {
   });
 }
 
-Widget _app(CommunityRepository repository, Widget home) {
+Widget _app(
+  CommunityRepository repository,
+  Widget home, {
+  RawFavoriteRepository? rawFavorites,
+  int viewerUserId = 42,
+}) {
+  final _MockAuthRepository auth = _MockAuthRepository();
+  when(auth.restoreSession).thenAnswer(
+    (_) async => AuthState.authenticated('用户B', userId: viewerUserId),
+  );
   return ProviderScope(
-    overrides: [communityRepositoryProvider.overrideWithValue(repository)],
+    overrides: [
+      communityRepositoryProvider.overrideWithValue(repository),
+      authRepositoryProvider.overrideWithValue(auth),
+      if (rawFavorites != null)
+        rawFavoriteRepositoryProvider.overrideWithValue(rawFavorites),
+    ],
     child: MaterialApp(home: home),
   );
 }
