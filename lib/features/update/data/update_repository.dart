@@ -23,13 +23,37 @@ class UpdateRepository
 
     Future<UpdateManifest> fetchLatest() async
     {
+        final List<UpdateManifest?> manifests = await Future.wait(
+            <Future<UpdateManifest?>>[
+                _tryFetch(_fetchGitCode),
+                _tryFetch(_fetchGithub),
+            ],
+        );
+        final UpdateManifest? gitCode = manifests[0];
+        final UpdateManifest? github = manifests[1];
+        if (gitCode == null && github == null)
+        {
+            throw StateError('两个官方更新源均不可用');
+        }
+        if (github != null &&
+            (gitCode == null || github.buildNumber > gitCode.buildNumber))
+        {
+            return github;
+        }
+        return gitCode!;
+    }
+
+    Future<UpdateManifest?> _tryFetch(
+        Future<UpdateManifest> Function() fetch,
+    ) async
+    {
         try
         {
-            return await _fetchGitCode().timeout(const Duration(seconds: 10));
+            return await fetch().timeout(const Duration(seconds: 10));
         }
         on Object
         {
-            return _fetchGithub().timeout(const Duration(seconds: 10));
+            return null;
         }
     }
 

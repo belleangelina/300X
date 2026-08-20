@@ -14,7 +14,7 @@ void main()
         registerFallbackValue(Uri());
     });
 
-    test('GitCode 失败后回退 GitHub 官方清单', () async
+    test('GitCode 失败时使用 GitHub 官方清单', () async
     {
         final _MockDio dio = _MockDio();
         when(() => dio.getUri<Object?>(any())).thenAnswer((Invocation call)
@@ -38,16 +38,71 @@ void main()
             () => dio.getUri<Object?>(captureAny()),
         ).captured.cast<Uri>();
         expect(requests, hasLength(2));
-        expect(requests.first.host, 'api.gitcode.com');
-        expect(requests.last.host, 'github.com');
+        expect(
+            requests.map((Uri value) => value.host),
+            containsAll(<String>['api.gitcode.com', 'github.com']),
+        );
     });
 
-    test('GitCode 正式版本有效时不访问 GitHub', () async
+    test('两个官方源都有效时选择较高构建号', () async
     {
         final _MockDio dio = _MockDio();
         when(() => dio.getUri<Object?>(any())).thenAnswer((Invocation call)
         {
             final Uri uri = call.positionalArguments.first! as Uri;
+            if (uri.host == 'github.com')
+            {
+                return Future<Response<Object?>>.value(
+                    _response(
+                        uri,
+                        _manifestJson(
+                            versionName: '1.0.9',
+                            buildNumber: 12,
+                        ),
+                    ),
+                );
+            }
+            final Object data = uri.path.endsWith('/latest')
+                ? <String, Object?>{
+                    'tag_name': 'v1.0.8',
+                    'prerelease': false,
+                }
+                : _manifestJson();
+            return Future<Response<Object?>>.value(_response(uri, data));
+        });
+
+        final manifest = await UpdateRepository(dio).fetchLatest();
+
+        expect(manifest.versionName, '1.0.9');
+        expect(manifest.buildNumber, 12);
+        final List<Uri> requests = verify(
+            () => dio.getUri<Object?>(captureAny()),
+        ).captured.cast<Uri>();
+        expect(requests, hasLength(3));
+        expect(
+            requests.map((Uri value) => value.host),
+            containsAll(<String>['api.gitcode.com', 'github.com']),
+        );
+    });
+
+    test('GitCode 较新时保留 GitCode 清单', () async
+    {
+        final _MockDio dio = _MockDio();
+        when(() => dio.getUri<Object?>(any())).thenAnswer((Invocation call)
+        {
+            final Uri uri = call.positionalArguments.first! as Uri;
+            if (uri.host == 'github.com')
+            {
+                return Future<Response<Object?>>.value(
+                    _response(
+                        uri,
+                        _manifestJson(
+                            versionName: '1.0.7',
+                            buildNumber: 10,
+                        ),
+                    ),
+                );
+            }
             final Object data = uri.path.endsWith('/latest')
                 ? <String, Object?>{
                     'tag_name': 'v1.0.8',
@@ -60,11 +115,7 @@ void main()
         final manifest = await UpdateRepository(dio).fetchLatest();
 
         expect(manifest.versionName, '1.0.8');
-        final List<Uri> requests = verify(
-            () => dio.getUri<Object?>(captureAny()),
-        ).captured.cast<Uri>();
-        expect(requests, hasLength(2));
-        expect(requests.every((Uri value) => value.host == 'api.gitcode.com'), isTrue);
+        expect(manifest.buildNumber, 11);
     });
 }
 
@@ -77,13 +128,17 @@ Response<Object?> _response(Uri uri, Object data)
     );
 }
 
-Map<String, Object?> _manifestJson()
+Map<String, Object?> _manifestJson({
+    String versionName = '1.0.8',
+    int buildNumber = 11,
+})
 {
-    const String fileName = 'X300-v1.0.8-android-universal-release.apk';
+    final String fileName =
+        'X300-v$versionName-android-universal-release.apk';
     return <String, Object?>{
         'schemaVersion': 1,
-        'versionName': '1.0.8',
-        'buildNumber': 11,
+        'versionName': versionName,
+        'buildNumber': buildNumber,
         'releaseNotes': '测试更新',
         'publishedAt': '2026-08-12T12:00:00Z',
         'artifacts': <Object?>[
@@ -95,10 +150,10 @@ Map<String, Object?> _manifestJson()
                 'sha256': 'a' * 64,
                 'githubUrl':
                     'https://github.com/belleangelina/300X/releases/'
-                    'download/v1.0.8/$fileName',
+                    'download/v$versionName/$fileName',
                 'gitcodeUrl':
                     'https://api.gitcode.com/api/v5/repos/belleangelina/'
-                    '300X/releases/v1.0.8/attach_files/$fileName/download',
+                    '300X/releases/v$versionName/attach_files/$fileName/download',
             },
         ],
     };
