@@ -57,6 +57,7 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         milliseconds: 100,
     );
     static const double _chapterDirectoryItemExtent = 56;
+    static const double _chapterDirectoryMaxHeightRatio = 9 / 16;
 
     late Future<_LoadedChapter> _contentFuture;
     late Future<void>? _progressFuture;
@@ -2798,14 +2799,30 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
     Future<void> _showChapterDirectory() async
     {
         final List<Chapter> chapters = _chapters;
+        final NavigatorState navigator = Navigator.of(context);
+        final RenderBox navigatorOverlay =
+            navigator.overlay!.context.findRenderObject()! as RenderBox;
+        final double directoryMaxHeight =
+            navigatorOverlay.size.height *
+                _chapterDirectoryMaxHeightRatio;
+        final double maximumInitialOffset =
+            (chapters.length * _chapterDirectoryItemExtent -
+                    directoryMaxHeight)
+                .clamp(0, double.infinity)
+                .toDouble();
         final ScrollController directoryController = ScrollController(
-            initialScrollOffset: _chapterIndex * _chapterDirectoryItemExtent,
+            initialScrollOffset:
+                (_chapterIndex * _chapterDirectoryItemExtent)
+                    .clamp(0, maximumInitialOffset)
+                    .toDouble(),
         );
         final Chapter? selected;
         try
         {
             selected = await showModalBottomSheet<Chapter>(
                 context: context,
+                scrollControlDisabledMaxHeightRatio:
+                    _chapterDirectoryMaxHeightRatio,
                 builder: (BuildContext context) => SafeArea(
                     child: ListView.builder(
                         controller: directoryController,

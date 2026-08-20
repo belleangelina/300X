@@ -328,7 +328,7 @@ void main()
             ],
             chapters: chapters,
         );
-        final Chapter currentChapter = chapters[19];
+        final Chapter currentChapter = chapters[29];
         await downloadRepository.enqueue(
             work: work,
             chapter: currentChapter,
@@ -365,12 +365,24 @@ void main()
         await _showReaderControls(tester);
 
         await tester.tap(find.byKey(const Key('reader-directory-button')));
+        await tester.pump();
+        final ScrollableState directoryScrollable =
+            tester.state<ScrollableState>(
+                find.descendant(
+                    of: find.byType(BottomSheet),
+                    matching: find.byType(Scrollable),
+                ),
+            );
+        expect(
+            directoryScrollable.position.pixels,
+            lessThanOrEqualTo(directoryScrollable.position.maxScrollExtent),
+        );
         await tester.pumpAndSettle();
 
         final Finder directory = find.byType(BottomSheet);
         final Finder currentTitle = find.descendant(
             of: directory,
-            matching: find.text('第20章'),
+            matching: find.text('第30章'),
         );
         expect(directory, findsOneWidget);
         expect(currentTitle, findsOneWidget);
