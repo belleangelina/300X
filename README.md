@@ -11,19 +11,22 @@
 - 高置信标题聚合、帖子目录解析、双向漫画与小说阅读器
 - 搜索 10 秒冷却、论坛云收藏、本机历史和阅读进度
 - 封面缓存、离线下载、暂停/继续和断网阅读
-
-## 工程实践
-
-项目的大部分代码实现、测试补充和问题排查由 AI Agent 完成。我通过规格、定向测试、目标平台运行和缺陷复验检查每轮产出。详见 [300X 的 AI Agent 开发与交付闭环](docs/engineering/agent-driven-development.md)。
+- Android/iOS 后台检查更新，Android 支持应用内下载、校验并调用系统安装器
 
 ## Release 构建
 
-可在 [Releases](https://github.com/belleangelina/300X/releases) 下载最新版本，也可自行构建。
+正式发布仅提供 Android 和 iOS 产物，可从
+[GitHub Releases](https://github.com/belleangelina/300X/releases) 或
+[GitCode 官方镜像](https://gitcode.com/belleangelina/300X/releases) 下载。Android
+提供通用 APK 和 `arm64-v8a` APK；iOS 提供未签名 IPA，需要自行签名，
+或在受支持的设备上通过 TrollStore 安装。
+
+也可以在本地自行构建：
 
 ```bash
-./build_release.sh  # 默认构建 Android
-./build_release.sh -p linux
+./build_release.sh -p android
 ./build_release.sh -p ios   # 需在 macOS/Xcode 环境执行
+./build_release.sh -p linux # 仅用于本地开发与验证，不正式发布
 ```
 
 产物统一位于 `build/releases/`。
