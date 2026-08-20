@@ -17,12 +17,18 @@ import 'package:x300/features/settings/data/cache_maintenance_repository.dart';
 import 'package:x300/features/update/application/update_controller.dart';
 import 'package:x300/features/update/application/update_download_controller.dart';
 import 'package:x300/features/update/presentation/update_dialog.dart';
+import 'package:x300/shared/presentation/app_loading_view.dart';
 
 class HomeShell extends ConsumerStatefulWidget
 {
-    const HomeShell({required this.authState, super.key});
+    const HomeShell({
+        required this.authState,
+        this.restoringAuth = false,
+        super.key,
+    });
 
     final AuthState authState;
+    final bool restoringAuth;
 
     @override
     ConsumerState<HomeShell> createState()
@@ -169,42 +175,44 @@ class _HomeShellState extends ConsumerState<HomeShell>
                 });
             }
         });
-        final Widget content = IndexedStack(
-            index: _index,
-            children: <Widget>[
-                TickerMode(
-                    enabled: _index == 0,
-                    child: LibraryHomePage(
-                        kind: LibraryKind.comic,
-                        authState: widget.authState,
-                        onLogin: _openLogin,
-                        controller: _comicHomeController,
-                        onOpenWork: _openWork,
-                        onSearch: () => _openSearch(LibraryKind.comic),
+        final Widget content = widget.restoringAuth
+            ? const AppLoadingView(message: '正在恢复登录状态')
+            : IndexedStack(
+                index: _index,
+                children: <Widget>[
+                    TickerMode(
+                        enabled: _index == 0,
+                        child: LibraryHomePage(
+                            kind: LibraryKind.comic,
+                            authState: widget.authState,
+                            onLogin: _openLogin,
+                            controller: _comicHomeController,
+                            onOpenWork: _openWork,
+                            onSearch: () => _openSearch(LibraryKind.comic),
+                        ),
                     ),
-                ),
-                TickerMode(
-                    enabled: _index == 1,
-                    child: LibraryHomePage(
-                        kind: LibraryKind.novel,
-                        authState: widget.authState,
-                        onLogin: _openLogin,
-                        controller: _novelHomeController,
-                        onOpenWork: _openWork,
-                        onSearch: () => _openSearch(LibraryKind.novel),
+                    TickerMode(
+                        enabled: _index == 1,
+                        child: LibraryHomePage(
+                            kind: LibraryKind.novel,
+                            authState: widget.authState,
+                            onLogin: _openLogin,
+                            controller: _novelHomeController,
+                            onOpenWork: _openWork,
+                            onSearch: () => _openSearch(LibraryKind.novel),
+                        ),
                     ),
-                ),
-                TickerMode(
-                    enabled: _index == 2,
-                    child: ProfilePage(
-                        authState: widget.authState,
-                        onLogin: _openLogin,
-                        onLogout: _logout,
-                        onOpenDetail: _openProfileDetail,
+                    TickerMode(
+                        enabled: _index == 2,
+                        child: ProfilePage(
+                            authState: widget.authState,
+                            onLogin: _openLogin,
+                            onLogout: _logout,
+                            onOpenDetail: _openProfileDetail,
+                        ),
                     ),
-                ),
-            ],
-        );
+                ],
+            );
 
         return LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints)

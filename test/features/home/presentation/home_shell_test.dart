@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:x300/app/x300_app.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
+import 'package:x300/features/auth/data/auth_repository.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/downloads/application/download_manager.dart';
 import 'package:x300/features/home/presentation/home_shell.dart';
@@ -17,6 +21,10 @@ import 'package:x300/features/settings/domain/app_settings.dart';
 import 'package:x300/features/settings/presentation/settings_page.dart';
 
 class _MockDownloadManager extends Mock implements DownloadManager
+{
+}
+
+class _MockAuthRepository extends Mock implements AuthRepository
 {
 }
 
@@ -85,6 +93,64 @@ void main()
         expect(usesWideHomeLayout(const Size(800, 1280)), isFalse);
         expect(usesWideHomeLayout(const Size(719, 600)), isFalse);
         expect(usesWideHomeLayout(const Size(720, 720)), isFalse);
+    });
+
+    testWidgets('恢复登录会话期间不显示可点击的登录入口', (
+        WidgetTester tester,
+    ) async
+    {
+        final _MockAuthRepository authRepository = _MockAuthRepository();
+        final Completer<AuthState> restore = Completer<AuthState>();
+        when(authRepository.restoreSession).thenAnswer((_) => restore.future);
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    authRepositoryProvider.overrideWithValue(authRepository),
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                    downloadManagerProvider.overrideWithValue(downloadManager),
+                    forumLibraryRepositoryProvider.overrideWithValue(
+                        libraryRepository,
+                    ),
+                    cacheMaintenanceRepositoryProvider.overrideWithValue(
+                        cacheMaintenanceRepository,
+                    ),
+                ],
+                child: const MaterialApp(home: AuthGate()),
+            ),
+        );
+        await tester.pump();
+
+        expect(find.text('正在恢复登录状态'), findsOneWidget);
+        expect(find.text('登录'), findsNothing);
+        verifyNever(
+            () => libraryRepository.loadCatalog(
+                kind: LibraryKind.comic,
+                section: CatalogSection.updated,
+                novelSource: NovelSourceFilter.all,
+                page: 1,
+                typeId: null,
+            ),
+        );
+
+        restore.complete(const AuthState.authenticated('测试账号'));
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('正在恢复登录状态'), findsNothing);
+        verify(
+            () => libraryRepository.loadCatalog(
+                kind: LibraryKind.comic,
+                section: CatalogSection.updated,
+                novelSource: NovelSourceFilter.all,
+                page: 1,
+                typeId: null,
+            ),
+        ).called(1);
+
+        await tester.pumpWidget(const SizedBox.shrink());
     });
 
     testWidgets('横屏个人页在右侧打开二级页面', (

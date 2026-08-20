@@ -85,8 +85,10 @@ class AuthGate extends ConsumerWidget
     Widget build(BuildContext context, WidgetRef ref)
     {
         final AsyncValue<AuthState> auth = ref.watch(authControllerProvider);
+        final AuthState? authState = auth.value;
         return HomeShell(
-            authState: auth.value ?? const AuthState.unauthenticated(),
+            authState: authState ?? const AuthState.unauthenticated(),
+            restoringAuth: auth.isLoading && authState == null,
         );
     }
 }
