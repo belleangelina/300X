@@ -149,7 +149,7 @@ fi
 printf '即将发布：%s（%s）\n' "$tag" "$next"
 printf '发布说明：\n'
 sed -n '1,20p' "$notes_file"
-printf '推送 main 和标签将触发三平台构建及双站发布。继续？[y/N] '
+printf '推送 main 和标签将触发 Android/iOS 构建及双站发布。继续？[y/N] '
 read -r answer
 [[ "$answer" == y || "$answer" == Y ]] || fail '已取消发布'
 
