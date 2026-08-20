@@ -118,6 +118,7 @@ void main()
         expect(find.byType(WorkListTile), findsOneWidget);
         expect(find.byType(WorkGridCard), findsNothing);
         expect(find.text('列表'), findsOneWidget);
+        expect(find.text('跳页'), findsOneWidget);
         final Rect cover = tester.getRect(find.byType(WorkCover));
         final Rect metadata = tester.getRect(find.textContaining('0 浏览'));
         expect(metadata.bottom, moreOrLessEquals(cover.bottom));
@@ -160,12 +161,14 @@ void main()
         );
         await tester.pumpAndSettle();
         expect(find.text('跳转页面'), findsOneWidget);
+        expect(find.text('已加载第 1 页 / 共 5 页'), findsOneWidget);
+        expect(find.text('跳转页码（1–5）'), findsOneWidget);
         await tester.enterText(find.byType(TextFormField), '3');
         await tester.pump();
         await tester.tap(find.text('跳转'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
-        expect(find.text('3页'), findsOneWidget);
+        expect(find.text('跳页'), findsOneWidget);
         verify(
             () => repository.loadCatalog(
                 kind: LibraryKind.comic,
@@ -329,7 +332,7 @@ void main()
         await tester.pumpAndSettle();
 
         expect(find.byType(WorkGridCard), findsNWidgets(3));
-        expect(find.text('40+2页'), findsOneWidget);
+        expect(find.text('跳页'), findsOneWidget);
         verify(
             () => repository.loadNextCatalog(
                 cursor: any(named: 'cursor'),
@@ -341,7 +344,8 @@ void main()
             find.byKey(const ValueKey<String>('catalog-page-jump')),
         );
         await tester.pumpAndSettle();
-        expect(find.text('页码（1–100）'), findsOneWidget);
+        expect(find.text('已加载第 40–42 页 / 共 100 页'), findsOneWidget);
+        expect(find.text('跳转页码（1–100）'), findsOneWidget);
         await tester.tap(find.text('取消'));
         await tester.pumpAndSettle();
 

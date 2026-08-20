@@ -361,7 +361,6 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
                     categories: _categories,
                     categoryTypeId: _categoryTypeId,
                     sort: _sort,
-                    pageLabel: _pageLabel,
                     onViewModeChanged: widget.onViewModeChanged,
                     onPageTap: _jumpToPage,
                     onCategoryChanged: _setCategory,
@@ -725,15 +724,6 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
         }
     }
 
-    String get _pageLabel
-    {
-        if (_startPage == _lastLoadedPage)
-        {
-            return '$_startPage页';
-        }
-        return '$_startPage+${_lastLoadedPage - _startPage}页';
-    }
-
     void _scheduleGridFill()
     {
         WidgetsBinding.instance.addPostFrameCallback((_)
@@ -783,6 +773,9 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
     Future<void> _jumpToPage() async
     {
         int? targetPage = _startPage;
+        final String loadedPages = _startPage == _lastLoadedPage
+            ? '已加载第 $_startPage 页 / 共 $_totalPages 页'
+            : '已加载第 $_startPage–$_lastLoadedPage 页 / 共 $_totalPages 页';
         final int? selected = await showDialog<int>(
             context: context,
             builder: (BuildContext context)
@@ -798,33 +791,41 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
                                 targetPage! <= _totalPages;
                         return AlertDialog(
                             title: const Text('跳转页面'),
-                            content: TextFormField(
-                                initialValue: _startPage.toString(),
-                                autofocus: true,
-                                keyboardType: TextInputType.number,
-                                inputFormatters: <TextInputFormatter>[
-                                    FilteringTextInputFormatter.digitsOnly,
+                            content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                    Text(loadedPages),
+                                    const SizedBox(height: 16),
+                                    TextFormField(
+                                        initialValue: _startPage.toString(),
+                                        autofocus: true,
+                                        keyboardType: TextInputType.number,
+                                        inputFormatters: <TextInputFormatter>[
+                                            FilteringTextInputFormatter.digitsOnly,
+                                        ],
+                                        decoration: InputDecoration(
+                                            labelText: '跳转页码（1–$_totalPages）',
+                                        ),
+                                        onChanged: (String value)
+                                        {
+                                            setDialogState(()
+                                            {
+                                                targetPage = int.tryParse(value);
+                                            });
+                                        },
+                                        onFieldSubmitted: (String value)
+                                        {
+                                            final int? page = int.tryParse(value);
+                                            if (page != null &&
+                                                page >= 1 &&
+                                                page <= _totalPages)
+                                            {
+                                                Navigator.pop(context, page);
+                                            }
+                                        },
+                                    ),
                                 ],
-                                decoration: InputDecoration(
-                                    labelText: '页码（1–$_totalPages）',
-                                ),
-                                onChanged: (String value)
-                                {
-                                    setDialogState(()
-                                    {
-                                        targetPage = int.tryParse(value);
-                                    });
-                                },
-                                onFieldSubmitted: (String value)
-                                {
-                                    final int? page = int.tryParse(value);
-                                    if (page != null &&
-                                            page >= 1 &&
-                                            page <= _totalPages)
-                                    {
-                                        Navigator.pop(context, page);
-                                    }
-                                },
                             ),
                             actions: <Widget>[
                                 TextButton(
@@ -870,7 +871,6 @@ class _CatalogControls extends StatelessWidget
         required this.categories,
         required this.categoryTypeId,
         required this.sort,
-        required this.pageLabel,
         required this.onViewModeChanged,
         required this.onPageTap,
         required this.onCategoryChanged,
@@ -883,7 +883,6 @@ class _CatalogControls extends StatelessWidget
     final List<ForumCategory> categories;
     final int? categoryTypeId;
     final CatalogSection sort;
-    final String pageLabel;
     final ValueChanged<_CatalogViewMode> onViewModeChanged;
     final VoidCallback onPageTap;
     final ValueChanged<int?> onCategoryChanged;
@@ -941,10 +940,7 @@ class _CatalogControls extends StatelessWidget
                                         ),
                                         tooltip: '跳页',
                                         onTap: onPageTap,
-                                        child: FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            child: Text(pageLabel),
-                                        ),
+                                        child: const Text('跳页'),
                                     ),
                                 ),
                                 Expanded(
