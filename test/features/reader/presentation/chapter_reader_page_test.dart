@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2121,12 +2122,9 @@ void main()
     ) async
     {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-        addTearDown(()
-        {
-            debugDefaultTargetPlatformOverride = null;
-        });
         await tester.binding.setSurfaceSize(const Size(800, 600));
-        addTearDown(() => tester.binding.setSurfaceSize(null));
+        try
+        {
         await settingsRepository.save(
             const AppSettings(
                 comicDirection: ReaderDirection.rightToLeft,
@@ -2193,6 +2191,12 @@ void main()
 
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pumpAndSettle();
+        }
+        finally
+        {
+            debugDefaultTargetPlatformOverride = null;
+            await tester.binding.setSurfaceSize(null);
+        }
     });
 }
 
