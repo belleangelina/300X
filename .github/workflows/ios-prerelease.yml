@@ -64,7 +64,7 @@ jobs:
           TAG: ${{ steps.ver.outputs.tag }}
         run: |
           test -n "$GITCODE_TOKEN"
-          tool/release/push_gitcode_tag.sh "$TAG"
+          bash tool/release/push_gitcode_tag.sh "$TAG"
       - name: Sync GitCode prerelease
         env:
           GITCODE_PRERELEASE: 'true'
@@ -73,5 +73,5 @@ jobs:
           test -n "$GITCODE_TOKEN"
           printf '%s\n' 'iOS-only prerelease. Unsigned IPA. Not an official update.' \
             > release-notes.md
-          tool/release/sync_gitcode_release.sh "$TAG" \
+          bash tool/release/sync_gitcode_release.sh "$TAG" \
             release-notes.md release-assets/*

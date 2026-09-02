@@ -234,11 +234,11 @@ jobs:
       - name: Push annotated tag to GitCode
         run: |
           test -n "$GITCODE_TOKEN"
-          tool/release/push_gitcode_tag.sh "v$VERSION"
+          bash tool/release/push_gitcode_tag.sh "v$VERSION"
       - name: Sync GitCode Release
         run: |
           test -n "$GITCODE_TOKEN"
-          tool/release/sync_gitcode_release.sh "v$VERSION" \
+          bash tool/release/sync_gitcode_release.sh "v$VERSION" \
             release-metadata/release-notes.md release-assets/*
 
   prepare-existing-gitcode-release:
@@ -270,13 +270,13 @@ jobs:
           TAG: ${{ inputs.sync_tag }}
         run: |
           test -n "$GITCODE_TOKEN"
-          tool/release/push_gitcode_tag.sh "$TAG"
+          bash tool/release/push_gitcode_tag.sh "$TAG"
       - name: Prepare GitCode Release
         env:
           TAG: ${{ inputs.sync_tag }}
         run: |
           test -n "$GITCODE_TOKEN"
-          tool/release/sync_gitcode_release.sh "$TAG" \
+          bash tool/release/sync_gitcode_release.sh "$TAG" \
             release-metadata/release-notes.md release-assets/*
 
   sync-existing-gitcode-assets:
@@ -311,11 +311,11 @@ jobs:
       - name: Push annotated tag to GitCode
         run: |
           test -n "$GITCODE_TOKEN"
-          tool/release/push_gitcode_tag.sh "$TAG"
+          bash tool/release/push_gitcode_tag.sh "$TAG"
       - name: Sync GitCode Release asset
         run: |
           test -n "$GITCODE_TOKEN"
-          tool/release/sync_gitcode_release.sh "$TAG" \
+          bash tool/release/sync_gitcode_release.sh "$TAG" \
             release-metadata/release-notes.md release-assets/*
 
   sync-existing-gitcode-manifest:
@@ -341,10 +341,10 @@ jobs:
       - name: Push annotated tag to GitCode
         run: |
           test -n "$GITCODE_TOKEN"
-          tool/release/push_gitcode_tag.sh "$TAG"
+          bash tool/release/push_gitcode_tag.sh "$TAG"
       - name: Sync GitCode Release manifest
         run: |
           test -n "$GITCODE_TOKEN"
-          tool/release/sync_gitcode_release.sh "$TAG" \
+          bash tool/release/sync_gitcode_release.sh "$TAG" \
             release-metadata/release-notes.md \
             release-assets/update-manifest.json
