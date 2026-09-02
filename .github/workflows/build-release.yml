@@ -169,6 +169,8 @@ jobs:
       BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.3'
@@ -229,6 +231,10 @@ jobs:
           else
             gh release upload "$tag" "$asset"
           fi
+      - name: Push annotated tag to GitCode
+        run: |
+          test -n "$GITCODE_TOKEN"
+          tool/release/push_gitcode_tag.sh "v$VERSION"
       - name: Sync GitCode Release
         run: |
           test -n "$GITCODE_TOKEN"
@@ -259,6 +265,12 @@ jobs:
             --pattern '*-android-arm64-v8a-release.apk' \
             --dir release-assets
           test "$(find release-assets -type f | wc -l)" = 1
+      - name: Push annotated tag to GitCode
+        env:
+          TAG: ${{ inputs.sync_tag }}
+        run: |
+          test -n "$GITCODE_TOKEN"
+          tool/release/push_gitcode_tag.sh "$TAG"
       - name: Prepare GitCode Release
         env:
           TAG: ${{ inputs.sync_tag }}
@@ -296,6 +308,10 @@ jobs:
           gh release download "$TAG" --pattern "$PATTERN" \
             --dir release-assets
           test "$(find release-assets -type f | wc -l)" = 1
+      - name: Push annotated tag to GitCode
+        run: |
+          test -n "$GITCODE_TOKEN"
+          tool/release/push_gitcode_tag.sh "$TAG"
       - name: Sync GitCode Release asset
         run: |
           test -n "$GITCODE_TOKEN"
@@ -322,6 +338,10 @@ jobs:
             > release-metadata/release-notes.md
           gh release download "$TAG" --pattern update-manifest.json \
             --dir release-assets
+      - name: Push annotated tag to GitCode
+        run: |
+          test -n "$GITCODE_TOKEN"
+          tool/release/push_gitcode_tag.sh "$TAG"
       - name: Sync GitCode Release manifest
         run: |
           test -n "$GITCODE_TOKEN"
