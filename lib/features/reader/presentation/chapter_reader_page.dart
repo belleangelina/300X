@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -56,6 +57,7 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
     static const Duration _comicSwipeDecisionWindow = Duration(
         milliseconds: 100,
     );
+    static const double _iosBackGestureWidth = 20;
     static const double _chapterDirectoryItemExtent = 56;
     static const double _chapterDirectoryMaxHeightRatio = 9 / 16;
 
@@ -396,6 +398,10 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
             _blockComicSwipe();
             return;
         }
+        if (_startsOnIosBackGestureEdge(event.position))
+        {
+            return;
+        }
         _beginComicSwipe(event);
         final int? offset = event.localPosition.dx <= width * 0.3
                 ? (_reverseControls ? 1 : -1)
@@ -581,6 +587,16 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
         drag?.cancel();
     }
 
+    bool _startsOnIosBackGestureEdge(Offset globalPosition)
+    {
+        if (!(Platform.isIOS ||
+                defaultTargetPlatform == TargetPlatform.iOS))
+        {
+            return false;
+        }
+        return globalPosition.dx <= _iosBackGestureWidth;
+    }
+
     void _beginComicSwipe(PointerDownEvent event)
     {
         final PageController? controller = _pageController;
@@ -590,7 +606,8 @@ class _ChapterReaderPageState extends ConsumerState<ChapterReaderPage>
                 _zoomedComicPages.contains(_pageIndex) ||
                 event.buttons != kPrimaryButton ||
                 controller == null ||
-                !controller.hasClients)
+                !controller.hasClients ||
+                _startsOnIosBackGestureEdge(event.position))
         {
             return;
         }

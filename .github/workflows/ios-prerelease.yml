@@ -1,0 +1,77 @@
+name: iOS prerelease
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - id: ver
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          current=$(awk '/^version:/ { print $2; exit }' pubspec.yaml)
+          version=${current%%+*}
+          build_number=${current##*+}
+          printf 'version=%s\nbuild-number=%s\ntag=v%s\n' \
+            "$version" "$build_number" "$version" >> "$GITHUB_OUTPUT"
+      - name: Build unsigned IPA
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          BUILD_NUMBER: ${{ steps.ver.outputs.build-number }}
+        run: |
+          set -Eeuo pipefail
+          flutter build ipa --release --no-codesign --build-name="$VERSION" \
+            --build-number="$BUILD_NUMBER"
+          archive=$(find build/ios/archive -maxdepth 1 -name '*.xcarchive' | head -1)
+          app=$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' | head -1)
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+            "$app/Info.plist")" = "$VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
+            "$app/Info.plist")" = "$BUILD_NUMBER"
+          mkdir -p package/Payload release-assets
+          cp -R "$app" package/Payload/
+          (cd package && zip -r -q \
+            "../release-assets/X300-v${VERSION}-ios-unsigned.ipa" Payload)
+      - name: Create GitHub prerelease
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          notes=$'iOS-only prerelease.\nUnsigned IPA for sideload/TrollStore. Not an official update.'
+          gh release create "$TAG" --prerelease --target "$GITHUB_SHA" \
+            --title "$TAG (iOS test)" --notes "$notes" \
+            release-assets/*
+          git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+      - name: Push annotated tag to GitCode
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          test -n "$GITCODE_TOKEN"
+          tool/release/push_gitcode_tag.sh "$TAG"
+      - name: Sync GitCode prerelease
+        env:
+          GITCODE_PRERELEASE: 'true'
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          test -n "$GITCODE_TOKEN"
+          printf '%s\n' 'iOS-only prerelease. Unsigned IPA. Not an official update.' \
+            > release-notes.md
+          tool/release/sync_gitcode_release.sh "$TAG" \
+            release-notes.md release-assets/*

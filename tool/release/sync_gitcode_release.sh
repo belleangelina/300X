@@ -41,12 +41,21 @@ release_json="$(curl -sS -G \
     "$api/releases/tags/$tag")"
 if ! jq -e '.tag_name' <<<"$release_json" >/dev/null 2>&1
 then
+    prerelease_json='false'
+    release_status='latest'
+    if [[ "${GITCODE_PRERELEASE:-}" == 'true' ]]
+    then
+        prerelease_json='true'
+        release_status='prerelease'
+    fi
     release_json="$(
         jq -n \
             --arg tag "$tag" \
             --arg name "$tag" \
             --rawfile body "$notes_file" \
-            '{tag_name:$tag,name:$name,body:$body,release_status:"latest"}' |
+            --argjson prerelease "$prerelease_json" \
+            --arg release_status "$release_status" \
+            '{tag_name:$tag,name:$name,body:$body,prerelease:$prerelease,release_status:$release_status}' |
             curl -fsS -X POST \
                 --url-query "access_token=$GITCODE_TOKEN" \
                 -H 'Content-Type: application/json' \

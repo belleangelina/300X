@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2114,6 +2115,88 @@ void main()
 
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pumpAndSettle();
+    });
+
+    testWidgets('iOS 左边缘滑动不带动漫画翻页', (
+        WidgetTester tester,
+    ) async
+    {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        await tester.binding.setSurfaceSize(const Size(800, 600));
+        try
+        {
+        await settingsRepository.save(
+            const AppSettings(
+                comicDirection: ReaderDirection.rightToLeft,
+                comicPageAnimation: false,
+            ),
+        );
+        final Work work = _comicWork();
+        final Chapter chapter = work.chapters.first;
+        final _MockDownloadRepository comicDownloads =
+            _MockDownloadRepository();
+        when(
+            () => comicDownloads.loadOfflineContent(work.id, chapter.id),
+        ).thenAnswer(
+            (_) async => OfflineChapterContent(
+                blocks: <PostContentBlock>[
+                    PostImageBlock(uri: Uri.file('/missing/page-1.png')),
+                    PostImageBlock(uri: Uri.file('/missing/page-2.png')),
+                    PostImageBlock(uri: Uri.file('/missing/page-3.png')),
+                ],
+                referer: chapter.sourceUri,
+            ),
+        );
+
+        await tester.pumpWidget(
+            ProviderScope(
+                overrides: [
+                    appDatabaseProvider.overrideWithValue(database),
+                    downloadRepositoryProvider.overrideWithValue(
+                        comicDownloads,
+                    ),
+                    forumLibraryRepositoryProvider.overrideWithValue(
+                        forumRepository,
+                    ),
+                    appSettingsRepositoryProvider.overrideWithValue(
+                        settingsRepository,
+                    ),
+                ],
+                child: MaterialApp(
+                    home: ChapterReaderPage(work: work, chapter: chapter),
+                ),
+            ),
+        );
+        await tester.pumpAndSettle();
+        final Rect reader = tester.getRect(find.byType(Scaffold));
+        final TestGesture gesture = await tester.startGesture(
+            Offset(8, reader.top + reader.height * 0.5),
+        );
+        for (int step = 1; step <= 20; step++)
+        {
+            await gesture.moveBy(
+                const Offset(20, 0),
+                timeStamp: Duration(milliseconds: step * 8),
+            );
+            await tester.pump(const Duration(milliseconds: 8));
+        }
+        await tester.pump(const Duration(milliseconds: 120));
+        await gesture.up();
+        await tester.pumpAndSettle();
+        final PageController controller = tester.widget<PageView>(
+            find.byType(PageView),
+        ).controller!;
+        expect(controller.page, closeTo(0, 0.01));
+        expect(_pageBadgeText(tester), '1 / 3');
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+        }
+        finally
+        {
+            debugDefaultTargetPlatformOverride = null;
+            await tester.binding.setSurfaceSize(null);
+        }
     });
 }
 
