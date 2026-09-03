@@ -162,6 +162,7 @@ jobs:
   publish:
     needs: [prepare, build-android, build-ios]
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
@@ -244,6 +245,7 @@ jobs:
   prepare-existing-gitcode-release:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
@@ -283,6 +285,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     needs: prepare-existing-gitcode-release
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -322,6 +325,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     needs: sync-existing-gitcode-assets
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
