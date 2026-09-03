@@ -136,7 +136,7 @@ upload_asset()
     jq -r '.headers // {} | to_entries[] | "\(.key): \(.value)"' \
         <<<"$upload_json" >"$header_file"
     curl_args=(
-        -fsS --max-time 600 --retry 2 --retry-delay 5 --retry-all-errors
+        -fsS --max-time 1800 --retry 1 --retry-delay 15 --retry-all-errors
         -X PUT --data-binary "@$asset"
     )
     while IFS= read -r header
