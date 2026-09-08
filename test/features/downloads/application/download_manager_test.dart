@@ -152,16 +152,26 @@ void main()
             chapter: chapter,
             directoryPath: temporaryDirectory.path,
         );
+        final String existingTaskId = '${work.id}::${chapter.id}';
+        await repository.setStatus(
+            existingTaskId,
+            DownloadStatus.downloading,
+        );
+        final Work newWork = _novelWork();
 
         await manager.start();
-        await manager.resume('${work.id}::${chapter.id}');
-        await manager.enqueue(work, <Chapter>[chapter]);
+        await manager.resume(existingTaskId);
+        await manager.enqueue(newWork, <Chapter>[newWork.chapters.first]);
 
         final List<DownloadTaskEntry> tasks = await repository
             .watch(kind: LibraryKind.comic)
             .first;
         expect(tasks, hasLength(1));
-        expect(tasks.single.status, DownloadStatus.queued);
+        expect(tasks.single.status, DownloadStatus.downloading);
+        expect(
+            await repository.watch(kind: LibraryKind.novel).first,
+            isEmpty,
+        );
         verifyNever(
             () => libraryRepository.loadChapterPage(
                 any(),
