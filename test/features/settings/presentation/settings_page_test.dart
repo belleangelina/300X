@@ -71,6 +71,7 @@ void main()
             findsNothing,
         );
         expect(find.text('更多设置'), findsOneWidget);
+        expect(find.text('下载'), findsNothing);
     });
 
     testWidgets('小说阅读方向与阅读主题不显示选中对勾', (

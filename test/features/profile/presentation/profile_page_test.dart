@@ -112,10 +112,8 @@ void main()
         final List<Finder> entries = <Finder>[
             _tileWithText('小说收藏'),
             _tileWithText('小说记录'),
-            _tileWithText('小说下载'),
             _tileWithText('漫画收藏'),
             _tileWithText('漫画记录'),
-            _tileWithText('漫画下载'),
             _tileWithText('显示主题'),
             _tileWithText('更多设置'),
             _tileWithText('开源主页'),
@@ -126,6 +124,8 @@ void main()
         {
             expect(tester.getSize(entry).height, height);
         }
+        expect(find.text('小说下载'), findsNothing);
+        expect(find.text('漫画下载'), findsNothing);
         expect(find.text('免责声明'), findsNothing);
     });
 

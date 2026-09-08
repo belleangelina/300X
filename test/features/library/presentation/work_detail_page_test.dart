@@ -131,17 +131,15 @@ void main()
 
         expect(find.text('阅读'), findsOneWidget);
         expect(find.text('收藏'), findsOneWidget);
-        expect(find.text('下载'), findsOneWidget);
+        expect(find.text('下载'), findsNothing);
         expect(find.text('原帖'), findsOneWidget);
         final List<double> actionPositions = <double>[
             tester.getCenter(find.text('原帖')).dx,
-            tester.getCenter(find.text('下载')).dx,
             tester.getCenter(find.text('收藏')).dx,
             tester.getCenter(find.text('阅读')).dx,
         ];
         expect(actionPositions[0], lessThan(actionPositions[1]));
         expect(actionPositions[1], lessThan(actionPositions[2]));
-        expect(actionPositions[2], lessThan(actionPositions[3]));
         expect(find.byType(CircleAvatar), findsNothing);
         expect(find.text('章节目录 ·2话'), findsOneWidget);
         expect(find.text('正文'), findsOneWidget);
@@ -640,25 +638,7 @@ void main()
         expect(find.text('第三章'), findsNothing);
         expect(find.text('第四章'), findsOneWidget);
 
-        await tester.tap(find.text('下载'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('选择下载章节'), findsOneWidget);
-        expect(find.text('第一章'), findsNothing);
-        expect(find.text('第二章'), findsNWidgets(2));
-        expect(find.text('第三章'), findsNothing);
-        expect(find.text('第四章'), findsNWidgets(2));
-        final CheckboxListTile downloadedTile = tester.widget<CheckboxListTile>(
-            find.widgetWithText(CheckboxListTile, '第二章'),
-        );
-        final CheckboxListTile availableTile = tester.widget<CheckboxListTile>(
-            find.widgetWithText(CheckboxListTile, '第四章'),
-        );
-        expect(downloadedTile.value, isTrue);
-        expect(downloadedTile.onChanged, isNull);
-        expect(find.text('已完成'), findsOneWidget);
-        expect(availableTile.value, isFalse);
-        expect(availableTile.onChanged, isNotNull);
+        expect(find.text('下载'), findsNothing);
     });
 
     testWidgets('小说聚合结果等同单一译者时不显示重复智能目录', (WidgetTester tester) async

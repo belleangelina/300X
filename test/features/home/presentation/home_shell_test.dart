@@ -125,6 +125,7 @@ void main()
 
         expect(find.text('正在恢复登录状态'), findsOneWidget);
         expect(find.text('登录'), findsNothing);
+        verifyNever(() => downloadManager.start());
         verifyNever(
             () => libraryRepository.loadCatalog(
                 kind: LibraryKind.comic,

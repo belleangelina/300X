@@ -54,6 +54,7 @@ void main()
             libraryRepository,
             client,
             settingsRepository,
+            downloadsEnabled: true,
         );
         temporaryDirectory = await Directory.systemTemp.createTemp(
             'page300_manager_test_',
@@ -133,6 +134,56 @@ void main()
         );
         expect(await image.readAsBytes(), <int>[1, 2, 3, 4]);
         expect(await File('${image.path}.part').exists(), isFalse);
+    });
+
+    test('功能关闭时不恢复、入队或继续下载任务', () async
+    {
+        manager.dispose();
+        manager = DownloadManager(
+            repository,
+            libraryRepository,
+            client,
+            settingsRepository,
+        );
+        final Work work = _work();
+        final Chapter chapter = work.chapters.single;
+        await repository.enqueue(
+            work: work,
+            chapter: chapter,
+            directoryPath: temporaryDirectory.path,
+        );
+        final String existingTaskId = '${work.id}::${chapter.id}';
+        await repository.setStatus(
+            existingTaskId,
+            DownloadStatus.downloading,
+        );
+        final Work newWork = _novelWork();
+
+        await manager.start();
+        await manager.resume(existingTaskId);
+        await manager.enqueue(newWork, <Chapter>[newWork.chapters.first]);
+
+        final List<DownloadTaskEntry> tasks = await repository
+            .watch(kind: LibraryKind.comic)
+            .first;
+        expect(tasks, hasLength(1));
+        expect(tasks.single.status, DownloadStatus.downloading);
+        expect(
+            await repository.watch(kind: LibraryKind.novel).first,
+            isEmpty,
+        );
+        verifyNever(
+            () => libraryRepository.loadChapterPage(
+                any(),
+                ForumBoard.comic,
+            ),
+        );
+        verifyNever(
+            () => libraryRepository.loadChapterPage(
+                any(),
+                ForumBoard.literature,
+            ),
+        );
     });
 
     test('小说最大任务数为二时只并发处理两个章节', () async
