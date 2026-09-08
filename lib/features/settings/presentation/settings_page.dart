@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:x300/app/app_features.dart';
 import 'package:x300/features/downloads/application/download_manager.dart';
 import 'package:x300/features/library/data/work_index_repository.dart';
 import 'package:x300/features/settings/application/app_settings_controller.dart';
@@ -51,8 +52,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             appSettingsControllerProvider,
         );
         return DefaultTabController(
-            length: 4,
-            initialIndex: widget.initialIndex,
+            length: offlineDownloadsEnabled ? 4 : 3,
+            initialIndex: offlineDownloadsEnabled || widget.initialIndex < 3
+                ? widget.initialIndex
+                : 0,
             child: Scaffold(
                 appBar: AppBar(title: const Text('更多设置')),
                 body: TabBarView(
@@ -60,7 +63,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                         _buildGeneral(settings),
                         _buildComic(settings),
                         _buildNovel(settings),
-                        _buildDownloads(settings),
+                        if (offlineDownloadsEnabled) _buildDownloads(settings),
                     ],
                 ),
                 bottomNavigationBar: Material(
@@ -83,7 +86,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                                 Tab(text: '常规'),
                                 Tab(text: '漫画'),
                                 Tab(text: '小说'),
-                                Tab(text: '下载'),
+                                if (offlineDownloadsEnabled) Tab(text: '下载'),
                             ],
                         ),
                     ),

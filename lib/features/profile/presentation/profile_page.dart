@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:x300/app/app_colors.dart';
+import 'package:x300/app/app_features.dart';
 import 'package:x300/app/app_links.dart';
 import 'package:x300/core/network/forum_client.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
@@ -135,7 +136,8 @@ class ProfilePage extends ConsumerWidget
                                         ProfileDetailDestination.novelHistory,
                                     ),
                                 ),
-                                ListTile(
+                                if (offlineDownloadsEnabled)
+                                    ListTile(
                                     leading: const Icon(Remix.download_line),
                                     title: const Text('小说下载'),
                                     trailing: const Icon(Icons.chevron_right),
@@ -169,7 +171,8 @@ class ProfilePage extends ConsumerWidget
                                         ProfileDetailDestination.comicHistory,
                                     ),
                                 ),
-                                ListTile(
+                                if (offlineDownloadsEnabled)
+                                    ListTile(
                                     leading: const Icon(Remix.download_line),
                                     title: const Text('漫画下载'),
                                     trailing: const Icon(Icons.chevron_right),

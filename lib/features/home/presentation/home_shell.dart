@@ -7,7 +7,6 @@ import 'package:x300/app/app_navigation.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/auth/presentation/login_page.dart';
-import 'package:x300/features/downloads/application/download_manager.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 import 'package:x300/features/library/presentation/library_home_page.dart';
 import 'package:x300/features/library/presentation/work_detail_page.dart';
@@ -74,7 +73,6 @@ class _HomeShellState extends ConsumerState<HomeShell>
     {
         super.initState();
         WidgetsBinding.instance.addObserver(this);
-        unawaited(ref.read(downloadManagerProvider).start());
         unawaited(
             ref
                 .read(updateDownloadControllerProvider.notifier)

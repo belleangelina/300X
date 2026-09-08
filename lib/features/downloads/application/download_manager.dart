@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:x300/app/app_features.dart';
 import 'package:x300/core/network/forum_client.dart';
 import 'package:x300/core/network/forum_exceptions.dart';
 import 'package:x300/features/downloads/data/download_repository.dart';
@@ -38,8 +39,11 @@ class DownloadManager
         this._repository,
         this._libraryRepository,
         this._client,
-        this._settingsRepository,
-    );
+        this._settingsRepository, {
+        this.downloadsEnabled = offlineDownloadsEnabled,
+    });
+
+    final bool downloadsEnabled;
 
     final DownloadRepository _repository;
     final ForumLibraryRepository _libraryRepository;
@@ -58,6 +62,10 @@ class DownloadManager
 
     Future<void> start() async
     {
+        if (!downloadsEnabled)
+        {
+            return;
+        }
         if (_started)
         {
             return;
@@ -69,6 +77,10 @@ class DownloadManager
 
     Future<void> enqueue(Work work, List<Chapter> chapters) async
     {
+        if (!downloadsEnabled)
+        {
+            return;
+        }
         final Directory supportDirectory = await getApplicationSupportDirectory();
         for (final Chapter chapter in chapters)
         {
@@ -97,6 +109,10 @@ class DownloadManager
 
     Future<void> resume(String id) async
     {
+        if (!downloadsEnabled)
+        {
+            return;
+        }
         _pausedIds.remove(id);
         _deletedIds.remove(id);
         await _repository.setStatus(id, DownloadStatus.queued);
@@ -121,12 +137,16 @@ class DownloadManager
 
     void refreshLimits()
     {
+        if (!downloadsEnabled)
+        {
+            return;
+        }
         _ensureProcessing();
     }
 
     void _ensureProcessing()
     {
-        if (_disposed)
+        if (!downloadsEnabled || _disposed)
         {
             return;
         }

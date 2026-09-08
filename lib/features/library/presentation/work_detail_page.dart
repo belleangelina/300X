@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:x300/app/app_features.dart';
 import 'package:x300/features/downloads/application/download_manager.dart';
 import 'package:x300/features/downloads/data/download_repository.dart';
 import 'package:x300/features/downloads/domain/download_models.dart';
@@ -765,15 +766,16 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage>
                                     label: const Text('原帖'),
                                 ),
                             ),
-                            Expanded(
-                                child: TextButton.icon(
-                                    onPressed: chapters.isEmpty
-                                            ? null
-                                            : () => _chooseDownloads(chapters),
-                                    icon: const Icon(Icons.download_outlined),
-                                    label: const Text('下载'),
+                            if (offlineDownloadsEnabled)
+                                Expanded(
+                                    child: TextButton.icon(
+                                        onPressed: chapters.isEmpty
+                                                ? null
+                                                : () => _chooseDownloads(chapters),
+                                        icon: const Icon(Icons.download_outlined),
+                                        label: const Text('下载'),
+                                    ),
                                 ),
-                            ),
                             Expanded(child: _buildFavoriteButton()),
                             Expanded(child: _buildReadButton(chapters)),
                         ],
