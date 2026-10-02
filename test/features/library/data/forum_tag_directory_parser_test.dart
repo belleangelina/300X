@@ -2,16 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:x300/features/library/data/forum_tag_directory_parser.dart';
 import 'package:x300/features/library/domain/thread_models.dart';
 
-void main()
-{
-    const ForumTagDirectoryParser parser = ForumTagDirectoryParser();
+void main() {
+  const ForumTagDirectoryParser parser = ForumTagDirectoryParser();
 
-    test('解析移动版和桌面版主题链接并保留 Tag 分页', ()
-    {
-        final Uri uri = Uri.parse(
-            'https://bbs.yamibo.com/misc.php?mod=tag&id=15629&type=thread&mobile=2',
-        );
-        const String html = '''
+  test('解析移动版和桌面版主题链接并保留 Tag 分页', () {
+    final Uri uri = Uri.parse(
+      'https://bbs.yamibo.com/misc.php?mod=tag&id=15629&type=thread&mobile=2',
+    );
+    const String html = '''
                         <html>
                         <body class="pg_tag">
                                 <div class="threadlist">
@@ -28,19 +26,18 @@ void main()
                         </html>
                 ''';
 
-        final ForumTagDirectoryPage page = parser.parse(html, uri);
+    final ForumTagDirectoryPage page = parser.parse(html, uri);
 
-        expect(page.links.map((ThreadLink link) => link.tid), <int?>[101, 102]);
-        expect(page.links.first.label, '作品 第1话');
-        expect(page.nextPageUri?.queryParameters['page'], '2');
-    });
+    expect(page.links.map((ThreadLink link) => link.tid), <int?>[101, 102]);
+    expect(page.links.first.label, '作品 第1话');
+    expect(page.nextPageUri?.queryParameters['page'], '2');
+  });
 
-    test('拒绝降级到 HTTP 的下一页', ()
-    {
-        final Uri uri = Uri.parse(
-            'https://bbs.yamibo.com/misc.php?mod=tag&id=15629&type=thread',
-        );
-        const String html = '''
+  test('拒绝降级到 HTTP 的下一页', () {
+    final Uri uri = Uri.parse(
+      'https://bbs.yamibo.com/misc.php?mod=tag&id=15629&type=thread',
+    );
+    const String html = '''
                         <html>
                         <body class="pg_tag">
                                 <div class="threadlist">
@@ -53,8 +50,8 @@ void main()
                         </html>
                 ''';
 
-        final ForumTagDirectoryPage page = parser.parse(html, uri);
+    final ForumTagDirectoryPage page = parser.parse(html, uri);
 
-        expect(page.nextPageUri, isNull);
-    });
+    expect(page.nextPageUri, isNull);
+  });
 }
