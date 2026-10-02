@@ -8,55 +8,50 @@ import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/data/auth_repository.dart';
 import 'package:x300/features/settings/data/app_settings_repository.dart';
 
-class AppDependencies
-{
-    AppDependencies._({
-        required this.client,
-        required this.credentialStore,
-        required this.authRepository,
-        required this.settingsRepository,
-    });
+class AppDependencies {
+  AppDependencies._({
+    required this.client,
+    required this.credentialStore,
+    required this.authRepository,
+    required this.settingsRepository,
+  });
 
-    final ForumClient client;
-    final CredentialStore credentialStore;
-    final AuthRepository authRepository;
-    final AppSettingsRepository settingsRepository;
+  final ForumClient client;
+  final CredentialStore credentialStore;
+  final AuthRepository authRepository;
+  final AppSettingsRepository settingsRepository;
 
-    Widget buildScope(Widget child)
-    {
-        return ProviderScope(
-            overrides: [
-                forumClientProvider.overrideWithValue(client),
-                credentialStoreProvider.overrideWithValue(credentialStore),
-                authRepositoryProvider.overrideWithValue(authRepository),
-                appSettingsRepositoryProvider.overrideWithValue(
-                    settingsRepository,
-                ),
-            ],
-            child: child,
-        );
-    }
+  Widget buildScope(Widget child) {
+    return ProviderScope(
+      overrides: [
+        forumClientProvider.overrideWithValue(client),
+        credentialStoreProvider.overrideWithValue(credentialStore),
+        authRepositoryProvider.overrideWithValue(authRepository),
+        appSettingsRepositoryProvider.overrideWithValue(settingsRepository),
+      ],
+      child: child,
+    );
+  }
 
-    static Future<AppDependencies> create() async
-    {
-        final ForumClient client = await ForumClient.create(
-            wafChallengeSolver: createPlatformWafChallengeSolver(),
-        );
-        const CredentialStore credentialStore = SecureCredentialStore();
-        final AuthRepository authRepository = AuthRepository(
-            client,
-            credentialStore,
-        );
-        final SharedPreferences preferences =
-            await SharedPreferences.getInstance();
-        final AppSettingsRepository settingsRepository =
-            AppSettingsRepository(preferences);
+  static Future<AppDependencies> create() async {
+    final ForumClient client = await ForumClient.create(
+      wafChallengeSolver: createPlatformWafChallengeSolver(),
+    );
+    const CredentialStore credentialStore = SecureCredentialStore();
+    final AuthRepository authRepository = AuthRepository(
+      client,
+      credentialStore,
+    );
+    final SharedPreferences preferences = await SharedPreferences.getInstance();
+    final AppSettingsRepository settingsRepository = AppSettingsRepository(
+      preferences,
+    );
 
-        return AppDependencies._(
-            client: client,
-            credentialStore: credentialStore,
-            authRepository: authRepository,
-            settingsRepository: settingsRepository,
-        );
-    }
+    return AppDependencies._(
+      client: client,
+      credentialStore: credentialStore,
+      authRepository: authRepository,
+      settingsRepository: settingsRepository,
+    );
+  }
 }

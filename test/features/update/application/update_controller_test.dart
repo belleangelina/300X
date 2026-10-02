@@ -11,165 +11,146 @@ import 'package:x300/features/update/application/update_platform.dart';
 import 'package:x300/features/update/data/update_repository.dart';
 import 'package:x300/features/update/domain/update_models.dart';
 
-class _MockUpdateRepository extends Mock implements UpdateRepository
-{
-}
+class _MockUpdateRepository extends Mock implements UpdateRepository {}
 
-void main()
-{
-    late AppSettingsRepository settingsRepository;
-    late _MockUpdateRepository updateRepository;
+void main() {
+  late AppSettingsRepository settingsRepository;
+  late _MockUpdateRepository updateRepository;
 
-    setUp(() async
-    {
-        UpdatePlatform.platformOverride = 'android';
-        SharedPreferences.setMockInitialValues(<String, Object>{});
-        settingsRepository = AppSettingsRepository(
-            await SharedPreferences.getInstance(),
-        );
-        updateRepository = _MockUpdateRepository();
-        PackageInfo.setMockInitialValues(
-            appName: '300X',
-            packageName: 'com.yamibox300',
-            version: '1.0.4',
-            buildNumber: '7',
-            buildSignature: '',
-        );
-    });
+  setUp(() async {
+    UpdatePlatform.platformOverride = 'android';
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    settingsRepository = AppSettingsRepository(
+      await SharedPreferences.getInstance(),
+    );
+    updateRepository = _MockUpdateRepository();
+    PackageInfo.setMockInitialValues(
+      appName: '300X',
+      packageName: 'com.yamibox300',
+      version: '1.0.4',
+      buildNumber: '7',
+      buildSignature: '',
+    );
+  });
 
-    tearDown(()
-    {
-        UpdatePlatform.platformOverride = null;
-    });
+  tearDown(() {
+    UpdatePlatform.platformOverride = null;
+  });
 
-    test('自动检查遵守关闭开关和 24 小时间隔', () async
-    {
-        await settingsRepository.save(
-            const AppSettings(automaticUpdateChecks: false),
-        );
-        final ProviderContainer disabled = _container(
-            settingsRepository,
-            updateRepository,
-        );
-        addTearDown(disabled.dispose);
+  test('自动检查遵守关闭开关和 24 小时间隔', () async {
+    await settingsRepository.save(
+      const AppSettings(automaticUpdateChecks: false),
+    );
+    final ProviderContainer disabled = _container(
+      settingsRepository,
+      updateRepository,
+    );
+    addTearDown(disabled.dispose);
 
-        await disabled
-            .read(updateControllerProvider.notifier)
-            .checkAutomatically();
-        verifyNever(updateRepository.fetchLatest);
+    await disabled.read(updateControllerProvider.notifier).checkAutomatically();
+    verifyNever(updateRepository.fetchLatest);
 
-        await settingsRepository.save(const AppSettings());
-        disabled.read(appSettingsControllerProvider.notifier).update(
-            const AppSettings(),
-        );
-        when(updateRepository.fetchLatest).thenAnswer(
-            (_) async => _manifest(buildNumber: 11),
-        );
-        await disabled
-            .read(updateControllerProvider.notifier)
-            .checkAutomatically();
-        verify(updateRepository.fetchLatest).called(1);
+    await settingsRepository.save(const AppSettings());
+    disabled
+        .read(appSettingsControllerProvider.notifier)
+        .update(const AppSettings());
+    when(
+      updateRepository.fetchLatest,
+    ).thenAnswer((_) async => _manifest(buildNumber: 11));
+    await disabled.read(updateControllerProvider.notifier).checkAutomatically();
+    verify(updateRepository.fetchLatest).called(1);
 
-        await settingsRepository.saveSuccessfulUpdateCheck(DateTime.now());
-        final ProviderContainer recent = _container(
-            settingsRepository,
-            updateRepository,
-        );
-        addTearDown(recent.dispose);
+    await settingsRepository.saveSuccessfulUpdateCheck(DateTime.now());
+    final ProviderContainer recent = _container(
+      settingsRepository,
+      updateRepository,
+    );
+    addTearDown(recent.dispose);
 
-        await recent
-            .read(updateControllerProvider.notifier)
-            .checkAutomatically();
-        verifyNever(updateRepository.fetchLatest);
-    });
+    await recent.read(updateControllerProvider.notifier).checkAutomatically();
+    verifyNever(updateRepository.fetchLatest);
+  });
 
-    test('自动检查不提示已忽略构建，手动检查仍返回该更新', () async
-    {
-        final UpdateManifest manifest = _manifest(buildNumber: 11);
-        await settingsRepository.ignoreUpdateBuild(11);
-        when(updateRepository.fetchLatest).thenAnswer((_) async => manifest);
-        final ProviderContainer container = _container(
-            settingsRepository,
-            updateRepository,
-        );
-        addTearDown(container.dispose);
+  test('自动检查不提示已忽略构建，手动检查仍返回该更新', () async {
+    final UpdateManifest manifest = _manifest(buildNumber: 11);
+    await settingsRepository.ignoreUpdateBuild(11);
+    when(updateRepository.fetchLatest).thenAnswer((_) async => manifest);
+    final ProviderContainer container = _container(
+      settingsRepository,
+      updateRepository,
+    );
+    addTearDown(container.dispose);
 
-        await container
-            .read(updateControllerProvider.notifier)
-            .checkAutomatically();
-        expect(container.read(updateControllerProvider).pending, isNull);
+    await container
+        .read(updateControllerProvider.notifier)
+        .checkAutomatically();
+    expect(container.read(updateControllerProvider).pending, isNull);
 
-        final UpdateManifest? manual = await container
-            .read(updateControllerProvider.notifier)
-            .checkManually();
-        expect(manual, same(manifest));
-        expect(container.read(updateControllerProvider).pending, same(manifest));
-    });
+    final UpdateManifest? manual = await container
+        .read(updateControllerProvider.notifier)
+        .checkManually();
+    expect(manual, same(manifest));
+    expect(container.read(updateControllerProvider).pending, same(manifest));
+  });
 
-    test('自动检查失败保持静默且不记录成功时间', () async
-    {
-        when(updateRepository.fetchLatest).thenThrow(Exception('offline'));
-        final ProviderContainer container = _container(
-            settingsRepository,
-            updateRepository,
-        );
-        addTearDown(container.dispose);
+  test('自动检查失败保持静默且不记录成功时间', () async {
+    when(updateRepository.fetchLatest).thenThrow(Exception('offline'));
+    final ProviderContainer container = _container(
+      settingsRepository,
+      updateRepository,
+    );
+    addTearDown(container.dispose);
 
-        await container
-            .read(updateControllerProvider.notifier)
-            .checkAutomatically();
+    await container
+        .read(updateControllerProvider.notifier)
+        .checkAutomatically();
 
-        expect(container.read(updateControllerProvider).pending, isNull);
-        expect(settingsRepository.lastSuccessfulUpdateCheck, isNull);
-    });
+    expect(container.read(updateControllerProvider).pending, isNull);
+    expect(settingsRepository.lastSuccessfulUpdateCheck, isNull);
+  });
 
-    test('不支持的平台不检查更新', () async
-    {
-        UpdatePlatform.platformOverride = 'linux';
-        final ProviderContainer container = _container(
-            settingsRepository,
-            updateRepository,
-        );
-        addTearDown(container.dispose);
+  test('不支持的平台不检查更新', () async {
+    UpdatePlatform.platformOverride = 'linux';
+    final ProviderContainer container = _container(
+      settingsRepository,
+      updateRepository,
+    );
+    addTearDown(container.dispose);
 
-        await container
-            .read(updateControllerProvider.notifier)
-            .checkAutomatically();
-        final UpdateManifest? manifest = await container
-            .read(updateControllerProvider.notifier)
-            .checkManually();
+    await container
+        .read(updateControllerProvider.notifier)
+        .checkAutomatically();
+    final UpdateManifest? manifest = await container
+        .read(updateControllerProvider.notifier)
+        .checkManually();
 
-        verifyNever(updateRepository.fetchLatest);
-        expect(manifest, isNull);
-        expect(
-            container.read(updateControllerProvider).manualMessage,
-            '当前平台暂不支持应用内更新',
-        );
-    });
+    verifyNever(updateRepository.fetchLatest);
+    expect(manifest, isNull);
+    expect(
+      container.read(updateControllerProvider).manualMessage,
+      '当前平台暂不支持应用内更新',
+    );
+  });
 }
 
 ProviderContainer _container(
-    AppSettingsRepository settingsRepository,
-    UpdateRepository updateRepository,
-)
-{
-    return ProviderContainer(
-        overrides: [
-            appSettingsRepositoryProvider.overrideWithValue(
-                settingsRepository,
-            ),
-            updateRepositoryProvider.overrideWithValue(updateRepository),
-        ],
-    );
+  AppSettingsRepository settingsRepository,
+  UpdateRepository updateRepository,
+) {
+  return ProviderContainer(
+    overrides: [
+      appSettingsRepositoryProvider.overrideWithValue(settingsRepository),
+      updateRepositoryProvider.overrideWithValue(updateRepository),
+    ],
+  );
 }
 
-UpdateManifest _manifest({required int buildNumber})
-{
-    return UpdateManifest(
-        versionName: '1.0.8',
-        buildNumber: buildNumber,
-        releaseNotes: '测试更新',
-        publishedAt: DateTime.utc(2026, 8, 12),
-        artifacts: const <UpdateArtifact>[],
-    );
+UpdateManifest _manifest({required int buildNumber}) {
+  return UpdateManifest(
+    versionName: '1.0.8',
+    buildNumber: buildNumber,
+    releaseNotes: '测试更新',
+    publishedAt: DateTime.utc(2026, 8, 12),
+    artifacts: const <UpdateArtifact>[],
+  );
 }
