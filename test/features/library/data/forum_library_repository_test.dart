@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,10 +8,25 @@ import 'package:x300/core/network/forum_client.dart';
 import 'package:x300/features/library/data/forum_catalog_parser.dart';
 import 'package:x300/features/library/data/forum_library_repository.dart';
 import 'package:x300/features/library/data/forum_thread_parser.dart';
+import 'package:x300/features/library/data/work_aggregator.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 import 'package:x300/features/library/domain/thread_models.dart';
 
 class _MockForumClient extends Mock implements ForumClient {}
+
+class _BackgroundOnlyAggregator extends WorkAggregator {
+  const _BackgroundOnlyAggregator(this.caller);
+
+  final SendPort caller;
+
+  @override
+  List<Work> aggregate(List<SourceThread> sourceThreads) {
+    if (Isolate.current.controlPort == caller) {
+      throw StateError('Catalog aggregation ran on the UI isolate');
+    }
+    return super.aggregate(sourceThreads);
+  }
+}
 
 class _SlowThreadParser extends ForumThreadParser {
   const _SlowThreadParser();
@@ -70,6 +86,75 @@ void main() {
         statusCode: 200,
       );
     });
+  });
+
+  test('目录首屏、分页和累计聚合均在后台执行并保留聚合结果', () async {
+    final ForumLibraryRepository backgroundRepository = ForumLibraryRepository(
+      client,
+      const ForumCatalogParser(),
+      const ForumThreadParser(),
+      _BackgroundOnlyAggregator(Isolate.current.controlPort),
+    );
+    final List<SourceThread> threads = List<SourceThread>.generate(
+      120,
+      (int index) => SourceThread(
+        tid: index + 1,
+        board: ForumBoard.comic,
+        title: '测试系列${index ~/ 3} 第${index % 3 + 1}话',
+        uri: Uri.parse('https://bbs.yamibo.com/thread-${index + 1}-1-1.html'),
+        typeName: '#長篇連載',
+      ),
+    );
+    final List<Work> expected = repository.aggregateThreads(threads);
+    final Future<List<Work>> pending = backgroundRepository
+        .aggregateThreadsInBackground(threads);
+    // Mutating the caller's collection must not affect the worker snapshot.
+    threads.clear();
+    final List<Work> actual = await pending;
+    expect(
+      actual.map((Work work) => work.id),
+      expected.map((Work work) => work.id),
+    );
+    expect(
+      actual.map(
+        (Work work) =>
+            work.chapters.map((Chapter chapter) => chapter.id).toList(),
+      ),
+      expected.map(
+        (Work work) =>
+            work.chapters.map((Chapter chapter) => chapter.id).toList(),
+      ),
+    );
+    final WorkCatalogPage first = await backgroundRepository.loadCatalog(
+      kind: LibraryKind.comic,
+      section: CatalogSection.updated,
+    );
+    final WorkCatalogPage cursor = WorkCatalogPage(
+      works: first.works,
+      sourceThreads: first.sourceThreads,
+      categories: first.categories,
+      pages: <ForumBoard, ForumCatalogPage>{
+        ForumBoard.comic: ForumCatalogPage(
+          board: ForumBoard.comic,
+          threads: first.sourceThreads,
+          pinnedThreads: const <SourceThread>[],
+          categories: first.categories,
+          currentPage: 1,
+          totalPages: 2,
+          nextPageUri: Uri.parse(
+            'https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=30&page=2',
+          ),
+        ),
+      },
+    );
+    final WorkCatalogPage next = await backgroundRepository.loadNextCatalog(
+      cursor: cursor,
+      section: CatalogSection.updated,
+    );
+    expect(
+      next.sourceThreads.map((SourceThread thread) => thread.tid),
+      first.sourceThreads.map((SourceThread thread) => thread.tid),
+    );
   });
 
   test('详情通过只看楼主分页合并完整楼主正文并复用结果', () async {

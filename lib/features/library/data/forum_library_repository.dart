@@ -99,7 +99,7 @@ class ForumLibraryRepository {
         .toList(growable: false);
 
     return WorkCatalogPage(
-      works: _aggregator.aggregate(sourceThreads),
+      works: await aggregateThreadsInBackground(sourceThreads),
       sourceThreads: sourceThreads,
       categories: categories,
       pages: pages,
@@ -129,7 +129,7 @@ class ForumLibraryRepository {
       section,
     );
     return WorkCatalogPage(
-      works: _aggregator.aggregate(sourceThreads),
+      works: await aggregateThreadsInBackground(sourceThreads),
       sourceThreads: sourceThreads,
       categories: loadedPages
           .expand((ForumCatalogPage value) => value.categories)
@@ -142,6 +142,18 @@ class ForumLibraryRepository {
 
   List<Work> aggregateThreads(List<SourceThread> sourceThreads) {
     return _aggregator.aggregate(sourceThreads);
+  }
+
+  Future<List<Work>> aggregateThreadsInBackground(
+    List<SourceThread> sourceThreads,
+  ) {
+    // Capture only sendable data, not the repository's client and pending loads.
+    final WorkAggregator aggregator = _aggregator;
+    final List<SourceThread> snapshot = List<SourceThread>.of(sourceThreads);
+    return Isolate.run(
+      () => aggregator.aggregate(snapshot),
+      debugName: 'x300-catalog-aggregation',
+    );
   }
 
   Future<ForumThreadPage> loadThread(

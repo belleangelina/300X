@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show SliverLayoutDimensions;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:x300/core/network/forum_exceptions.dart';
@@ -366,16 +367,18 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
   }
 
   Widget _buildList() {
-    return ListView.separated(
+    return ListView.builder(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       itemCount: _works.length + (_loadingMore ? 1 : 0),
-      separatorBuilder: (BuildContext context, int index) => Divider(
-        height: 1,
-        indent: 12,
-        endIndent: 12,
-        color: Colors.grey.withValues(alpha: 0.2),
-      ),
+      // WorkListTile has a 110px body and 12px padding on each side.
+      // Known extents avoid laying out skipped rows during a fast scroll.
+      itemExtentBuilder: (int index, SliverLayoutDimensions dimensions) {
+        if (index >= _works.length) {
+          return 76; // 36px progress indicator + 40px padding.
+        }
+        return index < _works.length - 1 || _loadingMore ? 135 : 134;
+      },
       itemBuilder: (BuildContext context, int index) {
         if (index >= _works.length) {
           return const Padding(
@@ -384,10 +387,21 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
           );
         }
         final Work work = _works[index];
-        return WorkListTile(
-          work: work,
-          rank: _sort == CatalogSection.ranking ? index + 1 : null,
-          onTap: () => widget.onOpenWork(work),
+        return Column(
+          children: <Widget>[
+            WorkListTile(
+              work: work,
+              rank: _sort == CatalogSection.ranking ? index + 1 : null,
+              onTap: () => widget.onOpenWork(work),
+            ),
+            if (index < _works.length - 1 || _loadingMore)
+              Divider(
+                height: 1,
+                indent: 12,
+                endIndent: 12,
+                color: Colors.grey.withValues(alpha: 0.2),
+              ),
+          ],
         );
       },
     );
@@ -575,15 +589,25 @@ class _CatalogFeedViewState extends ConsumerState<_CatalogFeedView>
       final Set<int> knownThreads = _sourceThreads
           .map((SourceThread value) => value.tid)
           .toSet();
+      final List<SourceThread> mergedThreads = <SourceThread>[
+        ..._sourceThreads,
+        ...page.sourceThreads.where(
+          (SourceThread value) => knownThreads.add(value.tid),
+        ),
+      ];
+      final List<Work> works = await repository.aggregateThreadsInBackground(
+        mergedThreads,
+      );
+      if (!mounted || generation != _generation) {
+        return;
+      }
       setState(() {
         _cursor = page;
-        _sourceThreads.addAll(
-          page.sourceThreads.where(
-            (SourceThread value) => knownThreads.add(value.tid),
-          ),
-        );
+        _sourceThreads
+          ..clear()
+          ..addAll(mergedThreads);
         _mergeCategories(page.categories);
-        _works = repository.aggregateThreads(_sourceThreads);
+        _works = works;
         _updatePageRange(page, reset: false);
         _loadingMore = false;
       });
