@@ -142,7 +142,6 @@ void main() {
       expect(repository.lastPage, page);
       expect(tester.takeException(), isNull);
     }
-    binding.removeTimingsCallback(collectTimings);
     expect(frames, isNotEmpty);
     binding.reportData = <String, dynamic>{
       'catalog_scroll': <String, dynamic>{

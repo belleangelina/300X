@@ -4,7 +4,9 @@ on:
   workflow_dispatch:
   push:
     branches: [fix-catalog-scroll-jank-20261003]
-    paths: [.github/workflows/android-test-build.yml]
+    paths:
+      - .github/workflows/android-test-build.yml
+      - integration_test/catalog_scroll_test.dart
 
 permissions:
   contents: read
