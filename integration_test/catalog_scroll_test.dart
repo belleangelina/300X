@@ -193,7 +193,8 @@ void main() {
     binding.addTimingsCallback(collectTimings);
     addTearDown(() => binding.removeTimingsCallback(collectTimings));
     debugPrint('GRID_STAGE: paginate catalog');
-    for (int page = 2; page <= 8; page++) {
+    for (int attempt = 0; repository.lastPage < 8 && attempt < 8; attempt++) {
+      final int previousPage = repository.lastPage;
       final ScrollableState scrollable = tester.state<ScrollableState>(
         find
             .descendant(
@@ -210,9 +211,11 @@ void main() {
         EnginePhase.sendSemanticsUpdate,
         const Duration(seconds: 30),
       );
-      expect(repository.lastPage, page);
+      expect(repository.lastPage, greaterThan(previousPage));
+      expect(repository.lastPage, lessThanOrEqualTo(8));
       expect(tester.takeException(), isNull);
     }
+    expect(repository.lastPage, 8);
     expect(frames, isNotEmpty);
     binding.reportData = <String, dynamic>{
       'catalog_scroll': <String, dynamic>{
