@@ -80,6 +80,7 @@ class _Catalog extends ForumLibraryRepository {
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  binding.defaultTestTimeout = const Timeout(Duration(minutes: 5));
   testWidgets('长目录实际列表滑动、分页、网格和刷新', (tester) async {
     final repository = _Catalog();
     final covers = _Covers();
@@ -94,6 +95,7 @@ void main() {
       PaintingBinding.instance.imageCache.clearLiveImages();
       await directory.delete(recursive: true);
     });
+    debugPrint('GRID_STAGE: create fixture images');
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.drawRect(
@@ -118,6 +120,7 @@ void main() {
       await file.writeAsBytes(bytes);
       coverFiles[tid] = file.uri;
     }
+    debugPrint('GRID_STAGE: fixtures ready');
     final Set<int> resolvedCovers = <int>{};
     int pausedCoverQueries = 0;
     int coverQueries = 0;
@@ -177,7 +180,11 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 30),
+    );
     expect(find.byType(WorkListTile), findsWidgets);
     // Collect engine timings directly. Timeline/GC collection connects to a
     // host VM-service port that is not reachable from an Android emulator.
@@ -185,6 +192,7 @@ void main() {
     final void Function(List<FrameTiming>) collectTimings = frames.addAll;
     binding.addTimingsCallback(collectTimings);
     addTearDown(() => binding.removeTimingsCallback(collectTimings));
+    debugPrint('GRID_STAGE: paginate catalog');
     for (int page = 2; page <= 8; page++) {
       final ScrollableState scrollable = tester.state<ScrollableState>(
         find
@@ -197,7 +205,11 @@ void main() {
       scrollable.position.jumpTo(scrollable.position.maxScrollExtent - 600);
       await tester.pump();
       await tester.fling(find.byType(ListView), const Offset(0, -650), 1800);
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 100),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 30),
+      );
       expect(repository.lastPage, page);
       expect(tester.takeException(), isNull);
     }
@@ -213,7 +225,11 @@ void main() {
       },
     };
     await tester.tap(find.byKey(const ValueKey<String>('catalog-view-toggle')));
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 30),
+    );
     expect(find.byType(WorkGridCard), findsWidgets);
     // Preload the entire existing catalog; this scenario never waits for a
     // new page. Revisit the same covers after their widgets have been recycled.
@@ -222,21 +238,39 @@ void main() {
       find.descendant(of: grid, matching: find.byType(Scrollable)).first,
     );
     final position = gridScrollable.position;
+    debugPrint('GRID_STAGE: preload existing grid');
     for (
       double offset = 0;
       offset < position.maxScrollExtent;
       offset += position.viewportDimension * 0.8
     ) {
       position.jumpTo(offset);
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 100),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 30),
+      );
       await tester.pump(const Duration(milliseconds: 200));
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 100),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 30),
+      );
     }
     position.jumpTo(position.maxScrollExtent);
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 30),
+    );
     await tester.pump(const Duration(milliseconds: 200));
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 30),
+    );
     expect(repository.lastPage, 8);
+    debugPrint('GRID_STAGE: preload complete; covers=${resolvedCovers.length}');
     final int queriesBeforeGrid = coverQueries;
     final int gridFrameStart = frames.length;
     for (int sweep = 0; sweep < 12; sweep++) {
@@ -245,7 +279,11 @@ void main() {
       await tester.fling(grid, Offset(0, sweep.isEven ? -1200 : 1200), 9000);
       await tester.pump(const Duration(milliseconds: 50));
       await tester.fling(grid, Offset(0, sweep.isEven ? 1200 : -1200), 9000);
-      await tester.pumpAndSettle();
+      await tester.pumpAndSettle(
+        const Duration(milliseconds: 100),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 30),
+      );
       expect(repository.lastPage, 8);
       expect(tester.takeException(), isNull);
     }
@@ -258,8 +296,13 @@ void main() {
       'additional_cover_queries': coverQueries - queriesBeforeGrid,
       'preloaded_covers': resolvedCovers.length,
     };
+    debugPrint('GRID_STAGE: warm flings complete');
     await controller.scrollToTopAndRefresh();
-    await tester.pumpAndSettle();
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 30),
+    );
     expect(repository.lastPage, 1);
     expect(tester.takeException(), isNull);
     // The report is included in the captured validation log, not committed data.

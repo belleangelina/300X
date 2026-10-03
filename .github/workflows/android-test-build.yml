@@ -8,6 +8,10 @@ on:
       - .github/workflows/android-test-build.yml
       - integration_test/catalog_scroll_test.dart
 
+concurrency:
+  group: android-test-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -79,6 +83,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Android scroll regression and signed APK launch
+        timeout-minutes: 12
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
