@@ -35,6 +35,8 @@ jobs:
           flutter test test/features/library/data/forum_library_repository_test.dart \
             test/features/library/data/work_aggregator_test.dart \
             test/features/library/presentation/library_home_page_test.dart \
+            test/features/library/presentation/work_cover_test.dart \
+            test/features/library/presentation/cover_load_interaction_boundary_test.dart \
             > .artifacts/validation/logs/regression.log 2>&1
       - name: Configure existing Android signing
         env:

@@ -8,6 +8,10 @@ import 'package:x300/features/library/domain/library_models.dart';
 final workCoverProvider = FutureProvider.autoDispose.family<Uri?, CoverRequest>(
   (Ref ref, CoverRequest request) {
     final CoverRepository repository = ref.watch(coverRepositoryProvider);
+    final Uri? cached = repository.peek(request);
+    if (cached != null) {
+      return cached;
+    }
     final CoverLoadCoordinator coordinator = ref.watch(
       coverLoadCoordinatorProvider,
     );
@@ -124,6 +128,8 @@ class _WorkCoverState extends ConsumerState<WorkCover> {
   Uri? _visibleUri;
   Uri? _reportedBrokenUri;
   bool _waitingForDisplayResume = false;
+  bool _waitingForResolveResume = false;
+  bool _hasCoverSubscription = false;
 
   CoverRequest get _request => CoverRequest(
     work: widget.work,
@@ -157,6 +163,7 @@ class _WorkCoverState extends ConsumerState<WorkCover> {
     if (oldRequest.cacheKey == request.cacheKey) {
       return;
     }
+    _hasCoverSubscription = false;
     final bool sameVisualWork =
         oldRequest.work.kind == request.work.kind &&
         (oldRequest.sourceTid == request.sourceTid ||
@@ -169,7 +176,15 @@ class _WorkCoverState extends ConsumerState<WorkCover> {
   @override
   Widget build(BuildContext context) {
     final CoverRequest request = _request;
-    final AsyncValue<Uri?>? cover = TickerMode.valuesOf(context).enabled
+    final bool enabled = TickerMode.valuesOf(context).enabled;
+    // Keep existing subscriptions, but do not start cache/database work for
+    // newly exposed cards during a fling. Offscreen cards can then disappear
+    // without ever creating a provider or a repository operation.
+    final bool resolve =
+        enabled && (_hasCoverSubscription || !_loadCoordinator.paused);
+    _waitingForResolveResume = enabled && !resolve;
+    _hasCoverSubscription = resolve;
+    final AsyncValue<Uri?>? cover = resolve
         ? ref.watch(workCoverProvider(request))
         : null;
     final Uri? resolved = switch (cover) {
@@ -289,10 +304,13 @@ class _WorkCoverState extends ConsumerState<WorkCover> {
   }
 
   void _handleLoadCoordinatorChanged() {
-    if (!mounted || !_waitingForDisplayResume || _loadCoordinator.paused) {
+    if (!mounted ||
+        (!_waitingForDisplayResume && !_waitingForResolveResume) ||
+        _loadCoordinator.paused) {
       return;
     }
     _waitingForDisplayResume = false;
+    _waitingForResolveResume = false;
     setState(() {});
   }
 

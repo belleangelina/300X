@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'dart:ui' show FrameTiming;
 
 import 'package:flutter/material.dart';
@@ -12,6 +14,7 @@ import 'package:x300/features/library/data/cover_repository.dart';
 import 'package:x300/features/library/data/forum_library_repository.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 import 'package:x300/features/library/presentation/library_home_page.dart';
+import 'package:x300/features/library/presentation/cover_load_interaction_boundary.dart';
 import 'package:x300/features/library/presentation/work_widgets.dart';
 import 'package:x300/features/settings/data/app_settings_repository.dart';
 
@@ -80,6 +83,44 @@ void main() {
   testWidgets('长目录实际列表滑动、分页、网格和刷新', (tester) async {
     final repository = _Catalog();
     final covers = _Covers();
+    final coordinator = CoverLoadCoordinator();
+    addTearDown(coordinator.dispose);
+    final directory = await Directory.systemTemp.createTemp(
+      'x300-grid-covers-',
+    );
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+      await directory.delete(recursive: true);
+    });
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.drawRect(
+      const Rect.fromLTWH(0, 0, 900, 1200),
+      Paint()..color = Colors.blue,
+    );
+    canvas.drawCircle(
+      const Offset(450, 600),
+      300,
+      Paint()..color = Colors.amber,
+    );
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(900, 1200);
+    final bytes = (await image.toByteData(
+      format: ui.ImageByteFormat.png,
+    ))!.buffer.asUint8List();
+    image.dispose();
+    picture.dispose();
+    final Map<int, Uri> coverFiles = <int, Uri>{};
+    for (int tid = 1; tid <= 1200; tid++) {
+      final file = File('${directory.path}/$tid.png');
+      await file.writeAsBytes(bytes);
+      coverFiles[tid] = file.uri;
+    }
+    final Set<int> resolvedCovers = <int>{};
+    int pausedCoverQueries = 0;
+    int coverQueries = 0;
     registerFallbackValue(
       SourceThread(
         tid: 1,
@@ -88,13 +129,26 @@ void main() {
         uri: Uri.parse('https://example.invalid/thread-1'),
       ),
     );
-    // Cover lookups are stubbed so no real forum session or content is needed.
+    // Synthetic local images exercise real file decoding without forum credentials.
     final initial = await repository.loadCatalog(
       kind: LibraryKind.comic,
       section: CatalogSection.updated,
     );
     registerFallbackValue(initial.works.first);
-    when(() => covers.resolve(any())).thenAnswer((_) async => null);
+    registerFallbackValue(CoverRequest(work: initial.works.first));
+    when(() => covers.peek(any())).thenAnswer((invocation) {
+      final request = invocation.positionalArguments.single as CoverRequest;
+      return resolvedCovers.contains(request.sourceTid)
+          ? coverFiles[request.sourceTid]
+          : null;
+    });
+    when(() => covers.resolve(any())).thenAnswer((invocation) async {
+      coverQueries++;
+      if (coordinator.paused) pausedCoverQueries++;
+      final work = invocation.positionalArguments.single as Work;
+      resolvedCovers.add(work.primarySourceTid);
+      return coverFiles[work.primarySourceTid];
+    });
     SharedPreferences.setMockInitialValues(<String, Object>{});
     final settings = AppSettingsRepository(
       await SharedPreferences.getInstance(),
@@ -105,9 +159,14 @@ void main() {
         overrides: [
           forumLibraryRepositoryProvider.overrideWithValue(repository),
           coverRepositoryProvider.overrideWithValue(covers),
+          coverLoadCoordinatorProvider.overrideWithValue(coordinator),
           appSettingsRepositoryProvider.overrideWithValue(settings),
         ],
         child: MaterialApp(
+          builder: (context, child) => CoverLoadInteractionBoundary(
+            coordinator: coordinator,
+            child: child!,
+          ),
           home: LibraryHomePage(
             kind: LibraryKind.comic,
             authState: const AuthState.authenticated('synthetic-test'),
@@ -156,12 +215,49 @@ void main() {
     await tester.tap(find.byKey(const ValueKey<String>('catalog-view-toggle')));
     await tester.pumpAndSettle();
     expect(find.byType(WorkGridCard), findsWidgets);
-    await tester.fling(
-      find.byType(CustomScrollView).last,
-      const Offset(0, 500),
-      1500,
+    // Preload the entire existing catalog; this scenario never waits for a
+    // new page. Revisit the same covers after their widgets have been recycled.
+    final grid = find.byType(CustomScrollView).last;
+    final ScrollableState gridScrollable = tester.state<ScrollableState>(
+      find.descendant(of: grid, matching: find.byType(Scrollable)).first,
     );
+    final position = gridScrollable.position;
+    for (
+      double offset = 0;
+      offset < position.maxScrollExtent;
+      offset += position.viewportDimension * 0.8
+    ) {
+      position.jumpTo(offset);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+    }
+    position.jumpTo(position.maxScrollExtent);
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    expect(repository.lastPage, 8);
+    final int queriesBeforeGrid = coverQueries;
+    final int gridFrameStart = frames.length;
+    for (int sweep = 0; sweep < 12; sweep++) {
+      position.jumpTo(position.maxScrollExtent * (sweep.isEven ? 0.3 : 0.7));
+      await tester.pump();
+      await tester.fling(grid, Offset(0, sweep.isEven ? -1200 : 1200), 9000);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.fling(grid, Offset(0, sweep.isEven ? 1200 : -1200), 9000);
+      await tester.pumpAndSettle();
+      expect(repository.lastPage, 8);
+      expect(tester.takeException(), isNull);
+    }
+    expect(pausedCoverQueries, 0);
+    expect(coverQueries, queriesBeforeGrid);
+    expect(find.byType(Image), findsWidgets);
+    binding.reportData!['warm_grid_scroll'] = <String, dynamic>{
+      'frame_count': frames.length - gridFrameStart,
+      'cover_queries_while_scrolling': pausedCoverQueries,
+      'additional_cover_queries': coverQueries - queriesBeforeGrid,
+      'preloaded_covers': resolvedCovers.length,
+    };
     await controller.scrollToTopAndRefresh();
     await tester.pumpAndSettle();
     expect(repository.lastPage, 1);
