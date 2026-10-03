@@ -576,7 +576,7 @@ class ForumLibraryRepository {
           query.addAll(<String, dynamic>{'filter': 'digest', 'digest': '1'});
         case CatalogSection.updated:
           query.addAll(<String, dynamic>{
-            'filter': 'author',
+            'filter': 'dateline',
             'orderby': 'dateline',
           });
         case CatalogSection.categories:
