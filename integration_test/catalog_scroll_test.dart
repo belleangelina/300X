@@ -1,3 +1,5 @@
+import 'dart:ui' show FrameTiming;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -118,24 +120,40 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(WorkListTile), findsWidgets);
-    await binding.watchPerformance(() async {
-      for (int page = 2; page <= 8; page++) {
-        final ScrollableState scrollable = tester.state<ScrollableState>(
-          find
-              .descendant(
-                of: find.byType(ListView),
-                matching: find.byType(Scrollable),
-              )
-              .first,
-        );
-        scrollable.position.jumpTo(scrollable.position.maxScrollExtent - 600);
-        await tester.pump();
-        await tester.fling(find.byType(ListView), const Offset(0, -650), 1800);
-        await tester.pumpAndSettle();
-        expect(repository.lastPage, page);
-        expect(tester.takeException(), isNull);
-      }
-    }, reportKey: 'catalog_scroll');
+    // Collect engine timings directly. Timeline/GC collection connects to a
+    // host VM-service port that is not reachable from an Android emulator.
+    final List<FrameTiming> frames = <FrameTiming>[];
+    final void Function(List<FrameTiming>) collectTimings = frames.addAll;
+    binding.addTimingsCallback(collectTimings);
+    addTearDown(() => binding.removeTimingsCallback(collectTimings));
+    for (int page = 2; page <= 8; page++) {
+      final ScrollableState scrollable = tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent - 600);
+      await tester.pump();
+      await tester.fling(find.byType(ListView), const Offset(0, -650), 1800);
+      await tester.pumpAndSettle();
+      expect(repository.lastPage, page);
+      expect(tester.takeException(), isNull);
+    }
+    binding.removeTimingsCallback(collectTimings);
+    expect(frames, isNotEmpty);
+    binding.reportData = <String, dynamic>{
+      'catalog_scroll': <String, dynamic>{
+        'frame_count': frames.length,
+        'worst_frame_build_time_millis':
+            frames
+                .map((FrameTiming frame) => frame.buildDuration.inMicroseconds)
+                .reduce((int a, int b) => a > b ? a : b) /
+            1000,
+      },
+    };
     await tester.tap(find.byKey(const ValueKey<String>('catalog-view-toggle')));
     await tester.pumpAndSettle();
     expect(find.byType(WorkGridCard), findsWidgets);

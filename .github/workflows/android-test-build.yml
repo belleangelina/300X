@@ -53,7 +53,7 @@ jobs:
           EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
         run: |
           set -Eeuo pipefail
-          bash build_release.sh --platform android \
+          bash build_release.sh --platform android --keep-version \
             > .artifacts/validation/logs/android-build.log 2>&1
           version=$(awk '/^version:/ { print $2; exit }' pubspec.yaml)
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
