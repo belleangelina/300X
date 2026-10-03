@@ -1,15 +1,15 @@
-name: Android branch test build
+name: Android latest-sort test build
 
 on:
   workflow_dispatch:
   push:
-    branches: [fix-catalog-scroll-jank-20261003]
+    branches: [test/latest-publish-sort-20261003]
     paths:
       - pubspec.yaml
       - .github/workflows/android-test-build.yml
       - integration_test/catalog_scroll_test.dart
-      - lib/features/library/presentation/work_widgets.dart
-      - test/features/library/presentation/work_cover_test.dart
+      - lib/features/library/data/forum_library_repository.dart
+      - test/features/library/data/forum_library_repository_test.dart
 
 concurrency:
   group: android-test-${{ github.ref }}
@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   build-and-validate:
-    if: github.ref == 'refs/heads/fix-catalog-scroll-jank-20261003'
+    if: github.ref == 'refs/heads/test/latest-publish-sort-20261003'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -40,14 +40,13 @@ jobs:
         run: |
           flutter pub get > .artifacts/validation/logs/pub-get.log 2>&1
           flutter analyze --no-pub integration_test/catalog_scroll_test.dart \
-            lib/features/library/presentation/work_widgets.dart \
-            test/features/library/presentation/work_cover_test.dart \
+            lib/features/library/data/forum_library_repository.dart \
+            test/features/library/data/forum_library_repository_test.dart \
             > .artifacts/validation/logs/analyze.log 2>&1
-          flutter test test/features/library/data/forum_library_repository_test.dart \
+          flutter test test/features/library/data/forum_catalog_parser_test.dart \
+            test/features/library/data/forum_library_repository_test.dart \
             test/features/library/data/work_aggregator_test.dart \
             test/features/library/presentation/library_home_page_test.dart \
-            test/features/library/presentation/work_cover_test.dart \
-            test/features/library/presentation/cover_load_interaction_boundary_test.dart \
             > .artifacts/validation/logs/regression.log 2>&1
       - name: Configure existing Android signing
         env:
@@ -105,7 +104,7 @@ jobs:
       - name: Upload verified Android test package
         uses: actions/upload-artifact@v4
         with:
-          name: X300-android-test-${{ steps.build.outputs.version }}
+          name: X300-latest-sort-test-${{ steps.build.outputs.version }}
           path: build/releases/
           if-no-files-found: error
           retention-days: 30
