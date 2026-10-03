@@ -5,6 +5,7 @@ on:
   push:
     branches: [fix-catalog-scroll-jank-20261003]
     paths:
+      - pubspec.yaml
       - .github/workflows/android-test-build.yml
       - integration_test/catalog_scroll_test.dart
       - lib/features/library/presentation/work_widgets.dart
