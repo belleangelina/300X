@@ -297,7 +297,14 @@ void main() {
       'preloaded_covers': resolvedCovers.length,
     };
     debugPrint('GRID_STAGE: warm flings complete');
-    await controller.scrollToTopAndRefresh();
+    // Drive animation frames before awaiting animateTo, as required by widget tests.
+    final refresh = controller.scrollToTopAndRefresh();
+    await tester.pumpAndSettle(
+      const Duration(milliseconds: 100),
+      EnginePhase.sendSemanticsUpdate,
+      const Duration(seconds: 30),
+    );
+    await refresh;
     await tester.pumpAndSettle(
       const Duration(milliseconds: 100),
       EnginePhase.sendSemanticsUpdate,
