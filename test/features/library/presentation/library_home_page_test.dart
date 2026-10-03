@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -228,6 +230,162 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('长列表跳动只构建可见区域而不逐项布局跳过的作品', (tester) async {
+    final repository = _MockForumLibraryRepository();
+    final coverRepository = _MockCoverRepository();
+    int coverLoads = 0;
+    when(() => coverRepository.resolve(any())).thenAnswer((_) async {
+      coverLoads++;
+      return null;
+    });
+    final works = List<Work>.generate(1000, (int index) => _work(index + 1));
+    when(
+      () => repository.loadCatalog(
+        kind: LibraryKind.comic,
+        section: any(named: 'section'),
+        novelSource: any(named: 'novelSource'),
+        page: any(named: 'page'),
+        typeId: any(named: 'typeId'),
+      ),
+    ).thenAnswer(
+      (_) async => WorkCatalogPage(
+        works: works,
+        sourceThreads: works
+            .map((Work work) => work.primarySourceThread)
+            .toList(),
+        categories: const <ForumCategory>[],
+        pages: const <ForumBoard, ForumCatalogPage>{},
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          forumLibraryRepositoryProvider.overrideWithValue(repository),
+          coverRepositoryProvider.overrideWithValue(coverRepository),
+          appSettingsRepositoryProvider.overrideWithValue(settingsRepository),
+        ],
+        child: MaterialApp(
+          home: LibraryHomePage(
+            kind: LibraryKind.comic,
+            authState: const AuthState.authenticated('测试账号'),
+            onLogin: _noop,
+            onOpenWork: (Work work) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(WorkListTile).first).height, 134);
+    final int beforeJump = coverLoads;
+    tester
+        .widget<ListView>(find.byType(ListView))
+        .controller!
+        .jumpTo(900 * 135);
+    await tester.pumpAndSettle();
+    expect(coverLoads - beforeJump, lessThan(20));
+    expect(
+      tester
+          .widgetList<WorkListTile>(find.byType(WorkListTile))
+          .any((WorkListTile tile) => tile.work.id == 'comic:901'),
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final bool disposeWhilePending in <bool>[false, true]) {
+    testWidgets('后台聚合期间${disposeWhilePending ? '离开页面' : '刷新'}丢弃旧分页结果', (
+      WidgetTester tester,
+    ) async {
+      final repository = _MockForumLibraryRepository();
+      final coverRepository = _MockCoverRepository();
+      final controller = LibraryHomeController();
+      final pending = Completer<List<Work>>();
+      when(() => coverRepository.resolve(any())).thenAnswer((_) async => null);
+      int loads = 0;
+      when(
+        () => repository.loadCatalog(
+          kind: LibraryKind.comic,
+          section: any(named: 'section'),
+          novelSource: any(named: 'novelSource'),
+          page: any(named: 'page'),
+          typeId: any(named: 'typeId'),
+        ),
+      ).thenAnswer(
+        (_) async => _page(
+          ForumBoard.comic,
+          typeId: 69,
+          category: '#長篇連載',
+          work: _work(++loads == 1 ? 301 : 900),
+          hasMore: loads == 1,
+        ),
+      );
+      when(
+        () => repository.loadNextCatalog(
+          cursor: any(named: 'cursor'),
+          section: any(named: 'section'),
+        ),
+      ).thenAnswer(
+        (_) async => _page(
+          ForumBoard.comic,
+          typeId: 69,
+          category: '#長篇連載',
+          work: _work(302),
+        ),
+      );
+      when(
+        () => repository.aggregateThreadsInBackground(any()),
+      ).thenAnswer((_) => pending.future);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            forumLibraryRepositoryProvider.overrideWithValue(repository),
+            coverRepositoryProvider.overrideWithValue(coverRepository),
+            appSettingsRepositoryProvider.overrideWithValue(settingsRepository),
+          ],
+          child: MaterialApp(
+            home: LibraryHomePage(
+              kind: LibraryKind.comic,
+              authState: const AuthState.authenticated('测试账号'),
+              controller: controller,
+              onLogin: _noop,
+              onOpenWork: (Work work) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('catalog-view-toggle')),
+      );
+      await tester.pump();
+      await tester.pump();
+      final List<SourceThread> snapshot =
+          verify(
+                () => repository.aggregateThreadsInBackground(captureAny()),
+              ).captured.single
+              as List<SourceThread>;
+      expect(snapshot.map((SourceThread thread) => thread.tid), <int>[
+        301,
+        302,
+      ]);
+      if (disposeWhilePending) {
+        await tester.pumpWidget(const SizedBox.shrink());
+      } else {
+        await controller.scrollToTopAndRefresh();
+        await tester.pump();
+      }
+      pending.complete(<Work>[_work(301), _work(302)]);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      if (!disposeWhilePending) {
+        expect(
+          tester.widget<WorkGridCard>(find.byType(WorkGridCard)).work.id,
+          'comic:900',
+        );
+      }
+    });
+  }
+
   testWidgets('主页记住视图模式且短网格自动补页', (WidgetTester tester) async {
     final _MockForumLibraryRepository repository =
         _MockForumLibraryRepository();
@@ -272,8 +430,8 @@ void main() {
       );
     });
     when(
-      () => repository.aggregateThreads(any()),
-    ).thenReturn(<Work>[_work(301), _work(302), _work(303)]);
+      () => repository.aggregateThreadsInBackground(any()),
+    ).thenAnswer((_) async => <Work>[_work(301), _work(302), _work(303)]);
 
     Widget page() => ProviderScope(
       overrides: [

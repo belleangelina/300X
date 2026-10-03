@@ -14,6 +14,77 @@ class _MockCoverRepository extends Mock implements CoverRepository {}
 void main() {
   registerFallbackValue(_work());
 
+  testWidgets('滑动中新出现的封面在停止后才开始解析', (tester) async {
+    final coordinator = CoverLoadCoordinator();
+    addTearDown(coordinator.dispose);
+    coordinator.pointerDown(1);
+    final repository = _MockCoverRepository();
+    when(() => repository.resolve(any())).thenAnswer((_) async => null);
+    await tester.pumpWidget(
+      _app(repository, _work(), coordinator: coordinator),
+    );
+    await tester.pump();
+    verifyNever(() => repository.resolve(any()));
+    coordinator.pointerUp(1);
+    await tester.pumpAndSettle();
+    verify(() => repository.resolve(any())).called(1);
+  });
+
+  testWidgets('滑动中离屏的延迟封面不会在恢复时补发请求', (tester) async {
+    final coordinator = CoverLoadCoordinator();
+    addTearDown(coordinator.dispose);
+    coordinator.pointerDown(1);
+    final repository = _MockCoverRepository();
+    when(() => repository.resolve(any())).thenAnswer((_) async => null);
+    await tester.pumpWidget(
+      _app(repository, _work(), coordinator: coordinator),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    coordinator.pointerUp(1);
+    await tester.pumpAndSettle();
+    verifyNever(() => repository.resolve(any()));
+  });
+
+  testWidgets('暂停时保留已有订阅但复用为新作品时延迟请求', (tester) async {
+    final coordinator = CoverLoadCoordinator();
+    addTearDown(coordinator.dispose);
+    final repository = _MockCoverRepository();
+    when(() => repository.resolve(any())).thenAnswer((_) async => null);
+    final first = _work();
+    final next = _work(20);
+    await tester.pumpWidget(_app(repository, first, coordinator: coordinator));
+    await tester.pumpAndSettle();
+    coordinator.pointerDown(1);
+    await tester.pumpWidget(_app(repository, first, coordinator: coordinator));
+    await tester.pump();
+    verify(() => repository.resolve(first)).called(1);
+    await tester.pumpWidget(_app(repository, next, coordinator: coordinator));
+    await tester.pump();
+    verifyNever(() => repository.resolve(next));
+    coordinator.pointerUp(1);
+    await tester.pumpAndSettle();
+    verify(() => repository.resolve(next)).called(1);
+  });
+
+  testWidgets('已加载的封面离屏再出现复用内存路径而不重复查库', (tester) async {
+    final repository = _MockCoverRepository();
+    final work = _work();
+    final uri = Uri.file('/tmp/x300-warm-cover.png');
+    when(() => repository.peek(CoverRequest(work: work))).thenReturn(uri);
+    when(() => repository.resolve(any())).thenAnswer((_) async => uri);
+    final coordinator = CoverLoadCoordinator();
+    addTearDown(coordinator.dispose);
+    coordinator.pointerDown(1);
+    await tester.pumpWidget(_app(repository, work, coordinator: coordinator));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(_app(repository, work, coordinator: coordinator));
+    verifyNever(() => repository.resolve(any()));
+    coordinator.pointerUp(1);
+    await tester.pump();
+    expect(find.byType(Image), findsOneWidget);
+    verifyNever(() => repository.resolve(any()));
+  });
+
   testWidgets('等价作品对象重建不会重新请求封面', (WidgetTester tester) async {
     final _MockCoverRepository repository = _MockCoverRepository();
     when(() => repository.resolve(any())).thenAnswer((_) async => null);
@@ -215,23 +286,23 @@ Widget _app(
   );
 }
 
-Work _work() {
+Work _work([int tid = 10]) {
   final Uri uri = Uri.parse(
-    'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=10&mobile=2',
+    'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$tid&mobile=2',
   );
   return Work(
-    id: 'forum-thread:10',
+    id: 'forum-thread:$tid',
     kind: LibraryKind.comic,
     title: '测试漫画',
     sourceThreads: <SourceThread>[
-      SourceThread(tid: 10, board: ForumBoard.comic, title: '测试漫画', uri: uri),
+      SourceThread(tid: tid, board: ForumBoard.comic, title: '测试漫画', uri: uri),
     ],
     chapters: <Chapter>[
       Chapter(
-        id: 'forum-thread:10',
+        id: 'forum-thread:$tid',
         title: '正文',
         sourceUri: uri,
-        sourceTid: 10,
+        sourceTid: tid,
       ),
     ],
   );
