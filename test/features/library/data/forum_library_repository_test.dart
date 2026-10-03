@@ -409,7 +409,7 @@ void main() {
     expect(requestedUris.single.queryParameters, containsPair('typeid', '69'));
     expect(
       requestedUris.single.queryParameters,
-      containsPair('orderby', 'lastpost'),
+      containsPair('orderby', 'dateline'),
     );
     expect(page.sourceThreads, isEmpty);
     expect(page.works, isEmpty);

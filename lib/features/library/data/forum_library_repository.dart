@@ -567,7 +567,7 @@ class ForumLibraryRepository {
       query.addAll(<String, dynamic>{
         'filter': 'typeid',
         'typeid': typeId.toString(),
-        if (section == CatalogSection.updated) 'orderby': 'lastpost',
+        if (section == CatalogSection.updated) 'orderby': 'dateline',
         if (section == CatalogSection.ranking) 'orderby': 'heats',
       });
     } else {
@@ -576,8 +576,8 @@ class ForumLibraryRepository {
           query.addAll(<String, dynamic>{'filter': 'digest', 'digest': '1'});
         case CatalogSection.updated:
           query.addAll(<String, dynamic>{
-            'filter': 'lastpost',
-            'orderby': 'lastpost',
+            'filter': 'dateline',
+            'orderby': 'dateline',
           });
         case CatalogSection.categories:
           break;
