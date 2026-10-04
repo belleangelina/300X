@@ -36,7 +36,12 @@ class ForumFavoriteParser {
     );
   }
 
-  SourceThread? parseThreadMetadata(String json, CloudFavoriteRecord record) {
+  SourceThread? parseThreadMetadata(
+    String json,
+    CloudFavoriteRecord record, {
+    Map<ForumBoard, Map<int, String>> categoryNames =
+        const <ForumBoard, Map<int, String>>{},
+  }) {
     final Object? decoded;
     try {
       decoded = jsonDecode(json);
@@ -83,10 +88,12 @@ class ForumFavoriteParser {
     final String apiTitle = normalizeForumText(
       threadValue['subject']?.toString() ?? '',
     );
+    final int? typeId = int.tryParse(threadValue['typeid']?.toString() ?? '');
     return SourceThread(
       tid: tid,
       board: board,
-      typeId: int.tryParse(threadValue['typeid']?.toString() ?? ''),
+      typeId: typeId,
+      typeName: categoryNames[board]?[typeId] ?? '',
       title: record.title.isEmpty ? apiTitle : record.title,
       author: normalizeForumText(threadValue['author']?.toString() ?? ''),
       timeLabel: timeLabel,

@@ -245,7 +245,7 @@ void main() {
     await tester.tap(find.text('小说收藏'));
     await tester.pumpAndSettle();
     expect(find.byType(TabAppBar), findsOneWidget);
-    expect(find.text('全部'), findsOneWidget);
+    expect(find.widgetWithText(Tab, '全部'), findsNothing);
     expect(find.text('测试作品'), findsWidgets);
     expect(find.text('测试作品 第1章'), findsNothing);
     expect(find.text('漫画收藏'), findsOneWidget);
@@ -255,7 +255,7 @@ void main() {
       findsNothing,
     );
 
-    await tester.tap(find.text('全部'));
+    await tester.tap(find.byKey(const Key('favorite-mode-toggle-1')));
     await tester.pumpAndSettle();
 
     expect(find.text('测试作品 第1章'), findsWidgets);
