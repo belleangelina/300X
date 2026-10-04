@@ -86,7 +86,11 @@ class _Favorites extends ForumFavoriteRepository {
     }
     return _page(
       splitPages
-          ? entries.where((item) => item.sourceThread.board.kind == LibraryKind.comic).toList()
+          ? entries
+                .where(
+                  (item) => item.sourceThread.board.kind == LibraryKind.comic,
+                )
+                .toList()
           : entries,
       first: true,
     );
@@ -96,24 +100,35 @@ class _Favorites extends ForumFavoriteRepository {
   Future<CloudFavoritePage> loadNext(CloudFavoritePage cursor) async {
     nextLoads++;
     return _page(
-      entries.where((item) => item.sourceThread.board.kind == LibraryKind.novel).toList(),
+      entries
+          .where((item) => item.sourceThread.board.kind == LibraryKind.novel)
+          .toList(),
       first: false,
     );
   }
 
-  CloudFavoritePage _page(List<CloudFavoriteEntry> values, {required bool first}) {
+  CloudFavoritePage _page(
+    List<CloudFavoriteEntry> values, {
+    required bool first,
+  }) {
     return CloudFavoritePage(
       entries: List<CloudFavoriteEntry>.of(values),
       ignoredCount: 0,
       currentPage: first ? 1 : 2,
       totalPages: splitPages ? 2 : 1,
-      nextPageUri: splitPages && first ? Uri.parse('https://example.invalid/page-2') : null,
+      nextPageUri: splitPages && first
+          ? Uri.parse('https://example.invalid/page-2')
+          : null,
     );
   }
 
   @override
   Future<List<CloudFavoriteRecord>> findForWork(Work work) async => entries
-      .where((item) => work.sourceThreads.any((thread) => thread.tid == item.record.threadId))
+      .where(
+        (item) => work.sourceThreads.any(
+          (thread) => thread.tid == item.record.threadId,
+        ),
+      )
       .map((item) => item.record)
       .toList();
 }
@@ -123,8 +138,11 @@ List<CloudFavoriteEntry> _entries(ForumBoard board, {int count = 20}) {
     final int tid = board.fid * 1000 + index;
     final String label = board == ForumBoard.comic
         ? '漫画'
-        : board == ForumBoard.lightNovel ? '轻小说' : '文学区';
-    final String title = '合成$label作品${index + 1}';
+        : board == ForumBoard.lightNovel
+        ? '轻小说'
+        : '文学区';
+    final String suffix = String.fromCharCode(65 + index);
+    final String title = '合成$label作品$suffix';
     final Uri uri = Uri.parse('https://example.invalid/thread-$tid');
     return CloudFavoriteEntry(
       record: CloudFavoriteRecord(
@@ -134,7 +152,12 @@ List<CloudFavoriteEntry> _entries(ForumBoard board, {int count = 20}) {
         threadUri: uri,
         deleteDialogUri: Uri.parse('https://example.invalid/favorite-$tid'),
       ),
-      sourceThread: SourceThread(tid: tid, board: board, title: title, uri: uri),
+      sourceThread: SourceThread(
+        tid: tid,
+        board: board,
+        title: title,
+        uri: uri,
+      ),
     );
   });
 }
@@ -180,7 +203,8 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
       ],
       child: MaterialApp(
         theme: theme ?? AppTheme.light,
-        builder: (context, child) => RepaintBoundary(key: captureKey, child: child!),
+        builder: (context, child) =>
+            RepaintBoundary(key: captureKey, child: child!),
         home: shell
             ? HomeShell(authState: auth)
             : CloudFavoritesPage(authState: auth, onLogin: onLogin ?? () {}),
@@ -199,7 +223,9 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
     final directory = Directory('.artifacts/validation/screenshots');
     await directory.create(recursive: true);
-    await File('${directory.path}/$name.png').writeAsBytes(bytes!.buffer.asUint8List());
+    await File(
+      '${directory.path}/$name.png',
+    ).writeAsBytes(bytes!.buffer.asUint8List());
     image.dispose();
   }
 
@@ -207,15 +233,20 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     _setSize(tester, const Size(390, 844));
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
-    expect(tester.widget<BottomNavigationBar>(find.byType(BottomNavigationBar)).items, hasLength(4));
+    expect(
+      tester
+          .widget<BottomNavigationBar>(find.byType(BottomNavigationBar))
+          .items,
+      hasLength(4),
+    );
     expect(favorites.initialLoads, 0);
 
     await tester.tap(find.byIcon(Remix.heart_line));
     await tester.pumpAndSettle();
     expect(find.byType(TabAppBar), findsOneWidget);
-    expect(find.text('漫画'), findsOneWidget);
-    expect(find.text('小说'), findsOneWidget);
-    expect(find.text('原始收藏'), findsOneWidget);
+    expect(find.widgetWithText(Tab, '漫画'), findsOneWidget);
+    expect(find.widgetWithText(Tab, '小说'), findsOneWidget);
+    expect(find.widgetWithText(Tab, '原始收藏'), findsOneWidget);
     expect(favorites.initialLoads, 1);
     expect(_visibleKinds(tester), everyElement(LibraryKind.comic));
     await snapshot(tester, 'favorites-comic-light');
@@ -224,24 +255,26 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
     final double comicOffset = _position(tester).pixels;
     expect(comicOffset, greaterThan(0));
-    await tester.tap(find.text('小说'));
+    await tester.tap(find.widgetWithText(Tab, '小说'));
     await tester.pumpAndSettle();
     expect(_visibleKinds(tester), everyElement(LibraryKind.novel));
-    await tester.tap(find.text('漫画'));
+    await tester.tap(find.widgetWithText(Tab, '漫画'));
     await tester.pumpAndSettle();
     expect(_position(tester).pixels, closeTo(comicOffset, 1));
 
-    await tester.tap(find.text('原始收藏'));
+    await tester.tap(find.widgetWithText(Tab, '原始收藏'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('favorite-kind-filter')), findsOneWidget);
     await _filter(tester, '小说');
     expect(_visibleKinds(tester), everyElement(LibraryKind.novel));
-    expect(find.text('合成漫画作品1'), findsNothing);
+    expect(find.text('合成漫画作品A'), findsNothing);
     await _filter(tester, '漫画');
     expect(_visibleKinds(tester), everyElement(LibraryKind.comic));
     await _filter(tester, '全部');
     expect(favorites.initialLoads, 1);
-    await tester.tap(find.byKey(const ValueKey<String>('favorite-view-toggle-2')));
+    await tester.tap(
+      find.byKey(const ValueKey<String>('favorite-view-toggle-2')),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(WorkGridCard), findsWidgets);
     await tester.pumpWidget(app(theme: AppTheme.dark));
@@ -261,7 +294,10 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
 
     _setSize(tester, const Size(1280, 800));
     await tester.pumpAndSettle();
-    expect(tester.widget<NavigationRail>(find.byType(NavigationRail)).destinations, hasLength(4));
+    expect(
+      tester.widget<NavigationRail>(find.byType(NavigationRail)).destinations,
+      hasLength(4),
+    );
     await tester.tap(find.byType(WorkGridCard).first);
     await tester.pumpAndSettle();
     WorkDetailPage detail = tester.widget(find.byType(WorkDetailPage));
@@ -293,11 +329,11 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpWidget(app(shell: false));
     await tester.pumpAndSettle();
     expect(favorites.nextLoads, 0);
-    await tester.tap(find.text('小说'));
+    await tester.tap(find.widgetWithText(Tab, '小说'));
     await tester.pumpAndSettle();
     expect(favorites.nextLoads, 1);
     expect(_visibleKinds(tester), everyElement(LibraryKind.novel));
-    expect(find.text('合成轻小说作品1'), findsWidgets);
+    expect(find.text('合成轻小说作品A'), findsWidgets);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
@@ -305,15 +341,17 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
   testWidgets('未登录保留收藏页签和筛选并在登录后自动同步', (tester) async {
     _setSize(tester, const Size(390, 844));
     int logins = 0;
-    await tester.pumpWidget(app(
-      shell: false,
-      auth: const AuthState.unauthenticated(),
-      onLogin: () => logins++,
-    ));
+    await tester.pumpWidget(
+      app(
+        shell: false,
+        auth: const AuthState.unauthenticated(),
+        onLogin: () => logins++,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(favorites.initialLoads, 0);
     expect(find.text('登录后查看收藏'), findsOneWidget);
-    await tester.tap(find.text('原始收藏'));
+    await tester.tap(find.widgetWithText(Tab, '原始收藏'));
     await tester.pumpAndSettle();
     await _filter(tester, '小说');
     await tester.tap(find.text('登录'));
@@ -332,13 +370,17 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     favorites.pending = Completer<CloudFavoritePage>();
     await tester.pumpWidget(app(shell: false));
     await tester.pump();
-    await tester.pumpWidget(app(shell: false, auth: const AuthState.unauthenticated()));
-    favorites.pending!.complete(CloudFavoritePage(
-      entries: favorites.entries,
-      ignoredCount: 0,
-      currentPage: 1,
-      totalPages: 1,
-    ));
+    await tester.pumpWidget(
+      app(shell: false, auth: const AuthState.unauthenticated()),
+    );
+    favorites.pending!.complete(
+      CloudFavoritePage(
+        entries: favorites.entries,
+        ignoredCount: 0,
+        currentPage: 1,
+        totalPages: 1,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(WorkListTile), findsNothing);
     expect(find.text('登录后查看收藏'), findsOneWidget);
@@ -355,12 +397,20 @@ void _setSize(WidgetTester tester, Size size) {
   addTearDown(tester.view.resetPhysicalSize);
 }
 
-Iterable<LibraryKind> _visibleKinds(WidgetTester tester) =>
-    tester.widgetList<WorkListTile>(find.byType(WorkListTile)).map((tile) => tile.work.kind);
+Iterable<LibraryKind> _visibleKinds(WidgetTester tester) => tester
+    .widgetList<WorkListTile>(find.byType(WorkListTile))
+    .map((tile) => tile.work.kind);
 
-ScrollPosition _position(WidgetTester tester) => tester.state<ScrollableState>(
-  find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first,
-).position;
+ScrollPosition _position(WidgetTester tester) => tester
+    .state<ScrollableState>(
+      find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    )
+    .position;
 
 Future<void> _filter(WidgetTester tester, String label) async {
   await tester.tap(find.byKey(const Key('favorite-kind-filter')));

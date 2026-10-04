@@ -184,10 +184,7 @@ class ProfilePage extends ConsumerWidget {
     );
   }
 
-  void _openDetail(
-    BuildContext context,
-    ProfileDetailDestination destination,
-  ) {
+  void _openDetail(BuildContext context, ProfileDetailDestination destination) {
     final ValueChanged<ProfileDetailDestination>? callback = onOpenDetail;
     if (callback != null) {
       callback(destination);

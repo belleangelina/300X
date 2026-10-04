@@ -136,7 +136,8 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
               works: _worksForTab(index),
               status: _buildStatus(),
               loadingMore: _loadingMore,
-              hasMore: !_usingCache &&
+              hasMore:
+                  !_usingCache &&
                   !_paginationFailed &&
                   (_cursor?.hasMore ?? false),
               usingCache: _usingCache,
@@ -162,9 +163,7 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
   Widget? _buildStatus() {
     if (!_authenticated) {
       return AppEmptyView(
-        message: widget.authState.sessionExpired
-            ? '登录状态已失效，请重新登录'
-            : '登录后查看收藏',
+        message: widget.authState.sessionExpired ? '登录状态已失效，请重新登录' : '登录后查看收藏',
         actionLabel: widget.authState.sessionExpired ? '重新登录' : '登录',
         onRefresh: widget.onLogin,
       );
@@ -224,11 +223,8 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
     }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (BuildContext context) => WorkDetailPage(
-          work: work,
-          resolveOnOpen: !raw,
-          rawSourceMode: raw,
-        ),
+        builder: (BuildContext context) =>
+            WorkDetailPage(work: work, resolveOnOpen: !raw, rawSourceMode: raw),
       ),
     );
   }
@@ -241,16 +237,16 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
     final int generation = ++_generation;
     _initialLoadStarted = true;
     setState(() {
-        _loading = true;
-        _paginationFailed = false;
-        _loadingMore = false;
-        _error = null;
-        _cursor = null;
-        _entries.clear();
-        _works = <FavoriteWork>[];
-        _busyWorkIds.clear();
-        _usingCache = false;
-        _cacheUpdatedAt = null;
+      _loading = true;
+      _paginationFailed = false;
+      _loadingMore = false;
+      _error = null;
+      _cursor = null;
+      _entries.clear();
+      _works = <FavoriteWork>[];
+      _busyWorkIds.clear();
+      _usingCache = false;
+      _cacheUpdatedAt = null;
     });
     try {
       final ForumFavoriteRepository repository = ref.read(
@@ -306,8 +302,11 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
   Future<void> _loadMore() async {
     final int generation = _generation;
     final CloudFavoritePage? cursor = _cursor;
-    if (_loading || _loadingMore || _usingCache ||
-        cursor == null || !cursor.hasMore) {
+    if (_loading ||
+        _loadingMore ||
+        _usingCache ||
+        cursor == null ||
+        !cursor.hasMore) {
       return;
     }
     setState(() {
@@ -487,7 +486,6 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
       records: <CloudFavoriteRecord>[record],
     );
   }
-
 }
 
 class _FavoritesTabView extends StatefulWidget {
@@ -565,7 +563,9 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
   }
 
   void _handleScroll() {
-    if (widget.active && widget.hasMore && !_gridChanging &&
+    if (widget.active &&
+        widget.hasMore &&
+        !_gridChanging &&
         _scrollController.position.extentAfter < 500) {
       unawaited(widget.onLoadMore());
     }
@@ -589,8 +589,12 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
 
   void _fillViewport() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !widget.active || widget.status != null ||
-          !widget.hasMore || widget.loadingMore || _gridChanging) {
+      if (!mounted ||
+          !widget.active ||
+          widget.status != null ||
+          !widget.hasMore ||
+          widget.loadingMore ||
+          _gridChanging) {
         return;
       }
       if (!_scrollController.hasClients ||
@@ -613,11 +617,7 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
                 key: const Key('favorite-kind-filter'),
                 label: const <String>['全部', '漫画', '小说'][widget.rawFilter],
                 selected: widget.rawFilter,
-                choices: const <(int, String)>[
-                  (0, '全部'),
-                  (1, '漫画'),
-                  (2, '小说'),
-                ],
+                choices: const <(int, String)>[(0, '全部'), (1, '漫画'), (2, '小说')],
                 onSelected: widget.onRawFilterChanged,
               ),
             CatalogControlAction(
@@ -742,7 +742,9 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
       builder: (BuildContext context, BoxConstraints constraints) {
         final int columns = constraints.maxWidth < 600
             ? 3
-            : constraints.maxWidth < 900 ? 4 : 5;
+            : constraints.maxWidth < 900
+            ? 4
+            : 5;
         return CustomScrollView(
           key: PageStorageKey<String>('favorites-grid-${widget.index}'),
           controller: _scrollController,
@@ -757,31 +759,31 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
                   crossAxisSpacing: 10,
                   childAspectRatio: 0.62,
                 ),
-                delegate: SliverChildBuilderDelegate(
-                  (BuildContext context, int index) {
-                    final FavoriteWork item = widget.works[index];
-                    return Stack(
-                      children: <Widget>[
-                        Positioned.fill(
-                          child: WorkGridCard(
-                            work: item.work,
-                            onTap: () => widget.onOpenWork(item.work),
-                          ),
+                delegate: SliverChildBuilderDelegate((
+                  BuildContext context,
+                  int index,
+                ) {
+                  final FavoriteWork item = widget.works[index];
+                  return Stack(
+                    children: <Widget>[
+                      Positioned.fill(
+                        child: WorkGridCard(
+                          work: item.work,
+                          onTap: () => widget.onOpenWork(item.work),
                         ),
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: Material(
-                            color: Theme.of(context).colorScheme.surface,
-                            shape: const CircleBorder(),
-                            child: _favoriteAction(item),
-                          ),
+                      ),
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: Material(
+                          color: Theme.of(context).colorScheme.surface,
+                          shape: const CircleBorder(),
+                          child: _favoriteAction(item),
                         ),
-                      ],
-                    );
-                  },
-                  childCount: widget.works.length,
-                ),
+                      ),
+                    ],
+                  );
+                }, childCount: widget.works.length),
               ),
             ),
             if (widget.loadingMore)

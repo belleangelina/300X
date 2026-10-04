@@ -39,6 +39,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
     with WidgetsBindingObserver, RouteAware {
   final LibraryHomeController _comicHomeController = LibraryHomeController();
   final LibraryHomeController _novelHomeController = LibraryHomeController();
+  final GlobalKey _contentKey = GlobalKey();
   int _index = 0;
   Work? _selectedWork;
   int? _selectedSourceTid;
@@ -210,13 +211,17 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
+        final Widget preservedContent = KeyedSubtree(
+          key: _contentKey,
+          child: content,
+        );
         final Widget shell;
         if (usesWideHomeLayout(
           Size(constraints.maxWidth, constraints.maxHeight),
         )) {
-          shell = _buildWide(content);
+          shell = _buildWide(preservedContent);
         } else {
-          shell = _buildNarrow(content);
+          shell = _buildNarrow(preservedContent);
         }
         final UpdateDownloadState download = ref.watch(
           updateDownloadControllerProvider,

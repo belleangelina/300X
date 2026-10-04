@@ -61,7 +61,12 @@ void main() {
           forumFavoriteRepositoryProvider.overrideWithValue(forum),
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
-        child: const MaterialApp(home: CloudFavoritesPage(authState: AuthState.authenticated('测试账号'), onLogin: _noop)),
+        child: const MaterialApp(
+          home: CloudFavoritesPage(
+            authState: AuthState.authenticated('测试账号'),
+            onLogin: _noop,
+          ),
+        ),
       ),
     );
     await tester.pump();
@@ -95,7 +100,10 @@ void main() {
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
         child: const MaterialApp(
-          home: CloudFavoritesPage(authState: AuthState.authenticated('测试账号'), onLogin: _noop),
+          home: CloudFavoritesPage(
+            authState: AuthState.authenticated('测试账号'),
+            onLogin: _noop,
+          ),
         ),
       ),
     );
@@ -154,12 +162,17 @@ void main() {
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
         child: const MaterialApp(
-          home: CloudFavoritesPage(authState: AuthState.authenticated('测试账号'), onLogin: _noop),
+          home: CloudFavoritesPage(
+            authState: AuthState.authenticated('测试账号'),
+            onLogin: _noop,
+          ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.widgetWithText(Tab, '小说'));
+    await tester.pumpAndSettle();
     expect(find.text('第一页小说收藏'), findsWidgets);
     expect(find.text('一周一次买下同班同学的那些事'), findsWidgets);
     expect(find.textContaining('已隐藏'), findsNothing);
@@ -220,7 +233,10 @@ void main() {
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
         child: const MaterialApp(
-          home: CloudFavoritesPage(authState: AuthState.authenticated('测试账号'), onLogin: _noop),
+          home: CloudFavoritesPage(
+            authState: AuthState.authenticated('测试账号'),
+            onLogin: _noop,
+          ),
         ),
       ),
     );
@@ -234,7 +250,10 @@ void main() {
     expect(find.text('测试作品 第1章'), findsNothing);
     expect(find.text('漫画'), findsOneWidget);
     expect(find.text('小说'), findsOneWidget);
-    expect(find.byKey(const Key('favorite-result-mode-bottom-bar')), findsNothing);
+    expect(
+      find.byKey(const Key('favorite-result-mode-bottom-bar')),
+      findsNothing,
+    );
 
     await tester.tap(find.text('原始收藏'));
     await tester.pumpAndSettle();
