@@ -274,10 +274,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
       expect(find.text('每 24 小时最多检查一次'), findsOneWidget);
       expect(find.text('GitCode 官方镜像'), findsOneWidget);
       await snapshot(tester, 'settings-general-$brightness');
-      final Finder textScale = find.widgetWithText(
-        SwitchListTile,
-        '字体大小跟随系统',
-      );
+      final Finder textScale = find.widgetWithText(SwitchListTile, '字体大小跟随系统');
       final bool previous = tester.widget<SwitchListTile>(textScale).value;
       await tester.tap(textScale);
       await tester.pumpAndSettle();
