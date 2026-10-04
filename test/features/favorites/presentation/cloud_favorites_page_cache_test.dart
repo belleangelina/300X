@@ -183,6 +183,45 @@ void main() {
     await database.close();
   });
 
+  testWidgets('后续分页失败时保留完整旧缓存，不展示部分同步页数', (tester) async {
+    final AppDatabase database = AppDatabase(NativeDatabase.memory());
+    final FavoriteCacheRepository cache = FavoriteCacheRepository(database);
+    await cache.save(<FavoriteWork>[_favorite()]);
+    final _MockForumFavoriteRepository forum = _MockForumFavoriteRepository();
+    final CloudFavoritePage page = CloudFavoritePage(
+      entries: <CloudFavoriteEntry>[_entry(tid: 600099, title: '部分同步条目')],
+      ignoredCount: 0,
+      currentPage: 1,
+      totalPages: 2,
+      nextPageUri: Uri.parse('https://example.invalid/favorites-page-2'),
+    );
+    when(() => forum.loadInitial()).thenAnswer((_) async => page);
+    when(() => forum.loadNext(any())).thenThrow(StateError('第二页失败'));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+          forumFavoriteRepositoryProvider.overrideWithValue(forum),
+          coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
+        ],
+        child: const MaterialApp(
+          home: CloudFavoritesPage(
+            authState: AuthState.authenticated('测试账号'),
+            onLogin: _noop,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('缓存收藏'), findsWidgets);
+    expect(find.text('部分同步条目'), findsNothing);
+    expect((await cache.load())!.works.single.work.title, '缓存收藏');
+    expect(find.byTooltip('取消收藏'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await database.close();
+  });
+
   testWidgets('收藏页可切换到逐帖原始收藏且只取消当前条目', (WidgetTester tester) async {
     final AppDatabase database = AppDatabase(NativeDatabase.memory());
     final _MockForumFavoriteRepository forum = _MockForumFavoriteRepository();

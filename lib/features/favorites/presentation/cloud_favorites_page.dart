@@ -118,7 +118,6 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
       appBar: TabAppBar(
         controller: _tabController,
         tabs: _titles.map((String title) => Tab(text: title)).toList(),
-
       ),
       body: TabBarView(
         controller: _tabController,
@@ -131,10 +130,20 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
               title: _titles[index],
               active: widget.active && _activeTab == index,
               works: _worksForTab(index),
-              rawWorks: _rawWorks.where((item) => item.work.kind ==
-                  (index == 0 ? LibraryKind.comic : LibraryKind.novel)).toList(),
-              categories: _categories.where((category) => category.board.kind ==
-                  (index == 0 ? LibraryKind.comic : LibraryKind.novel)).toList(),
+              rawWorks: _rawWorks
+                  .where(
+                    (item) =>
+                        item.work.kind ==
+                        (index == 0 ? LibraryKind.comic : LibraryKind.novel),
+                  )
+                  .toList(),
+              categories: _categories
+                  .where(
+                    (category) =>
+                        category.board.kind ==
+                        (index == 0 ? LibraryKind.comic : LibraryKind.novel),
+                  )
+                  .toList(),
               status: _buildStatus(),
               usingCache: _usingCache,
               cacheUpdatedAt: _cacheUpdatedAt,
@@ -240,7 +249,9 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
       setState(() {
         _categories = categories;
         final Set<int> seen = <int>{};
-        _entries.addAll(entries.where((entry) => seen.add(entry.record.favoriteId)));
+        _entries.addAll(
+          entries.where((entry) => seen.add(entry.record.favoriteId)),
+        );
         _works = works;
         _loading = false;
         _error = null;
@@ -456,16 +467,24 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
   void didUpdateWidget(covariant _FavoritesTabView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.status == null) {
-      if (_category.isNotEmpty && !_categoryChoices.any((c) => c.$1 == _category)) {
+      if (_category.isNotEmpty &&
+          !_categoryChoices.any((c) => c.$1 == _category)) {
         _category = '';
-        _resetPages();
+        _startPage = 1;
+        _lastLoadedPage = 1;
+        _reset++;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollToTop();
+        });
       }
       final int total = _totalPages;
       if (_startPage > total) {
         _startPage = total;
         _lastLoadedPage = total;
         _reset++;
-        _scrollToTop();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollToTop();
+        });
       } else if (_lastLoadedPage > total) {
         _lastLoadedPage = total;
       }
@@ -484,7 +503,9 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
     if (thread.typeId != null && thread.typeId != 0) {
       return '${thread.board.fid}:${thread.typeId}';
     }
-    return thread.typeName.isEmpty ? '' : '${thread.board.fid}:${thread.typeName}';
+    return thread.typeName.isEmpty
+        ? ''
+        : '${thread.board.fid}:${thread.typeName}';
   }
 
   List<(String, String)> get _categoryChoices {
@@ -516,9 +537,13 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
     if (_category.isEmpty) {
       return works;
     }
-    return works.where((item) => item.work.sourceThreads.any(
-      (thread) => _categoryKey(thread) == _category,
-    )).toList();
+    return works
+        .where(
+          (item) => item.work.sourceThreads.any(
+            (thread) => _categoryKey(thread) == _category,
+          ),
+        )
+        .toList();
   }
 
   int get _totalPages {
@@ -545,7 +570,9 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
   }
 
   void _handleScroll() {
-    if (widget.active && !_gridChanging && widget.status == null &&
+    if (widget.active &&
+        !_gridChanging &&
+        widget.status == null &&
         _lastLoadedPage < _totalPages &&
         _scrollController.position.extentAfter < 500) {
       setState(() => _lastLoadedPage++);
@@ -554,8 +581,11 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
 
   void _fillViewport() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !widget.active || widget.status != null ||
-          _gridChanging || _lastLoadedPage >= _totalPages) {
+      if (!mounted ||
+          !widget.active ||
+          widget.status != null ||
+          _gridChanging ||
+          _lastLoadedPage >= _totalPages) {
         return;
       }
       if (_scrollController.hasClients &&
@@ -595,8 +625,8 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
       context: context,
       builder: (BuildContext context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          final bool valid = targetPage != null && targetPage! >= 1 &&
-              targetPage! <= total;
+          final bool valid =
+              targetPage != null && targetPage! >= 1 && targetPage! <= total;
           return AlertDialog(
             title: const Text('跳转页面'),
             content: Column(
@@ -631,7 +661,9 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
                 child: const Text('取消'),
               ),
               FilledButton(
-                onPressed: valid ? () => Navigator.pop(context, targetPage) : null,
+                onPressed: valid
+                    ? () => Navigator.pop(context, targetPage)
+                    : null,
                 child: const Text('跳转'),
               ),
             ],
@@ -655,8 +687,9 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
     super.build(context);
     _fillViewport();
     final List<(String, String)> choices = _categoryChoices;
-    final String categoryLabel = choices.where((c) => c.$1 == _category)
-        .map((c) => c.$2).firstOrNull ?? '全部';
+    final String categoryLabel =
+        choices.where((c) => c.$1 == _category).map((c) => c.$2).firstOrNull ??
+        '全部';
     return Column(
       children: <Widget>[
         CatalogControlBar(
@@ -739,7 +772,8 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
     }
     final DateTime? updatedAt = widget.cacheUpdatedAt;
     final String time = updatedAt == null
-        ? '' : ' · ${DateFormat('MM-dd HH:mm').format(updatedAt)}';
+        ? ''
+        : ' · ${DateFormat('MM-dd HH:mm').format(updatedAt)}';
     return Column(
       children: <Widget>[
         Material(
@@ -768,7 +802,8 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
     }
     if (widget.busyWorkIds.contains(item.work.id)) {
       return const SizedBox(
-        width: 24, height: 24,
+        width: 24,
+        height: 24,
         child: CircularProgressIndicator(strokeWidth: 2),
       );
     }
@@ -790,7 +825,9 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
       physics: const AlwaysScrollableScrollPhysics(),
       itemCount: works.length,
       separatorBuilder: (BuildContext context, int index) => Divider(
-        height: 1, indent: 12, endIndent: 12,
+        height: 1,
+        indent: 12,
+        endIndent: 12,
         color: Colors.grey.withValues(alpha: 0.2),
       ),
       itemBuilder: (BuildContext context, int index) {
@@ -808,7 +845,10 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final int columns = constraints.maxWidth < 600
-            ? 3 : constraints.maxWidth < 900 ? 4 : 5;
+            ? 3
+            : constraints.maxWidth < 900
+            ? 4
+            : 5;
         return CustomScrollView(
           key: _scrollKey('grid'),
           controller: _scrollController,
@@ -819,7 +859,8 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
               sliver: SliverGrid(
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: columns,
-                  mainAxisSpacing: 14, crossAxisSpacing: 10,
+                  mainAxisSpacing: 14,
+                  crossAxisSpacing: 10,
                   childAspectRatio: 0.62,
                 ),
                 delegate: SliverChildBuilderDelegate((context, index) {

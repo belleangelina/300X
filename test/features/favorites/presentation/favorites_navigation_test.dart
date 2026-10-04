@@ -74,6 +74,7 @@ class _Favorites extends ForumFavoriteRepository {
   int nextLoads = 0;
   Completer<CloudFavoritePage>? pending;
   bool splitPages = false;
+  bool failLoads = false;
   final List<CloudFavoriteEntry> entries = <CloudFavoriteEntry>[
     ..._entries(ForumBoard.comic),
     ..._entries(ForumBoard.lightNovel),
@@ -83,6 +84,7 @@ class _Favorites extends ForumFavoriteRepository {
   @override
   Future<CloudFavoritePage> loadInitial() async {
     initialLoads++;
+    if (failLoads) throw StateError('合成离线状态');
     if (pending != null) {
       return pending!.future;
     }
@@ -306,8 +308,12 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     _setSize(tester, const Size(390, 844));
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
-    expect(tester.widget<BottomNavigationBar>(find.byType(BottomNavigationBar)).items,
-        hasLength(4));
+    expect(
+      tester
+          .widget<BottomNavigationBar>(find.byType(BottomNavigationBar))
+          .items,
+      hasLength(4),
+    );
     expect(favorites.initialLoads, 0);
     await tester.tap(find.byIcon(Remix.heart_line));
     await tester.pumpAndSettle();
@@ -317,8 +323,13 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     expect(find.widgetWithText(Tab, '全部'), findsNothing);
     expect(find.byType(CatalogControlBar), findsOneWidget);
     expect(find.byIcon(Icons.grid_view_outlined), findsNothing);
-    expect(find.descendant(of: find.byType(TabAppBar),
-        matching: find.byKey(const Key('favorite-view-toggle-0'))), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(TabAppBar),
+        matching: find.byKey(const Key('favorite-view-toggle-0')),
+      ),
+      findsNothing,
+    );
     expect(favorites.initialLoads, 1);
     expect(_visibleKinds(tester), everyElement(LibraryKind.comic));
     await snapshot(tester, 'favorites-comic-controls-light');
@@ -360,8 +371,12 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
     expect(find.text('原帖'), findsOneWidget);
     expect(find.byType(WorkGridCard), findsWidgets);
-    expect(tester.widgetList<WorkGridCard>(find.byType(WorkGridCard))
-        .map((card) => card.work.kind), everyElement(LibraryKind.novel));
+    expect(
+      tester
+          .widgetList<WorkGridCard>(find.byType(WorkGridCard))
+          .map((card) => card.work.kind),
+      everyElement(LibraryKind.novel),
+    );
     await tester.tap(find.byKey(const Key('favorite-view-toggle-1')));
     await tester.pumpAndSettle();
     expect(_visibleKinds(tester), everyElement(LibraryKind.novel));
@@ -445,8 +460,13 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
   testWidgets('未登录保留双页签和操作栏，登录后恢复当前原帖模式', (tester) async {
     _setSize(tester, const Size(390, 844));
     int logins = 0;
-    await tester.pumpWidget(app(shell: false,
-      auth: const AuthState.unauthenticated(), onLogin: () => logins++));
+    await tester.pumpWidget(
+      app(
+        shell: false,
+        auth: const AuthState.unauthenticated(),
+        onLogin: () => logins++,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(favorites.initialLoads, 0);
     expect(find.text('登录后查看收藏'), findsOneWidget);
@@ -478,9 +498,14 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     expect(find.text('已加载第 1 页 / 共 3 页'), findsOneWidget);
     await tester.enterText(find.byType(TextFormField), '4');
     await tester.pumpAndSettle();
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '跳转')).onPressed,
-        isNull);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '跳转'))
+          .onPressed,
+      isNull,
+    );
     await tester.enterText(find.byType(TextFormField), '2');
+    await tester.pumpAndSettle();
     await tester.tap(find.text('跳转'));
     await tester.pumpAndSettle();
     expect(_position(tester).pixels, 0);
@@ -491,15 +516,22 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.tap(find.byKey(const Key('favorite-page-jump-0')));
     await tester.pumpAndSettle();
     expect(find.text('已加载第 2–3 页 / 共 3 页'), findsOneWidget);
-    expect(tester.widget<TextFormField>(find.byType(TextFormField)).initialValue, '2');
+    expect(
+      tester.widget<TextFormField>(find.byType(TextFormField)).initialValue,
+      '2',
+    );
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('favorite-category-filter-0')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('分类甲').last);
     await tester.pumpAndSettle();
-    expect(tester.widgetList<WorkListTile>(find.byType(WorkListTile))
-        .map((tile) => tile.work.sourceThreads.first.typeId), everyElement(1));
+    expect(
+      tester
+          .widgetList<WorkListTile>(find.byType(WorkListTile))
+          .map((tile) => tile.work.sourceThreads.first.typeId),
+      everyElement(1),
+    );
     await tester.tap(find.byKey(const Key('favorite-page-jump-0')));
     await tester.pumpAndSettle();
     expect(find.text('已加载第 1 页 / 共 2 页'), findsOneWidget);
@@ -513,14 +545,51 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
     await tester.tap(find.text('分类甲（文学区）'));
     await tester.pumpAndSettle();
-    expect(tester.widgetList<WorkListTile>(find.byType(WorkListTile))
-        .map((tile) => tile.work.primaryBoard), everyElement(ForumBoard.literature));
+    expect(
+      tester
+          .widgetList<WorkListTile>(find.byType(WorkListTile))
+          .map((tile) => tile.work.primaryBoard),
+      everyElement(ForumBoard.literature),
+    );
     await tester.tap(find.widgetWithText(Tab, '漫画收藏'));
     await tester.pumpAndSettle();
     expect(find.text('分类甲'), findsOneWidget);
     expect(favorites.initialLoads, 1);
     expect(tester.takeException(), isNull);
     await snapshot(tester, 'favorites-filtered-controls');
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('离线收藏仍支持分类、原帖网格和跳页但保持只读', (tester) async {
+    _setSize(tester, const Size(390, 844));
+    await FavoriteCacheRepository(database).save(
+      favorites.aggregateEntries(favorites.entries),
+    );
+    favorites.failLoads = true;
+    await tester.pumpWidget(app(shell: false));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('当前显示只读收藏缓存'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('favorite-category-filter-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分类甲').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('favorite-mode-toggle-0')));
+    await tester.pumpAndSettle();
+    expect(_visibleKinds(tester), everyElement(LibraryKind.comic));
+    expect(find.byTooltip('取消收藏'), findsNothing);
+    await tester.tap(find.byKey(const Key('favorite-page-jump-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('已加载第 1 页 / 共 1 页'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('favorite-view-toggle-0')));
+    await tester.pumpAndSettle();
+    expect(find.byType(WorkGridCard), findsWidgets);
+    expect(find.byIcon(Icons.favorite), findsNothing);
+    expect(find.text('原帖'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await snapshot(tester, 'favorites-offline-original-grid');
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
