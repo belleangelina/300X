@@ -104,6 +104,14 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+      - name: Upload directly downloadable universal APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: X300-favorites-universal-APK-${{ steps.build.outputs.version }}
+          path: build/releases/*-android-universal-release.apk
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
       - name: Upload Android validation evidence
         if: always()
         uses: actions/upload-artifact@v4

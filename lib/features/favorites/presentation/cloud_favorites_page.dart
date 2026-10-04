@@ -43,6 +43,7 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
   late final TabController _tabController;
   final List<CloudFavoriteEntry> _entries = <CloudFavoriteEntry>[];
   final Set<String> _busyWorkIds = <String>{};
+  final List<bool> _gridModes = <bool>[false, false, false];
 
   CloudFavoritePage? _cursor;
   List<FavoriteWork> _works = <FavoriteWork>[];
@@ -116,12 +117,30 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
     }
   }
 
+  void _toggleView(int index) {
+    setState(() {
+      _gridModes[index] = !_gridModes[index];
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: TabAppBar(
         controller: _tabController,
         tabs: _titles.map((String title) => Tab(text: title)).toList(),
+        action: _activeTab < 2
+            ? IconButton(
+                key: ValueKey<String>('favorite-view-toggle-$_activeTab'),
+                tooltip: _gridModes[_activeTab] ? '切换为列表' : '切换为网格',
+                onPressed: () => _toggleView(_activeTab),
+                icon: Icon(
+                  _gridModes[_activeTab]
+                      ? Icons.view_list_outlined
+                      : Icons.grid_view_outlined,
+                ),
+              )
+            : null,
       ),
       body: TabBarView(
         controller: _tabController,
@@ -133,6 +152,8 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
               index: index,
               title: _titles[index],
               active: widget.active && _activeTab == index,
+              grid: _gridModes[index],
+              onToggleView: () => _toggleView(index),
               works: _worksForTab(index),
               status: _buildStatus(),
               loadingMore: _loadingMore,
@@ -493,6 +514,8 @@ class _FavoritesTabView extends StatefulWidget {
     required this.index,
     required this.title,
     required this.active,
+    required this.grid,
+    required this.onToggleView,
     required this.works,
     required this.status,
     required this.loadingMore,
@@ -512,6 +535,8 @@ class _FavoritesTabView extends StatefulWidget {
   final int index;
   final String title;
   final bool active;
+  final bool grid;
+  final VoidCallback onToggleView;
   final List<FavoriteWork> works;
   final Widget? status;
   final bool loadingMore;
@@ -533,7 +558,6 @@ class _FavoritesTabView extends StatefulWidget {
 class _FavoritesTabViewState extends State<_FavoritesTabView>
     with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
-  bool _grid = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -547,6 +571,16 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
   @override
   void didUpdateWidget(covariant _FavoritesTabView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.grid != widget.grid) {
+      _gridChanging = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _gridChanging = false;
+          });
+        }
+      });
+    }
     if (oldWidget.rawFilter != widget.rawFilter &&
         widget.index == 2 &&
         _scrollController.hasClients) {
@@ -573,20 +607,6 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
 
   bool _gridChanging = false;
 
-  void _toggleView() {
-    setState(() {
-      _gridChanging = true;
-      _grid = !_grid;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() {
-          _gridChanging = false;
-        });
-      }
-    });
-  }
-
   void _fillViewport() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
@@ -610,9 +630,9 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
     _fillViewport();
     return Column(
       children: <Widget>[
-        CatalogControlBar(
-          children: <Widget>[
-            if (widget.index == 2)
+        if (widget.index == 2)
+          CatalogControlBar(
+            children: <Widget>[
               CatalogControlSelector<int>(
                 key: const Key('favorite-kind-filter'),
                 label: const <String>['全部', '漫画', '小说'][widget.rawFilter],
@@ -620,19 +640,19 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
                 choices: const <(int, String)>[(0, '全部'), (1, '漫画'), (2, '小说')],
                 onSelected: widget.onRawFilterChanged,
               ),
-            CatalogControlAction(
-              key: ValueKey<String>('favorite-view-toggle-${widget.index}'),
-              tooltip: _grid ? '切换为列表' : '切换为网格',
-              onTap: _toggleView,
-              child: Text(_grid ? '网格' : '列表'),
-            ),
-            CatalogControlAction(
-              tooltip: '刷新收藏',
-              onTap: () => unawaited(widget.onRefresh()),
-              child: const Text('刷新'),
-            ),
-          ],
-        ),
+              CatalogControlAction(
+                key: const ValueKey<String>('favorite-view-toggle-2'),
+                tooltip: widget.grid ? '切换为列表' : '切换为网格',
+                onTap: widget.onToggleView,
+                child: Text(widget.grid ? '网格' : '列表'),
+              ),
+              CatalogControlAction(
+                tooltip: '刷新收藏',
+                onTap: () => unawaited(widget.onRefresh()),
+                child: const Text('刷新'),
+              ),
+            ],
+          ),
         Expanded(child: _buildContent()),
       ],
     );
@@ -647,16 +667,27 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
     if (widget.works.isEmpty) {
       content = widget.hasMore
           ? const AppLoadingView(message: '正在读取后续收藏')
-          : AppEmptyView(
-              message: widget.index == 2
-                  ? '暂无符合筛选条件的原始收藏'
-                  : '暂无${widget.title}收藏，可在原始收藏中查看逐帖记录',
-              onRefresh: () => unawaited(widget.onRefresh()),
+          : RefreshIndicator(
+              onRefresh: widget.onRefresh,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: <Widget>[
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: AppEmptyView(
+                      message: widget.index == 2
+                          ? '暂无符合筛选条件的原始收藏'
+                          : '暂无${widget.title}收藏，可在原始收藏中查看逐帖记录',
+                      onRefresh: () => unawaited(widget.onRefresh()),
+                    ),
+                  ),
+                ],
+              ),
             );
     } else {
       content = RefreshIndicator(
         onRefresh: widget.onRefresh,
-        child: _grid ? _buildGrid() : _buildList(),
+        child: widget.grid ? _buildGrid() : _buildList(),
       );
     }
     if (!widget.usingCache) {
