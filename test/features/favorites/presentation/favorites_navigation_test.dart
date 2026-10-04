@@ -563,9 +563,9 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
 
   testWidgets('离线收藏仍支持分类、原帖网格和跳页但保持只读', (tester) async {
     _setSize(tester, const Size(390, 844));
-    await FavoriteCacheRepository(database).save(
-      favorites.aggregateEntries(favorites.entries),
-    );
+    await FavoriteCacheRepository(
+      database,
+    ).save(favorites.aggregateEntries(favorites.entries));
     favorites.failLoads = true;
     await tester.pumpWidget(app(shell: false));
     await tester.pumpAndSettle();
