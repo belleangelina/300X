@@ -256,9 +256,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     expect(
       find.descendant(
         of: find.byType(TabAppBar),
-        matching: find.byKey(
-          const ValueKey<String>('favorite-view-toggle-0'),
-        ),
+        matching: find.byKey(const ValueKey<String>('favorite-view-toggle-0')),
       ),
       findsOneWidget,
     );
