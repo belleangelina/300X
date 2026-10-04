@@ -319,7 +319,10 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     expect(find.byType(WorkGridCard), findsNothing);
     expect(find.text('漫画 · 正文'), findsWidgets);
     await tester.scrollUntilVisible(
-      find.text('小说 · 正文').first,
+      find.descendant(
+        of: find.widgetWithText(WorkListTile, '合成轻小说作品A'),
+        matching: find.text('小说 · 正文'),
+      ),
       500,
       scrollable: find
           .descendant(
