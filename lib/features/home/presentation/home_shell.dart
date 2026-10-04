@@ -7,6 +7,7 @@ import 'package:x300/app/app_navigation.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/auth/presentation/login_page.dart';
+import 'package:x300/features/favorites/presentation/cloud_favorites_page.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 import 'package:x300/features/library/presentation/library_home_page.dart';
 import 'package:x300/features/library/presentation/work_detail_page.dart';
@@ -41,6 +42,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
   int _index = 0;
   Work? _selectedWork;
   int? _selectedSourceTid;
+  bool _selectedRawSourceMode = false;
   ProfileDetailDestination? _selectedProfileDetail;
   Timer? _automaticMaintenanceTimer;
   bool _showingUpdate = false;
@@ -57,6 +59,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
       label: '小说',
       icon: Remix.book_open_line,
       selectedIcon: Remix.book_open_fill,
+    ),
+    _Destination(
+      label: '收藏',
+      icon: Remix.heart_line,
+      selectedIcon: Remix.heart_fill,
     ),
     _Destination(
       label: '我的',
@@ -178,6 +185,19 @@ class _HomeShellState extends ConsumerState<HomeShell>
               ),
               TickerMode(
                 enabled: _index == 2,
+                child: CloudFavoritesPage(
+                  authState: widget.authState,
+                  active: _index == 2,
+                  onLogin: _openLogin,
+                  onOpenWork: (Work work, {required bool raw}) => _showWork(
+                    work,
+                    initialSourceTid: work.primarySourceTid,
+                    rawSourceMode: raw,
+                  ),
+                ),
+              ),
+              TickerMode(
+                enabled: _index == 3,
                 child: ProfilePage(
                   authState: widget.authState,
                   onLogin: _openLogin,
@@ -326,7 +346,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
   }
 
   Widget _buildWideDetail() {
-    if (_index == 2) {
+    if (_index == 3) {
       final ProfileDetailDestination? destination = _selectedProfileDetail;
       if (destination == null) {
         return const Center(
@@ -344,11 +364,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
       );
     }
     return WorkDetailPage(
-      key: ValueKey<String>(_selectedWork!.id),
+      key: ValueKey<String>('${_selectedWork!.id}:$_selectedRawSourceMode'),
       work: _selectedWork!,
       embedded: true,
       initialSourceTid: _selectedSourceTid,
-      resolveOnOpen: true,
+      resolveOnOpen: !_selectedRawSourceMode,
+      rawSourceMode: _selectedRawSourceMode,
     );
   }
 
@@ -365,6 +386,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
       _index = value;
       _selectedWork = null;
       _selectedSourceTid = null;
+      _selectedRawSourceMode = false;
       _selectedProfileDetail = null;
     });
     unawaited(_showPendingUpdate());
@@ -375,11 +397,16 @@ class _HomeShellState extends ConsumerState<HomeShell>
     _showWork(work, initialSourceTid: initialSourceTid);
   }
 
-  void _showWork(Work work, {required int initialSourceTid}) {
+  void _showWork(
+    Work work, {
+    required int initialSourceTid,
+    bool rawSourceMode = false,
+  }) {
     if (usesWideHomeLayout(MediaQuery.sizeOf(context))) {
       setState(() {
         _selectedWork = work;
         _selectedSourceTid = initialSourceTid;
+        _selectedRawSourceMode = rawSourceMode;
       });
       return;
     }
@@ -388,7 +415,8 @@ class _HomeShellState extends ConsumerState<HomeShell>
         builder: (BuildContext context) => WorkDetailPage(
           work: work,
           initialSourceTid: initialSourceTid,
-          resolveOnOpen: true,
+          resolveOnOpen: !rawSourceMode,
+          rawSourceMode: rawSourceMode,
         ),
       ),
     );

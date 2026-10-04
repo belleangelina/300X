@@ -16,6 +16,7 @@ import 'package:x300/shared/presentation/app_error_view.dart';
 import 'package:x300/shared/presentation/app_loading_view.dart';
 import 'package:x300/shared/presentation/app_snack_bar.dart';
 import 'package:x300/shared/presentation/tab_app_bar.dart';
+import 'package:x300/shared/presentation/catalog_controls.dart';
 
 class LibraryHomeController {
   Future<void> Function()? _refreshHandler;
@@ -805,7 +806,7 @@ class _CatalogControls extends StatelessWidget {
             child: Row(
               children: <Widget>[
                 Expanded(
-                  child: _CatalogSelector<int>(
+                  child: CatalogControlSelector<int>(
                     key: const ValueKey<String>('catalog-category-filter'),
                     label: categoryLabel,
                     selected: categoryTypeId ?? _allCategories,
@@ -821,7 +822,7 @@ class _CatalogControls extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  child: _CatalogAction(
+                  child: CatalogControlAction(
                     key: const ValueKey<String>('catalog-page-jump'),
                     tooltip: '跳页',
                     onTap: onPageTap,
@@ -829,7 +830,7 @@ class _CatalogControls extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  child: _CatalogAction(
+                  child: CatalogControlAction(
                     key: const ValueKey<String>('catalog-view-toggle'),
                     tooltip: viewMode == _CatalogViewMode.list
                         ? '切换为网格'
@@ -845,7 +846,7 @@ class _CatalogControls extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  child: _CatalogAction(
+                  child: CatalogControlAction(
                     key: const ValueKey<String>('catalog-sort-filter'),
                     tooltip: sort == CatalogSection.ranking ? '切换为最新' : '切换为热度',
                     onTap: () => onSortChanged(
@@ -866,87 +867,6 @@ class _CatalogControls extends StatelessWidget {
             color: Colors.grey.withValues(alpha: 0.2),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CatalogAction extends StatelessWidget {
-  const _CatalogAction({
-    required this.tooltip,
-    required this.onTap,
-    required this.child,
-    super.key,
-  });
-
-  final String tooltip;
-  final VoidCallback onTap;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: child,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CatalogSelector<T> extends StatelessWidget {
-  const _CatalogSelector({
-    required this.label,
-    required this.selected,
-    required this.choices,
-    required this.onSelected,
-    super.key,
-  });
-
-  final String label;
-  final T selected;
-  final List<(T, String)> choices;
-  final ValueChanged<T> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<T>(
-      initialValue: selected,
-      position: PopupMenuPosition.under,
-      onSelected: onSelected,
-      itemBuilder: (BuildContext context) => choices
-          .map(
-            ((T, String) choice) => CheckedPopupMenuItem<T>(
-              value: choice.$1,
-              checked: choice.$1 == selected,
-              child: Text(choice.$2),
-            ),
-          )
-          .toList(growable: false),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 2),
-              const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-            ],
-          ),
-        ),
       ),
     );
   }

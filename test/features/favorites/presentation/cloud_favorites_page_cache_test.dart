@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:x300/core/storage/app_database.dart';
+import 'package:x300/features/auth/domain/auth_models.dart';
+import 'package:x300/shared/presentation/tab_app_bar.dart';
 import 'package:x300/features/favorites/data/favorite_cache_repository.dart';
 import 'package:x300/features/favorites/data/forum_favorite_repository.dart';
 import 'package:x300/features/favorites/domain/favorite_models.dart';
@@ -59,7 +61,7 @@ void main() {
           forumFavoriteRepositoryProvider.overrideWithValue(forum),
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
-        child: const MaterialApp(home: CloudFavoritesPage()),
+        child: const MaterialApp(home: CloudFavoritesPage(authState: AuthState.authenticated('测试账号'), onLogin: _noop)),
       ),
     );
     await tester.pump();
@@ -93,14 +95,16 @@ void main() {
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
         child: const MaterialApp(
-          home: CloudFavoritesPage(kind: LibraryKind.novel),
+          home: CloudFavoritesPage(authState: AuthState.authenticated('测试账号'), onLogin: _noop),
         ),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('小说收藏'), findsOneWidget);
+    await tester.tap(find.text('小说'));
+    await tester.pumpAndSettle();
+    expect(find.text('小说'), findsOneWidget);
     expect(find.text('缓存小说收藏'), findsWidgets);
     expect(find.text('缓存收藏'), findsNothing);
 
@@ -150,7 +154,7 @@ void main() {
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
         child: const MaterialApp(
-          home: CloudFavoritesPage(kind: LibraryKind.novel),
+          home: CloudFavoritesPage(authState: AuthState.authenticated('测试账号'), onLogin: _noop),
         ),
       ),
     );
@@ -216,35 +220,21 @@ void main() {
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
         child: const MaterialApp(
-          home: CloudFavoritesPage(kind: LibraryKind.novel),
+          home: CloudFavoritesPage(authState: AuthState.authenticated('测试账号'), onLogin: _noop),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('智能聚合'), findsOneWidget);
+    await tester.tap(find.text('小说'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TabAppBar), findsOneWidget);
     expect(find.text('原始收藏'), findsOneWidget);
     expect(find.text('测试作品'), findsWidgets);
     expect(find.text('测试作品 第1章'), findsNothing);
-    final Finder bottomModes = find.byKey(
-      const Key('favorite-result-mode-bottom-bar'),
-    );
-    expect(
-      tester.getBottomRight(bottomModes).dy,
-      tester.getBottomRight(find.byType(Scaffold)).dy,
-    );
-    expect(
-      find.descendant(of: bottomModes, matching: find.byType(Icon)),
-      findsNothing,
-    );
-    final TabBar resultModes = tester.widget<TabBar>(
-      find.descendant(of: bottomModes, matching: find.byType(TabBar)),
-    );
-    expect(
-      resultModes.labelColor,
-      Theme.of(tester.element(bottomModes)).colorScheme.primary,
-    );
-    expect(resultModes.unselectedLabelColor, Colors.black87);
+    expect(find.text('漫画'), findsOneWidget);
+    expect(find.text('小说'), findsOneWidget);
+    expect(find.byKey(const Key('favorite-result-mode-bottom-bar')), findsNothing);
 
     await tester.tap(find.text('原始收藏'));
     await tester.pumpAndSettle();
@@ -358,3 +348,5 @@ FavoriteWork _favorite({LibraryKind kind = LibraryKind.comic}) {
     ],
   );
 }
+
+void _noop() {}

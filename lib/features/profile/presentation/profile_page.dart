@@ -11,7 +11,6 @@ import 'package:x300/core/network/forum_client.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/downloads/presentation/downloads_page.dart';
-import 'package:x300/features/favorites/presentation/cloud_favorites_page.dart';
 import 'package:x300/features/history/presentation/reading_history_page.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 import 'package:x300/features/profile/presentation/about_page.dart';
@@ -21,10 +20,8 @@ import 'package:x300/features/settings/domain/app_settings.dart';
 import 'package:x300/features/settings/presentation/settings_page.dart';
 
 enum ProfileDetailDestination {
-  novelFavorites,
   novelHistory,
   novelDownloads,
-  comicFavorites,
   comicHistory,
   comicDownloads,
   settings,
@@ -33,17 +30,11 @@ enum ProfileDetailDestination {
 
 Widget buildProfileDetailPage(ProfileDetailDestination destination) {
   return switch (destination) {
-    ProfileDetailDestination.novelFavorites => const CloudFavoritesPage(
-      kind: LibraryKind.novel,
-    ),
     ProfileDetailDestination.novelHistory => const ReadingHistoryPage(
       kind: LibraryKind.novel,
     ),
     ProfileDetailDestination.novelDownloads => const DownloadsPage(
       kind: LibraryKind.novel,
-    ),
-    ProfileDetailDestination.comicFavorites => const CloudFavoritesPage(
-      kind: LibraryKind.comic,
     ),
     ProfileDetailDestination.comicHistory => const ReadingHistoryPage(
       kind: LibraryKind.comic,
@@ -106,16 +97,6 @@ class ProfilePage extends ConsumerWidget {
               key: const Key('profile-novel-card'),
               children: <Widget>[
                 ListTile(
-                  leading: const Icon(Remix.heart_line),
-                  title: const Text('小说收藏'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _openDetail(
-                    context,
-                    ProfileDetailDestination.novelFavorites,
-                    requiresLogin: true,
-                  ),
-                ),
-                ListTile(
                   leading: const Icon(Remix.file_history_line),
                   title: const Text('小说记录'),
                   trailing: const Icon(Icons.chevron_right),
@@ -140,16 +121,6 @@ class ProfilePage extends ConsumerWidget {
             _ProfileCard(
               key: const Key('profile-comic-card'),
               children: <Widget>[
-                ListTile(
-                  leading: const Icon(Remix.heart_line),
-                  title: const Text('漫画收藏'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _openDetail(
-                    context,
-                    ProfileDetailDestination.comicFavorites,
-                    requiresLogin: true,
-                  ),
-                ),
                 ListTile(
                   leading: const Icon(Remix.file_history_line),
                   title: const Text('漫画记录'),
@@ -215,13 +186,8 @@ class ProfilePage extends ConsumerWidget {
 
   void _openDetail(
     BuildContext context,
-    ProfileDetailDestination destination, {
-    bool requiresLogin = false,
-  }) {
-    if (requiresLogin && authState.status != AuthStatus.authenticated) {
-      onLogin();
-      return;
-    }
+    ProfileDetailDestination destination,
+  ) {
     final ValueChanged<ProfileDetailDestination>? callback = onOpenDetail;
     if (callback != null) {
       callback(destination);
