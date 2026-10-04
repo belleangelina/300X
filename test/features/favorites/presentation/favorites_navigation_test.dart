@@ -242,7 +242,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     for (final ThemeData theme in <ThemeData>[AppTheme.light, AppTheme.dark]) {
       await tester.pumpWidget(app(theme: theme));
       await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Remix.user_3_line));
+      await tester.tap(find.text('我的'));
       await tester.pumpAndSettle();
       final Finder board = find.byKey(const Key('profile-board'));
       expect(board, findsOneWidget);
