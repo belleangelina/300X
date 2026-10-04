@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:x300/app/app_colors.dart';
 import 'package:x300/app/app_theme.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
@@ -34,57 +33,34 @@ void main() {
     );
   });
 
-  testWidgets('个人页小说漫画与设置在浅色和深色主题下都有独立卡片', (WidgetTester tester) async {
-    await tester.pumpWidget(_profileApp(settingsRepository, AppTheme.light));
-    await tester.pumpAndSettle();
+  testWidgets('个人页入口合并到一张卡片且头像不显示说明', (WidgetTester tester) async {
+    for (final ThemeData theme in <ThemeData>[AppTheme.light, AppTheme.dark]) {
+      await tester.pumpWidget(_profileApp(settingsRepository, theme));
+      await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('profile-novel-card')), findsOneWidget);
-    expect(find.byKey(const Key('profile-comic-card')), findsOneWidget);
-    expect(find.byKey(const Key('profile-settings-card')), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('profile-novel-card')),
-        matching: find.text('小说记录'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('profile-comic-card')),
-        matching: find.text('漫画记录'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('profile-settings-card')),
-        matching: find.text('开源主页'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('profile-settings-card')),
-        matching: find.text('关于APP'),
-      ),
-      findsOneWidget,
-    );
-    expect(_materialsWithColor(tester, Colors.white), greaterThanOrEqualTo(3));
-    expect(
-      tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
-      AppColors.background,
-    );
-
-    await tester.pumpWidget(_profileApp(settingsRepository, AppTheme.dark));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('profile-novel-card')), findsOneWidget);
-    expect(find.byKey(const Key('profile-comic-card')), findsOneWidget);
-    expect(find.byKey(const Key('profile-settings-card')), findsOneWidget);
-    expect(
-      _materialsWithColor(tester, AppColors.cardDark),
-      greaterThanOrEqualTo(3),
-    );
+      final Finder board = find.byKey(const Key('profile-board'));
+      expect(board, findsOneWidget);
+      expect(find.byKey(const Key('profile-novel-card')), findsNothing);
+      expect(find.byKey(const Key('profile-comic-card')), findsNothing);
+      expect(find.byKey(const Key('profile-settings-card')), findsNothing);
+      final List<ListTile> entries = tester
+          .widgetList<ListTile>(
+            find.descendant(of: board, matching: find.byType(ListTile)),
+          )
+          .toList();
+      expect(
+        entries.map((ListTile entry) => (entry.title! as Text).data),
+        <String>['小说记录', '漫画记录', '显示主题', '更多设置', '开源主页', '关于APP'],
+      );
+      final Finder material = find.descendant(
+        of: board,
+        matching: find.byType(Material),
+      );
+      expect(material, findsOneWidget);
+      expect(tester.widget<Material>(material).color, theme.cardColor);
+      expect(tester.widget<ListTile>(_tileWithText('测试账号')).subtitle, isNull);
+      expect(find.text('百合会论坛账号'), findsNothing);
+    }
     expect(AppTheme.dark.scaffoldBackgroundColor, Colors.black);
   });
 
@@ -169,6 +145,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('未登录'), findsOneWidget);
+    expect(tester.widget<ListTile>(_tileWithText('未登录')).subtitle, isNull);
     await tester.tap(find.widgetWithText(ListTile, '未登录'));
 
     expect(loginRequests, 1);
@@ -222,13 +199,6 @@ Widget _profileApp(
 
 Finder _tileWithText(String text) {
   return find.ancestor(of: find.text(text), matching: find.byType(ListTile));
-}
-
-int _materialsWithColor(WidgetTester tester, Color color) {
-  return tester
-      .widgetList<Material>(find.byType(Material))
-      .where((Material material) => material.color == color)
-      .length;
 }
 
 void _noop() {}

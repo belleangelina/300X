@@ -28,6 +28,7 @@ import 'package:x300/features/library/presentation/work_widgets.dart';
 import 'package:x300/features/settings/data/app_settings_repository.dart';
 import 'package:x300/features/settings/data/cache_maintenance_repository.dart';
 import 'package:x300/features/settings/domain/app_settings.dart';
+import 'package:x300/features/settings/presentation/settings_page.dart';
 import 'package:x300/shared/presentation/catalog_controls.dart';
 import 'package:x300/shared/presentation/tab_app_bar.dart';
 
@@ -180,6 +181,12 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     favorites = _Favorites();
     maintenance = _Maintenance();
     when(() => maintenance.maintainAutomatically()).thenAnswer((_) async {});
+    when(maintenance.measureUsage).thenAnswer(
+      (_) async => const CacheUsageSnapshot(
+        temporaryBytes: 2048,
+        coverBytes: 1024 * 1024,
+      ),
+    );
   });
 
   tearDown(() async {
@@ -230,6 +237,70 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     image.dispose();
   }
 
+  testWidgets('个人页单卡片、无头像说明和设置简短文案可交互', (tester) async {
+    _setSize(tester, const Size(390, 844));
+    for (final ThemeData theme in <ThemeData>[AppTheme.light, AppTheme.dark]) {
+      await tester.pumpWidget(app(theme: theme));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Remix.user_3_line));
+      await tester.pumpAndSettle();
+      final Finder board = find.byKey(const Key('profile-board'));
+      expect(board, findsOneWidget);
+      expect(
+        find.descendant(of: board, matching: find.byType(ListTile)),
+        findsNWidgets(6),
+      );
+      expect(
+        tester
+            .widget<ListTile>(find.widgetWithText(ListTile, '合成测试账号'))
+            .subtitle,
+        isNull,
+      );
+      final String brightness = theme.brightness.name;
+      await snapshot(tester, 'profile-board-$brightness');
+      await tester.tap(find.text('显示主题'));
+      await tester.pumpAndSettle();
+      expect(find.text('设置主题'), findsOneWidget);
+      Navigator.of(tester.element(find.byType(SimpleDialog))).pop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('更多设置'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsPage), findsOneWidget);
+      expect(find.textContaining('当前大小：约 2.0 KB'), findsOneWidget);
+      expect(find.textContaining('搜索、收藏及正文图片'), findsOneWidget);
+      expect(find.textContaining('封面可重新加载'), findsOneWidget);
+      expect(find.text('下次打开作品时重建'), findsOneWidget);
+      expect(find.text('关闭后使用默认字号'), findsOneWidget);
+      expect(find.text('每 24 小时最多检查一次'), findsOneWidget);
+      expect(find.text('GitCode 官方镜像'), findsOneWidget);
+      await snapshot(tester, 'settings-general-$brightness');
+      final Finder textScale = find.widgetWithText(
+        SwitchListTile,
+        '字体大小跟随系统',
+      );
+      final bool previous = tester.widget<SwitchListTile>(textScale).value;
+      await tester.tap(textScale);
+      await tester.pumpAndSettle();
+      expect(settings.load().useSystemTextScale, !previous);
+      await tester.tap(
+        find.descendant(
+          of: find.widgetWithText(ListTile, '清除临时缓存'),
+          matching: find.byType(OutlinedButton),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('阅读历史和离线下载不会被删除'), findsOneWidget);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(board, findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('收藏底栏、干净网格、原帖类型标注和宽窄屏详情', (tester) async {
     _setSize(tester, const Size(390, 844));
     await tester.pumpWidget(app());
@@ -247,7 +318,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     expect(find.byType(TabAppBar), findsOneWidget);
     expect(find.widgetWithText(Tab, '漫画收藏'), findsOneWidget);
     expect(find.widgetWithText(Tab, '小说收藏'), findsOneWidget);
-    expect(find.widgetWithText(Tab, '全部原帖'), findsOneWidget);
+    expect(find.widgetWithText(Tab, '全部'), findsOneWidget);
     expect(favorites.initialLoads, 1);
     expect(_visibleKinds(tester), everyElement(LibraryKind.comic));
     expect(find.byType(CatalogControlBar), findsNothing);
@@ -306,7 +377,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
     await snapshot(tester, 'favorites-novel-grid-dark');
 
-    await tester.tap(find.widgetWithText(Tab, '全部原帖'));
+    await tester.tap(find.widgetWithText(Tab, '全部'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('favorite-kind-filter')), findsNothing);
     expect(find.byType(CatalogControlBar), findsNothing);
@@ -405,7 +476,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, 450));
     await tester.pumpAndSettle();
     expect(favorites.initialLoads, 3);
-    await tester.tap(find.widgetWithText(Tab, '全部原帖'));
+    await tester.tap(find.widgetWithText(Tab, '全部'));
     await tester.pumpAndSettle();
     expect(find.text('暂无原帖'), findsOneWidget);
     expect(find.byType(CatalogControlBar), findsNothing);
@@ -433,7 +504,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('未登录保留收藏页签并在登录后显示全部原帖', (tester) async {
+  testWidgets('未登录保留收藏页签并在登录后显示全部', (tester) async {
     _setSize(tester, const Size(390, 844));
     int logins = 0;
     await tester.pumpWidget(
@@ -446,7 +517,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
     expect(favorites.initialLoads, 0);
     expect(find.text('登录后查看收藏'), findsOneWidget);
-    await tester.tap(find.widgetWithText(Tab, '全部原帖'));
+    await tester.tap(find.widgetWithText(Tab, '全部'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('登录'));
     await tester.pumpAndSettle();

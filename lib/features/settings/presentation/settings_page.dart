@@ -92,8 +92,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           title: const Text('清除临时缓存'),
           subtitle: Text(
             '${_cacheSizeText(_cacheUsage?.temporaryBytes)}\n'
-            '清除搜索、云收藏和在线正文图片缓存，'
-            '保留作品索引、历史与离线下载',
+            '搜索、收藏及正文图片',
           ),
           trailing: OutlinedButton(
             onPressed: _clearing ? null : _clearCaches,
@@ -104,8 +103,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           title: const Text('清除封面缓存'),
           subtitle: Text(
             '${_cacheSizeText(_cacheUsage?.coverBytes)}\n'
-            '删除已缓存的漫画和小说封面，'
-            '不影响作品索引、历史与离线下载',
+            '封面可重新加载',
           ),
           trailing: OutlinedButton(
             onPressed: _clearingCovers ? null : _clearCoverCaches,
@@ -114,7 +112,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
         ListTile(
           title: const Text('清除作品索引'),
-          subtitle: const Text('删除已建立的漫画和小说目录索引，不删除历史与离线下载'),
+          subtitle: const Text('下次打开作品时重建'),
           trailing: OutlinedButton(
             onPressed: _clearingIndex ? null : _clearWorkIndexes,
             child: Text(_clearingIndex ? '清理中' : '清除'),
@@ -125,14 +123,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           onChanged: (bool value) =>
               _update(settings.copyWith(useSystemTextScale: value)),
           title: const Text('字体大小跟随系统'),
-          subtitle: const Text('关闭后使用应用设计字号'),
+          subtitle: const Text('关闭后使用默认字号'),
         ),
         const Divider(),
         SwitchListTile(
           value: settings.automaticUpdateChecks,
           onChanged: (bool value) => _setAutomaticUpdateChecks(settings, value),
           title: const Text('自动检查更新'),
-          subtitle: const Text('关闭后永不自动提醒；开启时每 24 小时最多检查一次'),
+          subtitle: const Text('每 24 小时最多检查一次'),
         ),
         ListTile(
           title: const Text('国内下载源'),

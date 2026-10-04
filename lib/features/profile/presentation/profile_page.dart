@@ -76,13 +76,12 @@ class ProfilePage extends ConsumerWidget {
           children: <Widget>[
             ListTile(
               leading: _ProfileAvatar(uri: avatarUri),
-              title: Text(authenticated ? authState.username : '未登录'),
-              subtitle: Text(
-                authState.sessionExpired
-                    ? '登录状态已失效，请重新登录'
-                    : authenticated
-                    ? '百合会论坛账号'
-                    : '点击头像登录百合会论坛',
+              title: Text(
+                authenticated
+                    ? authState.username
+                    : authState.sessionExpired
+                    ? '登录已失效'
+                    : '未登录',
               ),
               trailing: authenticated
                   ? IconButton(
@@ -94,7 +93,7 @@ class ProfilePage extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
             _ProfileCard(
-              key: const Key('profile-novel-card'),
+              key: const Key('profile-board'),
               children: <Widget>[
                 ListTile(
                   leading: const Icon(Remix.file_history_line),
@@ -115,12 +114,6 @@ class ProfilePage extends ConsumerWidget {
                       ProfileDetailDestination.novelDownloads,
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _ProfileCard(
-              key: const Key('profile-comic-card'),
-              children: <Widget>[
                 ListTile(
                   leading: const Icon(Remix.file_history_line),
                   title: const Text('漫画记录'),
@@ -140,12 +133,6 @@ class ProfilePage extends ConsumerWidget {
                       ProfileDetailDestination.comicDownloads,
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _ProfileCard(
-              key: const Key('profile-settings-card'),
-              children: <Widget>[
                 ListTile(
                   leading: Icon(
                     settings.theme == AppThemePreference.dark

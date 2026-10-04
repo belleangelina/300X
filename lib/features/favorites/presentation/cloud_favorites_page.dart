@@ -38,7 +38,7 @@ class CloudFavoritesPage extends ConsumerStatefulWidget {
 
 class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
     with SingleTickerProviderStateMixin {
-  static const List<String> _titles = <String>['漫画收藏', '小说收藏', '全部原帖'];
+  static const List<String> _titles = <String>['漫画收藏', '小说收藏', '全部'];
   late final TabController _tabController;
   final List<CloudFavoriteEntry> _entries = <CloudFavoriteEntry>[];
   final Set<String> _busyWorkIds = <String>{};
@@ -618,7 +618,7 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
                     child: AppEmptyView(
                       message: widget.index == 2
                           ? '暂无原帖'
-                          : '暂无${widget.title}，可在全部原帖中查看逐帖记录',
+                          : '暂无${widget.title}，可在全部中查看逐帖记录',
                       onRefresh: () => unawaited(widget.onRefresh()),
                     ),
                   ),
