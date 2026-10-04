@@ -1,0 +1,273 @@
+name: Publish formal v1.0.11
+
+on:
+  push:
+    branches: [release/v1.0.11]
+    paths: [.github/workflows/publish-v1.0.11.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      build-number: ${{ steps.release.outputs.build-number }}
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c30cd1de183a608b4dd9121dfe15acae31438a15
+          fetch-depth: 0
+      - id: release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(awk '/^version:/ { print $2; exit }' pubspec.yaml)" = "1.0.11+14"
+          test "$(git rev-parse HEAD)" = "c30cd1de183a608b4dd9121dfe15acae31438a15"
+          printf 'version=1.0.11\nbuild-number=14\ncommit=c30cd1de183a608b4dd9121dfe15acae31438a15\n' >> "$GITHUB_OUTPUT"
+          cat > release-notes.md <<'NOTES'
+          ## 更新内容
+          
+          - 优化作品列表和网格滑动，减少长目录滚动中的卡顿。
+          - 修复「最新」排序：按主题发布时间倒序，回复旧帖不再使作品前移；分类与分页沿用相同条件。
+          
+          ## 验证
+          
+          - 排序与滑动相关回归及 Android 模拟器验证通过。
+          - Android v8a 测试包已完成用户实机验证。
+          
+          ## 安装包
+          
+          - Android arm64-v8a 与通用 APK 沿用原签名。
+          - iOS 提供未签名 IPA，需自行签名安装。
+          
+          正式版本：1.0.11+14。
+          NOTES
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  build-android:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c30cd1de183a608b4dd9121dfe15acae31438a15
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+      - name: Configure release signing
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$KEYSTORE" && test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD" && test -n "$STORE_PASSWORD"
+          printf '%s' "$KEYSTORE" | base64 --decode > android/app/x300-release.jks
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=x300-release.jks\n' \
+            "$STORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
+      - name: Resolve dependencies and run release checks
+        run: |
+          mkdir -p .artifacts/validation/logs
+          flutter pub get > .artifacts/validation/logs/pub-get.log 2>&1
+          flutter analyze --no-pub > .artifacts/validation/logs/analyze.log 2>&1
+          flutter test --no-pub > .artifacts/validation/logs/tests.log 2>&1
+      - name: Build APKs
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
+          EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p release-assets
+          # The release script owns version increments; restore the previous
+          # committed version only inside this runner, then reproduce the tag version.
+          perl -pi -e 's/^version: 1\.0\.11\+14$/version: 1.0.10+13/' pubspec.yaml
+          bash build_release.sh --platform android --version "$VERSION" \
+            --build-number "$BUILD_NUMBER" > .artifacts/validation/logs/android-build.log 2>&1
+          test "$(awk '/^version:/ { print $2; exit }' pubspec.yaml)" = "1.0.11+14"
+          cp build/releases/*.apk release-assets/
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          aapt=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
+          test -x "$apksigner"
+          test -x "$aapt"
+          for apk in release-assets/*.apk; do
+            "$apksigner" verify --verbose "$apk" >/dev/null
+            actual_cert=$(
+              "$apksigner" verify --print-certs-pem "$apk" |
+                openssl x509 -outform DER | sha256sum | awk '{ print $1 }'
+            )
+            test "${actual_cert,,}" = "${EXPECTED_CERT_SHA256,,}"
+            badging=$("$aapt" dump badging "$apk" | sed -n '1p')
+            grep -Fq "versionCode='$BUILD_NUMBER'" <<<"$badging"
+            grep -Fq "versionName='$VERSION'" <<<"$badging"
+          done
+          unzip -Z1 "release-assets/X300-v${VERSION}-android-universal-release.apk" |
+            awk -F/ '/^lib\/[^/]+\/.*\.so$/ { print $2 }' | sort -u \
+              > universal-abis.txt
+          printf '%s\n' arm64-v8a armeabi-v7a x86_64 > expected-universal-abis.txt
+          cmp expected-universal-abis.txt universal-abis.txt
+          unzip -Z1 "release-assets/X300-v${VERSION}-android-arm64-v8a-release.apk" |
+            awk -F/ '/^lib\/[^/]+\/.*\.so$/ { print $2 }' | sort -u \
+              > arm64-abis.txt
+          printf '%s\n' arm64-v8a > expected-arm64-abis.txt
+          cmp expected-arm64-abis.txt arm64-abis.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: release-assets/*
+
+      - name: Upload release validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: formal-release-validation-logs
+          path: .artifacts/validation/logs/
+      - name: Remove signing material
+        if: always()
+        run: rm -f android/key.properties android/app/x300-release.jks
+
+  build-ios:
+    needs: prepare
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c30cd1de183a608b4dd9121dfe15acae31438a15
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+      - run: |
+          mkdir -p .artifacts/validation/logs
+          flutter pub get > .artifacts/validation/logs/pub-get.log 2>&1
+      - name: Build unsigned IPA
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
+        run: |
+          set -Eeuo pipefail
+          flutter build ipa --release --no-codesign --build-name="$VERSION" \
+            --build-number="$BUILD_NUMBER" > .artifacts/validation/logs/ios-build.log 2>&1
+          archive=$(find build/ios/archive -maxdepth 1 -name '*.xcarchive' | head -1)
+          app=$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' | head -1)
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+            "$app/Info.plist")" = "$VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
+            "$app/Info.plist")" = "$BUILD_NUMBER"
+          mkdir -p package/Payload release-assets
+          cp -R "$app" package/Payload/
+          (cd package && zip -r -q \
+            "../release-assets/X300-v${VERSION}-ios-unsigned.ipa" Payload)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-release
+          path: release-assets/*
+
+  publish:
+    needs: [prepare, build-android, build-ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      BUILD_NUMBER: ${{ needs.prepare.outputs.build-number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c30cd1de183a608b4dd9121dfe15acae31438a15
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-release'
+          path: release-assets
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: release-metadata
+      - name: Create annotated formal release tag
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "c30cd1de183a608b4dd9121dfe15acae31438a15"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a v1.0.11 "c30cd1de183a608b4dd9121dfe15acae31438a15" -F release-metadata/release-notes.md
+          git push origin refs/tags/v1.0.11
+      - name: Generate update manifest
+        run: |
+          mkdir -p .artifacts/validation/logs
+          flutter pub get > .artifacts/validation/logs/pub-get.log 2>&1
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct v1.0.11)
+          dart run tool/release/generate_update_manifest.dart \
+            release-assets "$VERSION" "$BUILD_NUMBER" \
+            release-metadata/release-notes.md \
+            release-assets/update-manifest.json
+      - name: Publish GitHub Release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          tag="v$VERSION"
+          mkdir -p /tmp/github-existing
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --verify-tag --title "$tag" \
+              --notes-file release-metadata/release-notes.md
+          fi
+          release=$(gh release view "$tag" \
+            --json tagName,name,body,isDraft,isPrerelease)
+          test "$(jq -r .tagName <<<"$release")" = "$tag"
+          test "$(jq -r .name <<<"$release")" = "$tag"
+          test "$(jq -r .body <<<"$release")" = \
+            "$(cat release-metadata/release-notes.md)"
+          jq -e '(.isDraft | not) and (.isPrerelease | not)' \
+            <<<"$release" >/dev/null
+          for asset in release-assets/*; do
+            test "$(basename "$asset")" = update-manifest.json && continue
+            if gh release view "$tag" --json assets \
+              --jq ".assets[].name" | grep -Fxq "$(basename "$asset")"; then
+              gh release download "$tag" --pattern "$(basename "$asset")" \
+                --dir /tmp/github-existing
+              cmp "$asset" "/tmp/github-existing/$(basename "$asset")"
+            else
+              gh release upload "$tag" "$asset"
+            fi
+          done
+          asset=release-assets/update-manifest.json
+          if gh release view "$tag" --json assets \
+            --jq '.assets[].name' | grep -Fxq update-manifest.json; then
+            gh release download "$tag" --pattern update-manifest.json \
+              --dir /tmp/github-existing
+            cmp "$asset" /tmp/github-existing/update-manifest.json
+          else
+            gh release upload "$tag" "$asset"
+          fi
+      - name: Push annotated tag to GitCode
+        run: |
+          test -n "$GITCODE_TOKEN"
+          bash tool/release/push_gitcode_tag.sh "v$VERSION"
+      - name: Sync GitCode Release
+        run: |
+          test -n "$GITCODE_TOKEN"
+          bash tool/release/sync_gitcode_release.sh "v$VERSION" \
+            release-metadata/release-notes.md release-assets/*
