@@ -230,7 +230,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     image.dispose();
   }
 
-  testWidgets('收藏底栏、三个页签、类型筛选、视图记忆和宽窄屏原始详情', (tester) async {
+  testWidgets('收藏底栏、干净网格、原帖类型标注和宽窄屏详情', (tester) async {
     _setSize(tester, const Size(390, 844));
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
@@ -245,9 +245,9 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.tap(find.byIcon(Remix.heart_line));
     await tester.pumpAndSettle();
     expect(find.byType(TabAppBar), findsOneWidget);
-    expect(find.widgetWithText(Tab, '漫画'), findsOneWidget);
-    expect(find.widgetWithText(Tab, '小说'), findsOneWidget);
-    expect(find.widgetWithText(Tab, '原始收藏'), findsOneWidget);
+    expect(find.widgetWithText(Tab, '漫画收藏'), findsOneWidget);
+    expect(find.widgetWithText(Tab, '小说收藏'), findsOneWidget);
+    expect(find.widgetWithText(Tab, '全部原帖'), findsOneWidget);
     expect(favorites.initialLoads, 1);
     expect(_visibleKinds(tester), everyElement(LibraryKind.comic));
     expect(find.byType(CatalogControlBar), findsNothing);
@@ -266,7 +266,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
     final double comicOffset = _position(tester).pixels;
     expect(comicOffset, greaterThan(0));
-    await tester.tap(find.widgetWithText(Tab, '小说'));
+    await tester.tap(find.widgetWithText(Tab, '小说收藏'));
     await tester.pumpAndSettle();
     expect(_visibleKinds(tester), everyElement(LibraryKind.novel));
     expect(find.byType(CatalogControlBar), findsNothing);
@@ -276,11 +276,13 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.view_list_outlined), findsOneWidget);
     expect(find.byType(WorkGridCard), findsWidgets);
+    expect(find.byIcon(Icons.favorite), findsNothing);
+    expect(find.byTooltip('取消收藏'), findsNothing);
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -250));
     await tester.pumpAndSettle();
     final double novelGridOffset = _position(tester, grid: true).pixels;
     expect(novelGridOffset, greaterThan(0));
-    await tester.tap(find.widgetWithText(Tab, '漫画'));
+    await tester.tap(find.widgetWithText(Tab, '漫画收藏'));
     await tester.pumpAndSettle();
     expect(_position(tester).pixels, closeTo(comicOffset, 1));
     expect(find.byIcon(Icons.grid_view_outlined), findsOneWidget);
@@ -289,12 +291,14 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     );
     await tester.pumpAndSettle();
     await snapshot(tester, 'favorites-comic-grid-light');
+    expect(find.byIcon(Icons.favorite), findsNothing);
+    expect(find.byTooltip('取消收藏'), findsNothing);
     await tester.tap(
       find.byKey(const ValueKey<String>('favorite-view-toggle-0')),
     );
     await tester.pumpAndSettle();
     expect(_position(tester).pixels, closeTo(comicOffset, 1));
-    await tester.tap(find.widgetWithText(Tab, '小说'));
+    await tester.tap(find.widgetWithText(Tab, '小说收藏'));
     await tester.pumpAndSettle();
     expect(find.byType(WorkGridCard), findsWidgets);
     expect(_position(tester, grid: true).pixels, closeTo(novelGridOffset, 1));
@@ -302,37 +306,46 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
     await snapshot(tester, 'favorites-novel-grid-dark');
 
-    await tester.tap(find.widgetWithText(Tab, '原始收藏'));
+    await tester.tap(find.widgetWithText(Tab, '全部原帖'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('favorite-kind-filter')), findsOneWidget);
-    expect(find.byType(CatalogControlBar), findsOneWidget);
+    expect(find.byKey(const Key('favorite-kind-filter')), findsNothing);
+    expect(find.byType(CatalogControlBar), findsNothing);
     expect(find.byIcon(Icons.grid_view_outlined), findsNothing);
     expect(find.byIcon(Icons.view_list_outlined), findsNothing);
-    await _filter(tester, '小说');
-    expect(_visibleKinds(tester), everyElement(LibraryKind.novel));
-    expect(find.text('合成漫画作品A'), findsNothing);
-    await _filter(tester, '漫画');
-    expect(_visibleKinds(tester), everyElement(LibraryKind.comic));
-    await _filter(tester, '全部');
-    expect(favorites.initialLoads, 1);
-    await tester.tap(
+    expect(
       find.byKey(const ValueKey<String>('favorite-view-toggle-2')),
+      findsNothing,
+    );
+    expect(find.byType(WorkGridCard), findsNothing);
+    expect(find.text('漫画 · 正文'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.text('小说 · 正文').first,
+      500,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     await tester.pumpAndSettle();
-    expect(find.byType(WorkGridCard), findsWidgets);
-    await tester.pumpWidget(app(theme: AppTheme.dark));
+    await tester.drag(find.byType(ListView), const Offset(0, 240));
     await tester.pumpAndSettle();
-    await snapshot(tester, 'favorites-raw-grid-dark');
+    expect(find.text('漫画 · 正文'), findsWidgets);
+    expect(find.text('小说 · 正文'), findsWidgets);
+    final double rawOffset = _position(tester).pixels;
+    await snapshot(tester, 'favorites-all-posts-list-dark');
 
     // Visiting other primary destinations keeps the selected favorite tab,
-    // filter and view mode, and does not start another complete sync.
+    // scroll position, and does not start another complete sync.
     await tester.tap(find.byIcon(Remix.user_3_line));
     await tester.pumpAndSettle();
     expect(find.text('漫画收藏'), findsNothing);
     expect(find.text('小说收藏'), findsNothing);
     await tester.tap(find.byIcon(Remix.heart_line));
     await tester.pumpAndSettle();
-    expect(find.byType(WorkGridCard), findsWidgets);
+    expect(find.byType(WorkListTile), findsWidgets);
+    expect(_position(tester).pixels, closeTo(rawOffset, 1));
     expect(favorites.initialLoads, 1);
 
     _setSize(tester, const Size(1280, 800));
@@ -341,7 +354,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
       tester.widget<NavigationRail>(find.byType(NavigationRail)).destinations,
       hasLength(4),
     );
-    await tester.tap(find.byType(WorkGridCard).first);
+    await tester.tap(find.byType(WorkListTile).hitTestable().first);
     await tester.pumpAndSettle();
     WorkDetailPage detail = tester.widget(find.byType(WorkDetailPage));
     expect(detail.embedded, isTrue);
@@ -351,7 +364,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
 
     _setSize(tester, const Size(390, 844));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(WorkGridCard).first);
+    await tester.tap(find.byType(WorkListTile).hitTestable().first);
     await tester.pumpAndSettle();
     detail = tester.widget(find.byType(WorkDetailPage));
     expect(detail.embedded, isFalse);
@@ -359,7 +372,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     expect(detail.resolveOnOpen, isFalse);
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.byType(WorkGridCard), findsWidgets);
+    expect(find.byType(WorkListTile), findsWidgets);
     expect(favorites.initialLoads, 1);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -377,7 +390,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
     expect(favorites.initialLoads, 2);
 
-    await tester.tap(find.widgetWithText(Tab, '小说'));
+    await tester.tap(find.widgetWithText(Tab, '小说收藏'));
     await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const ValueKey<String>('favorite-view-toggle-1')),
@@ -389,6 +402,14 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, 450));
     await tester.pumpAndSettle();
     expect(favorites.initialLoads, 3);
+    await tester.tap(find.widgetWithText(Tab, '全部原帖'));
+    await tester.pumpAndSettle();
+    expect(find.text('暂无原帖'), findsOneWidget);
+    expect(find.byType(CatalogControlBar), findsNothing);
+    expect(find.byIcon(Icons.view_list_outlined), findsNothing);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 450));
+    await tester.pumpAndSettle();
+    expect(favorites.initialLoads, 4);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -400,7 +421,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpWidget(app(shell: false));
     await tester.pumpAndSettle();
     expect(favorites.nextLoads, 0);
-    await tester.tap(find.widgetWithText(Tab, '小说'));
+    await tester.tap(find.widgetWithText(Tab, '小说收藏'));
     await tester.pumpAndSettle();
     expect(favorites.nextLoads, 1);
     expect(_visibleKinds(tester), everyElement(LibraryKind.novel));
@@ -409,7 +430,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('未登录保留收藏页签和筛选并在登录后自动同步', (tester) async {
+  testWidgets('未登录保留收藏页签并在登录后显示全部原帖', (tester) async {
     _setSize(tester, const Size(390, 844));
     int logins = 0;
     await tester.pumpWidget(
@@ -422,16 +443,17 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpAndSettle();
     expect(favorites.initialLoads, 0);
     expect(find.text('登录后查看收藏'), findsOneWidget);
-    await tester.tap(find.widgetWithText(Tab, '原始收藏'));
+    await tester.tap(find.widgetWithText(Tab, '全部原帖'));
     await tester.pumpAndSettle();
-    await _filter(tester, '小说');
     await tester.tap(find.text('登录'));
     await tester.pumpAndSettle();
     expect(logins, 1);
     await tester.pumpWidget(app(shell: false));
     await tester.pumpAndSettle();
     expect(favorites.initialLoads, 1);
-    expect(_visibleKinds(tester), everyElement(LibraryKind.novel));
+    expect(find.byType(CatalogControlBar), findsNothing);
+    expect(find.byType(WorkListTile), findsWidgets);
+    expect(find.text('漫画 · 正文'), findsWidgets);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
@@ -482,10 +504,3 @@ ScrollPosition _position(WidgetTester tester, {bool grid = false}) => tester
           .first,
     )
     .position;
-
-Future<void> _filter(WidgetTester tester, String label) async {
-  await tester.tap(find.byKey(const Key('favorite-kind-filter')));
-  await tester.pumpAndSettle();
-  await tester.tap(find.widgetWithText(CheckedPopupMenuItem<int>, label));
-  await tester.pumpAndSettle();
-}

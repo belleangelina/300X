@@ -14,7 +14,6 @@ import 'package:x300/shared/presentation/app_empty_view.dart';
 import 'package:x300/shared/presentation/app_error_view.dart';
 import 'package:x300/shared/presentation/app_loading_view.dart';
 import 'package:x300/shared/presentation/app_snack_bar.dart';
-import 'package:x300/shared/presentation/catalog_controls.dart';
 import 'package:x300/shared/presentation/tab_app_bar.dart';
 
 typedef OpenFavoriteWork = void Function(Work work, {required bool raw});
@@ -39,11 +38,11 @@ class CloudFavoritesPage extends ConsumerStatefulWidget {
 
 class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
     with SingleTickerProviderStateMixin {
-  static const List<String> _titles = <String>['漫画', '小说', '原始收藏'];
+  static const List<String> _titles = <String>['漫画收藏', '小说收藏', '全部原帖'];
   late final TabController _tabController;
   final List<CloudFavoriteEntry> _entries = <CloudFavoriteEntry>[];
   final Set<String> _busyWorkIds = <String>{};
-  final List<bool> _gridModes = <bool>[false, false, false];
+  final List<bool> _gridModes = <bool>[false, false];
 
   CloudFavoritePage? _cursor;
   List<FavoriteWork> _works = <FavoriteWork>[];
@@ -55,7 +54,6 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
   bool _paginationFailed = false;
   DateTime? _cacheUpdatedAt;
   int _activeTab = 0;
-  int _rawFilter = 0;
   int _generation = 0;
 
   bool get _authenticated =>
@@ -152,8 +150,7 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
               index: index,
               title: _titles[index],
               active: widget.active && _activeTab == index,
-              grid: _gridModes[index],
-              onToggleView: () => _toggleView(index),
+              grid: index < 2 && _gridModes[index],
               works: _worksForTab(index),
               status: _buildStatus(),
               loadingMore: _loadingMore,
@@ -164,12 +161,6 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
               usingCache: _usingCache,
               cacheUpdatedAt: _cacheUpdatedAt,
               busyWorkIds: _busyWorkIds,
-              rawFilter: _rawFilter,
-              onRawFilterChanged: (int value) {
-                setState(() {
-                  _rawFilter = value;
-                });
-              },
               onRefresh: _load,
               onLoadMore: _loadMore,
               onRemove: _remove,
@@ -205,27 +196,15 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
     if (_activeTab == 1) {
       return LibraryKind.novel;
     }
-    return switch (_rawFilter) {
-      1 => LibraryKind.comic,
-      2 => LibraryKind.novel,
-      _ => null,
-    };
+    return null;
   }
 
   List<FavoriteWork> _worksForTab(int index) {
-    final LibraryKind? kind = index == 0
-        ? LibraryKind.comic
-        : index == 1
-        ? LibraryKind.novel
-        : switch (_rawFilter) {
-            1 => LibraryKind.comic,
-            2 => LibraryKind.novel,
-            _ => null,
-          };
-    final List<FavoriteWork> works = index == 2 ? _rawWorks : _works;
-    return kind == null
-        ? works
-        : works.where((FavoriteWork item) => item.work.kind == kind).toList();
+    if (index == 2) {
+      return _rawWorks;
+    }
+    final LibraryKind kind = index == 0 ? LibraryKind.comic : LibraryKind.novel;
+    return _works.where((FavoriteWork item) => item.work.kind == kind).toList();
   }
 
   bool _hasRequestedEntries(List<CloudFavoriteEntry> entries) {
@@ -515,7 +494,6 @@ class _FavoritesTabView extends StatefulWidget {
     required this.title,
     required this.active,
     required this.grid,
-    required this.onToggleView,
     required this.works,
     required this.status,
     required this.loadingMore,
@@ -523,8 +501,6 @@ class _FavoritesTabView extends StatefulWidget {
     required this.usingCache,
     required this.cacheUpdatedAt,
     required this.busyWorkIds,
-    required this.rawFilter,
-    required this.onRawFilterChanged,
     required this.onRefresh,
     required this.onLoadMore,
     required this.onRemove,
@@ -536,7 +512,6 @@ class _FavoritesTabView extends StatefulWidget {
   final String title;
   final bool active;
   final bool grid;
-  final VoidCallback onToggleView;
   final List<FavoriteWork> works;
   final Widget? status;
   final bool loadingMore;
@@ -544,8 +519,6 @@ class _FavoritesTabView extends StatefulWidget {
   final bool usingCache;
   final DateTime? cacheUpdatedAt;
   final Set<String> busyWorkIds;
-  final int rawFilter;
-  final ValueChanged<int> onRawFilterChanged;
   final Future<void> Function() onRefresh;
   final Future<void> Function() onLoadMore;
   final ValueChanged<FavoriteWork> onRemove;
@@ -580,11 +553,6 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
           });
         }
       });
-    }
-    if (oldWidget.rawFilter != widget.rawFilter &&
-        widget.index == 2 &&
-        _scrollController.hasClients) {
-      _scrollController.jumpTo(0);
     }
   }
 
@@ -628,34 +596,7 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
   Widget build(BuildContext context) {
     super.build(context);
     _fillViewport();
-    return Column(
-      children: <Widget>[
-        if (widget.index == 2)
-          CatalogControlBar(
-            children: <Widget>[
-              CatalogControlSelector<int>(
-                key: const Key('favorite-kind-filter'),
-                label: const <String>['全部', '漫画', '小说'][widget.rawFilter],
-                selected: widget.rawFilter,
-                choices: const <(int, String)>[(0, '全部'), (1, '漫画'), (2, '小说')],
-                onSelected: widget.onRawFilterChanged,
-              ),
-              CatalogControlAction(
-                key: const ValueKey<String>('favorite-view-toggle-2'),
-                tooltip: widget.grid ? '切换为列表' : '切换为网格',
-                onTap: widget.onToggleView,
-                child: Text(widget.grid ? '网格' : '列表'),
-              ),
-              CatalogControlAction(
-                tooltip: '刷新收藏',
-                onTap: () => unawaited(widget.onRefresh()),
-                child: const Text('刷新'),
-              ),
-            ],
-          ),
-        Expanded(child: _buildContent()),
-      ],
-    );
+    return _buildContent();
   }
 
   Widget _buildContent() {
@@ -676,8 +617,8 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
                     hasScrollBody: false,
                     child: AppEmptyView(
                       message: widget.index == 2
-                          ? '暂无符合筛选条件的原始收藏'
-                          : '暂无${widget.title}收藏，可在原始收藏中查看逐帖记录',
+                          ? '暂无原帖'
+                          : '暂无${widget.title}，可在全部原帖中查看逐帖记录',
                       onRefresh: () => unawaited(widget.onRefresh()),
                     ),
                   ),
@@ -757,6 +698,7 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
         return WorkListTile(
           work: item.work,
           onTap: () => widget.onOpenWork(item.work),
+          showKindLabel: widget.index == 2,
           trailing: _favoriteAction(item),
         );
       },
@@ -795,24 +737,9 @@ class _FavoritesTabViewState extends State<_FavoritesTabView>
                   int index,
                 ) {
                   final FavoriteWork item = widget.works[index];
-                  return Stack(
-                    children: <Widget>[
-                      Positioned.fill(
-                        child: WorkGridCard(
-                          work: item.work,
-                          onTap: () => widget.onOpenWork(item.work),
-                        ),
-                      ),
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: Material(
-                          color: Theme.of(context).colorScheme.surface,
-                          shape: const CircleBorder(),
-                          child: _favoriteAction(item),
-                        ),
-                      ),
-                    ],
+                  return WorkGridCard(
+                    work: item.work,
+                    onTap: () => widget.onOpenWork(item.work),
                   );
                 }, childCount: widget.works.length),
               ),

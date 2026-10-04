@@ -354,6 +354,7 @@ class WorkListTile extends StatelessWidget {
     required this.onTap,
     this.rank,
     this.trailing,
+    this.showKindLabel = false,
     super.key,
   });
 
@@ -361,6 +362,7 @@ class WorkListTile extends StatelessWidget {
   final VoidCallback? onTap;
   final int? rank;
   final Widget? trailing;
+  final bool showKindLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -413,6 +415,8 @@ class WorkListTile extends StatelessWidget {
                     _MetadataLine(
                       icon: Icons.sell_outlined,
                       text: <String>[
+                        if (showKindLabel)
+                          work.kind == LibraryKind.comic ? '漫画' : '小说',
                         if (work.typeName.isNotEmpty) work.typeName,
                         work.chapters.length > 1
                             ? '${work.chapters.length} 个章节'

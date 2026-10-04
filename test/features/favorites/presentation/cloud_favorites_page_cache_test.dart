@@ -110,9 +110,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(find.text('小说'));
+    await tester.tap(find.text('小说收藏'));
     await tester.pumpAndSettle();
-    expect(find.text('小说'), findsOneWidget);
+    expect(find.text('小说收藏'), findsOneWidget);
     expect(find.text('缓存小说收藏'), findsWidgets);
     expect(find.text('缓存收藏'), findsNothing);
 
@@ -171,7 +171,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(Tab, '小说'));
+    await tester.tap(find.widgetWithText(Tab, '小说收藏'));
     await tester.pumpAndSettle();
     expect(find.text('第一页小说收藏'), findsWidgets);
     expect(find.text('一周一次买下同班同学的那些事'), findsWidgets);
@@ -242,20 +242,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('小说'));
+    await tester.tap(find.text('小说收藏'));
     await tester.pumpAndSettle();
     expect(find.byType(TabAppBar), findsOneWidget);
-    expect(find.text('原始收藏'), findsOneWidget);
+    expect(find.text('全部原帖'), findsOneWidget);
     expect(find.text('测试作品'), findsWidgets);
     expect(find.text('测试作品 第1章'), findsNothing);
-    expect(find.text('漫画'), findsOneWidget);
-    expect(find.text('小说'), findsOneWidget);
+    expect(find.text('漫画收藏'), findsOneWidget);
+    expect(find.text('小说收藏'), findsOneWidget);
     expect(
       find.byKey(const Key('favorite-result-mode-bottom-bar')),
       findsNothing,
     );
 
-    await tester.tap(find.text('原始收藏'));
+    await tester.tap(find.text('全部原帖'));
     await tester.pumpAndSettle();
 
     expect(find.text('测试作品 第1章'), findsWidgets);
