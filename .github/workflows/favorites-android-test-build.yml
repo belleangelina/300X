@@ -1,0 +1,116 @@
+name: Favorites Android test build
+
+on:
+  push:
+    branches: [feat/favorites-navigation]
+    paths:
+      - pubspec.yaml
+      - lib/**
+      - android/**
+      - build_release.sh
+      - integration_test/favorites_navigation_test.dart
+      - test/features/favorites/**
+      - .github/workflows/favorites-android-test-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: favorites-android-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-validate:
+    if: github.ref == 'refs/heads/feat/favorites-navigation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: |
+          mkdir -p .artifacts/validation/logs .artifacts/validation/screenshots
+          flutter pub get > .artifacts/validation/logs/pub-get.log 2>&1
+      - name: Configure existing Android signing
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$KEYSTORE" && test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD" && test -n "$STORE_PASSWORD"
+          printf '%s' "$KEYSTORE" | base64 --decode > android/app/x300-release.jks
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=x300-release.jks\n' \
+            "$STORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
+      - name: Build and verify versioned APKs
+        id: build
+        env:
+          EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
+        run: |
+          set -Eeuo pipefail
+          bash build_release.sh --platform android --keep-version \
+            > .artifacts/validation/logs/android-build.log 2>&1
+          version=$(awk '/^version:/ { print $2; exit }' pubspec.yaml)
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$EXPECTED_CERT_SHA256"
+          for apk in build/releases/*.apk; do
+            actual_cert=$(
+              "$apksigner" verify --print-certs-pem "$apk" |
+                openssl x509 -outform DER | sha256sum | awk '{ print $1 }'
+            )
+            test "${actual_cert,,}" = "${EXPECTED_CERT_SHA256,,}"
+          done
+          sha256sum build/releases/*.apk > build/releases/SHA256SUMS.txt
+          printf 'Source commit: %s\nVersion: %s\nBranch: %s\n' \
+            "$GITHUB_SHA" "$version" "$GITHUB_REF_NAME" > build/releases/BUILD.txt
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise Android favorites and launch signed release
+        timeout-minutes: 20
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          disable-animations: true
+          script: |
+            flutter test --no-pub integration_test/favorites_navigation_test.dart -d emulator-5554 > .artifacts/validation/logs/android-integration.log 2>&1
+            adb uninstall com.yamibox300 > .artifacts/validation/logs/android-uninstall.log 2>&1 || true
+            adb install build/releases/*-android-universal-release.apk > .artifacts/validation/logs/android-install.log 2>&1
+            adb shell am start -W -n com.yamibox300/.MainActivity > .artifacts/validation/logs/android-launch.log 2>&1
+            adb shell pidof com.yamibox300 > .artifacts/validation/logs/android-process.log
+            adb shell dumpsys package com.yamibox300 > .artifacts/validation/logs/android-package.log
+            adb exec-out screencap -p > .artifacts/validation/screenshots/android-release-launch.png
+      - name: Upload verified Android test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: X300-favorites-android-test-${{ steps.build.outputs.version }}
+          path: build/releases/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload Android validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: favorites-android-validation
+          path: .artifacts/validation/
+          retention-days: 14
+      - name: Remove signing material
+        if: always()
+        run: rm -f android/key.properties android/app/x300-release.jks
