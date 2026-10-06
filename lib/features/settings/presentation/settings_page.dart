@@ -90,10 +90,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       children: <Widget>[
         ListTile(
           title: const Text('清除临时缓存'),
-          subtitle: Text(
-            '${_cacheSizeText(_cacheUsage?.temporaryBytes)}\n'
-            '搜索、收藏及正文图片',
-          ),
+          subtitle: Text(_cacheSizeText(_cacheUsage?.temporaryBytes)),
           trailing: OutlinedButton(
             onPressed: _clearing ? null : _clearCaches,
             child: Text(_clearing ? '清理中' : '清除'),
@@ -101,10 +98,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
         ListTile(
           title: const Text('清除封面缓存'),
-          subtitle: Text(
-            '${_cacheSizeText(_cacheUsage?.coverBytes)}\n'
-            '封面可重新加载',
-          ),
+          subtitle: Text(_cacheSizeText(_cacheUsage?.coverBytes)),
           trailing: OutlinedButton(
             onPressed: _clearingCovers ? null : _clearCoverCaches,
             child: Text(_clearingCovers ? '清理中' : '清除'),
@@ -112,7 +106,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
         ListTile(
           title: const Text('清除作品索引'),
-          subtitle: const Text('下次打开作品时重建'),
           trailing: OutlinedButton(
             onPressed: _clearingIndex ? null : _clearWorkIndexes,
             child: Text(_clearingIndex ? '清理中' : '清除'),
@@ -123,14 +116,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           onChanged: (bool value) =>
               _update(settings.copyWith(useSystemTextScale: value)),
           title: const Text('字体大小跟随系统'),
-          subtitle: const Text('关闭后使用默认字号'),
         ),
         const Divider(),
         SwitchListTile(
           value: settings.automaticUpdateChecks,
           onChanged: (bool value) => _setAutomaticUpdateChecks(settings, value),
           title: const Text('自动检查更新'),
-          subtitle: const Text('每 24 小时最多检查一次'),
         ),
         ListTile(
           title: const Text('国内下载源'),
@@ -581,12 +572,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   String _cacheSizeText(int? bytes) {
     if (_measuringCache) {
-      return '当前大小：正在计算';
+      return '大小：计算中';
     }
     if (bytes == null) {
-      return '当前大小：暂时无法统计';
+      return '大小：暂不可用';
     }
-    return '当前大小：约 ${_formatBytes(bytes)}';
+    return '大小：约 ${_formatBytes(bytes)}';
   }
 
   String _formatBytes(int bytes) {

@@ -272,12 +272,12 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
       await tester.tap(find.text('更多设置'));
       await tester.pumpAndSettle();
       expect(find.byType(SettingsPage), findsOneWidget);
-      expect(find.textContaining('当前大小：约 2.0 KB'), findsOneWidget);
-      expect(find.textContaining('搜索、收藏及正文图片'), findsOneWidget);
-      expect(find.textContaining('封面可重新加载'), findsOneWidget);
-      expect(find.text('下次打开作品时重建'), findsOneWidget);
-      expect(find.text('关闭后使用默认字号'), findsOneWidget);
-      expect(find.text('每 24 小时最多检查一次'), findsOneWidget);
+      expect(find.textContaining('大小：约 2.0 KB'), findsOneWidget);
+      expect(find.textContaining('搜索、收藏及正文图片'), findsNothing);
+      expect(find.textContaining('封面可重新加载'), findsNothing);
+      expect(find.text('下次打开作品时重建'), findsNothing);
+      expect(find.text('关闭后使用默认字号'), findsNothing);
+      expect(find.text('每 24 小时最多检查一次'), findsNothing);
       expect(find.text('GitCode 官方镜像'), findsOneWidget);
       await snapshot(tester, 'settings-general-$brightness');
       final Finder textScale = find.widgetWithText(SwitchListTile, '字体大小跟随系统');

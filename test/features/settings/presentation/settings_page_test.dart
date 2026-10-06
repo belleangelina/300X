@@ -89,10 +89,10 @@ void main() {
       _app(settingsRepository, initialIndex: 0, maintenance: maintenance),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('当前大小：约 2.0 KB'), findsOneWidget);
-    expect(find.textContaining('当前大小：约 1.0 MB'), findsOneWidget);
-    expect(find.textContaining('搜索、收藏及正文图片'), findsOneWidget);
-    expect(find.textContaining('封面可重新加载'), findsOneWidget);
+    expect(find.textContaining('大小：约 2.0 KB'), findsOneWidget);
+    expect(find.textContaining('大小：约 1.0 MB'), findsOneWidget);
+    expect(find.textContaining('搜索、收藏及正文图片'), findsNothing);
+    expect(find.textContaining('封面可重新加载'), findsNothing);
     expect(find.textContaining('保留作品索引、历史与离线下载'), findsNothing);
 
     await tester.tap(
@@ -130,10 +130,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('自动检查更新'), findsOneWidget);
-    expect(find.text('每 24 小时最多检查一次'), findsOneWidget);
+    expect(find.text('每 24 小时最多检查一次'), findsNothing);
     expect(find.textContaining('关闭后永不自动提醒'), findsNothing);
-    expect(find.text('下次打开作品时重建'), findsOneWidget);
-    expect(find.text('关闭后使用默认字号'), findsOneWidget);
+    expect(find.text('下次打开作品时重建'), findsNothing);
+    expect(find.text('关闭后使用默认字号'), findsNothing);
     expect(find.text('GitCode 官方镜像'), findsOneWidget);
 
     await tester.tap(find.text('国内下载源'));
