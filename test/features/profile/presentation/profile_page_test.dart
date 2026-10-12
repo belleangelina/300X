@@ -44,14 +44,14 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const Key('profile-novel-card')),
-        matching: find.text('小说收藏'),
+        matching: find.text('小说记录'),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: find.byKey(const Key('profile-comic-card')),
-        matching: find.text('漫画收藏'),
+        matching: find.text('漫画记录'),
       ),
       findsOneWidget,
     );
@@ -94,9 +94,7 @@ void main() {
 
     expect(find.text('跟随系统'), findsNothing);
     final List<Finder> entries = <Finder>[
-      _tileWithText('小说收藏'),
       _tileWithText('小说记录'),
-      _tileWithText('漫画收藏'),
       _tileWithText('漫画记录'),
       _tileWithText('显示主题'),
       _tileWithText('更多设置'),
@@ -158,7 +156,7 @@ void main() {
     );
   });
 
-  testWidgets('未登录个人页点击头像和云收藏都请求登录', (WidgetTester tester) async {
+  testWidgets('未登录个人页点击头像请求登录且收藏入口已移至主导航', (WidgetTester tester) async {
     var loginRequests = 0;
     await tester.pumpWidget(
       _profileApp(
@@ -172,10 +170,10 @@ void main() {
 
     expect(find.text('未登录'), findsOneWidget);
     await tester.tap(find.widgetWithText(ListTile, '未登录'));
-    await tester.tap(find.text('漫画收藏'));
 
-    expect(loginRequests, 2);
-    expect(find.text('漫画收藏'), findsOneWidget);
+    expect(loginRequests, 1);
+    expect(find.text('漫画收藏'), findsNothing);
+    expect(find.text('小说收藏'), findsNothing);
   });
 
   testWidgets('关于页合并免责声明且不重复展示开源和参考项目链接', (WidgetTester tester) async {
