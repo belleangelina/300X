@@ -7,6 +7,7 @@ import 'package:x300/app/app_features.dart';
 import 'package:x300/features/downloads/application/download_manager.dart';
 import 'package:x300/features/downloads/data/download_repository.dart';
 import 'package:x300/features/downloads/domain/download_models.dart';
+import 'package:x300/features/favorites/application/favorite_changes.dart';
 import 'package:x300/features/favorites/data/forum_favorite_repository.dart';
 import 'package:x300/features/favorites/domain/favorite_models.dart';
 import 'package:x300/features/history/data/reading_history_repository.dart';
@@ -1552,6 +1553,7 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage> {
     setState(() {
       _favoriteBusy = true;
     });
+    final FavoriteChanges changes = ref.read(favoriteChangesProvider.notifier);
     try {
       final ForumFavoriteRepository repository = ref.read(
         forumFavoriteRepositoryProvider,
@@ -1563,6 +1565,7 @@ class _WorkDetailPageState extends ConsumerState<WorkDetailPage> {
         await repository.removeWork(_work, records);
         updated = const <CloudFavoriteRecord>[];
       }
+      changes.markChanged();
       if (!mounted) {
         return;
       }

@@ -12,6 +12,7 @@ import 'package:remixicon/remixicon.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:x300/app/app_theme.dart';
 import 'package:x300/core/network/forum_client.dart';
+import 'package:x300/core/network/forum_exceptions.dart';
 import 'package:x300/core/storage/app_database.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
@@ -35,6 +36,15 @@ import 'package:x300/shared/presentation/tab_app_bar.dart';
 class _Client extends Mock implements ForumClient {}
 
 class _Maintenance extends Mock implements CacheMaintenanceRepository {}
+
+class _Auth extends AuthController {
+  _Auth(this.initial);
+
+  final AuthState initial;
+
+  @override
+  Future<AuthState> build() async => initial;
+}
 
 class _Catalog extends Fake implements ForumLibraryRepository {
   @override
@@ -75,6 +85,7 @@ class _Favorites extends ForumFavoriteRepository {
   Completer<CloudFavoritePage>? pending;
   bool splitPages = false;
   bool failLoads = false;
+  String? expiredAt;
   final List<CloudFavoriteEntry> entries = <CloudFavoriteEntry>[
     ..._entries(ForumBoard.comic),
     ..._entries(ForumBoard.lightNovel),
@@ -82,8 +93,15 @@ class _Favorites extends ForumFavoriteRepository {
   ];
 
   @override
+  Future<List<ForumCategory>> loadCategories() async {
+    if (expiredAt == 'categories') throw const ForumSessionExpiredException();
+    return const <ForumCategory>[];
+  }
+
+  @override
   Future<CloudFavoritePage> loadInitial() async {
     initialLoads++;
+    if (expiredAt == 'initial') throw const ForumSessionExpiredException();
     if (failLoads) throw StateError('合成离线状态');
     if (pending != null) {
       return pending!.future;
@@ -103,6 +121,7 @@ class _Favorites extends ForumFavoriteRepository {
   @override
   Future<CloudFavoritePage> loadNext(CloudFavoritePage cursor) async {
     nextLoads++;
+    if (expiredAt == 'next') throw const ForumSessionExpiredException();
     return _page(
       entries
           .where((item) => item.sourceThread.board.kind == LibraryKind.novel)
@@ -135,6 +154,27 @@ class _Favorites extends ForumFavoriteRepository {
       )
       .map((item) => item.record)
       .toList();
+
+  @override
+  Future<List<CloudFavoriteRecord>> addWork(Work work) async {
+    final SourceThread thread = work.sourceThreads.first;
+    final CloudFavoriteRecord record = CloudFavoriteRecord(
+      favoriteId: thread.tid,
+      threadId: thread.tid,
+      title: thread.title,
+      threadUri: thread.uri,
+      deleteDialogUri: thread.uri,
+    );
+    entries.insert(0, CloudFavoriteEntry(record: record, sourceThread: thread));
+    return <CloudFavoriteRecord>[record];
+  }
+
+  @override
+  Future<void> removeWork(Work work, List<CloudFavoriteRecord> records) async {
+    if (expiredAt == 'remove') throw const ForumSessionExpiredException();
+    final Set<int> ids = records.map((record) => record.favoriteId).toSet();
+    entries.removeWhere((entry) => ids.contains(entry.record.favoriteId));
+  }
 }
 
 List<CloudFavoriteEntry> _entries(ForumBoard board, {int count = 20}) {
@@ -203,6 +243,7 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     AuthState auth = const AuthState.authenticated('合成测试账号'),
     ThemeData? theme,
     bool shell = true,
+    bool liveAuth = false,
     VoidCallback? onLogin,
   }) {
     return ProviderScope(
@@ -214,14 +255,25 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
         coverRepositoryProvider.overrideWithValue(_Covers()),
         cacheMaintenanceRepositoryProvider.overrideWithValue(maintenance),
         currentUserAvatarUriProvider.overrideWithValue(null),
+        authControllerProvider.overrideWith(() => _Auth(auth)),
       ],
       child: MaterialApp(
         theme: theme ?? AppTheme.light,
         builder: (context, child) =>
             RepaintBoundary(key: captureKey, child: child!),
-        home: shell
-            ? HomeShell(authState: auth)
-            : CloudFavoritesPage(authState: auth, onLogin: onLogin ?? () {}),
+        home: Consumer(
+          builder: (context, ref, child) {
+            final AuthState current = liveAuth
+                ? ref.watch(authControllerProvider).value ?? auth
+                : auth;
+            return shell
+                ? HomeShell(authState: current)
+                : CloudFavoritesPage(
+                    authState: current,
+                    onLogin: onLogin ?? () {},
+                  );
+          },
+        ),
       ),
     );
   }
@@ -593,6 +645,132 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
+
+  testWidgets('详情新增收藏后再次进入收藏同步并保留筛选布局', (tester) async {
+    _setSize(tester, const Size(390, 844));
+    final List<CloudFavoriteEntry> comics = _entries(ForumBoard.comic, count: 3);
+    favorites.entries
+      ..clear()
+      ..add(comics.first);
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Remix.heart_line));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('favorite-category-filter-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分类甲').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('favorite-view-toggle-0')));
+    await tester.tap(find.byKey(const Key('favorite-mode-toggle-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Remix.home_2_line));
+    await tester.pumpAndSettle();
+
+    final Work added = favorites.aggregateEntries(<CloudFavoriteEntry>[
+      comics.last,
+    ]).single.work;
+    unawaited(
+      Navigator.of(tester.element(find.byType(HomeShell))).push<void>(
+        MaterialPageRoute<void>(
+          builder: (context) => WorkDetailPage(work: added, rawSourceMode: true),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '收藏'));
+    await tester.pumpAndSettle();
+    expect(find.text('已加入云端收藏'), findsOneWidget);
+    expect(favorites.initialLoads, 1);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Remix.heart_line));
+    await tester.pumpAndSettle();
+    expect(favorites.initialLoads, 2);
+    expect(find.text('分类甲'), findsOneWidget);
+    expect(find.text('网格'), findsOneWidget);
+    expect(find.text('原帖'), findsOneWidget);
+    expect(
+      tester.widgetList<WorkGridCard>(find.byType(WorkGridCard)).map(
+        (card) => card.work.primarySourceTid,
+      ),
+      contains(comics.last.record.threadId),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  for (final Size size in <Size>[const Size(390, 844), const Size(1280, 800)]) {
+    testWidgets('详情取消收藏同步到常驻收藏列表：${size.width}', (tester) async {
+      _setSize(tester, size);
+      favorites.entries
+        ..clear()
+        ..addAll(_entries(ForumBoard.comic, count: 2));
+      final int removedTid = favorites.entries.first.record.threadId;
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Remix.heart_line));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('favorite-mode-toggle-0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(WorkListTile).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, '收藏'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+      if (size.width < 720) {
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+      }
+      expect(favorites.initialLoads, 2);
+      expect(
+        tester.widgetList<WorkListTile>(find.byType(WorkListTile)).map(
+          (tile) => tile.work.primarySourceTid,
+        ),
+        isNot(contains(removedTid)),
+      );
+      expect(find.byType(WorkListTile), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  }
+
+  for (final String stage in <String>['categories', 'initial', 'next', 'remove']) {
+    testWidgets('收藏会话失效显示重新登录且不回退缓存：$stage', (tester) async {
+      _setSize(tester, const Size(390, 844));
+      await FavoriteCacheRepository(
+        database,
+      ).save(favorites.aggregateEntries(favorites.entries));
+      favorites.splitPages = stage == 'next';
+      favorites.expiredAt = stage;
+      int logins = 0;
+      await tester.pumpWidget(
+        app(shell: false, liveAuth: true, onLogin: () => logins++),
+      );
+      await tester.pumpAndSettle();
+      if (stage == 'remove') {
+        await tester.tap(find.byTooltip('取消收藏').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('确定'));
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('登录状态已失效，请重新登录'), findsOneWidget);
+      expect(find.textContaining('当前显示只读收藏缓存'), findsNothing);
+      expect(find.byType(WorkListTile), findsNothing);
+      expect(find.byType(CatalogControlBar), findsOneWidget);
+      expect(find.widgetWithText(Tab, '漫画收藏'), findsOneWidget);
+      expect(find.widgetWithText(Tab, '小说收藏'), findsOneWidget);
+      if (stage == 'categories') expect(favorites.initialLoads, 0);
+      await tester.tap(find.text('重新登录'));
+      await tester.pumpAndSettle();
+      expect(logins, 1);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  }
 
   testWidgets('退出登录后丢弃旧账号仍在进行的收藏响应', (tester) async {
     _setSize(tester, const Size(390, 844));

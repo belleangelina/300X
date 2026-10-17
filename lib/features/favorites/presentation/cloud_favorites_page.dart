@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:x300/core/network/forum_exceptions.dart';
+import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
+import 'package:x300/features/favorites/application/favorite_changes.dart';
 import 'package:x300/features/favorites/data/favorite_cache_repository.dart';
 import 'package:x300/features/favorites/data/forum_favorite_repository.dart';
 import 'package:x300/features/favorites/domain/favorite_models.dart';
@@ -54,6 +57,7 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
   DateTime? _cacheUpdatedAt;
   int _activeTab = 0;
   int _generation = 0;
+  int _loadedRevision = 0;
 
   bool get _authenticated =>
       widget.authState.status == AuthStatus.authenticated;
@@ -96,7 +100,11 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
   }
 
   void _ensureLoaded() {
-    if (widget.active && _authenticated && !_initialLoadStarted) {
+    final bool changed =
+        ref.read(favoriteChangesProvider) != _loadedRevision;
+    if (widget.active &&
+        _authenticated &&
+        (!_initialLoadStarted || changed)) {
       unawaited(_load());
     }
   }
@@ -114,6 +122,9 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(favoriteChangesProvider, (previous, next) {
+      _ensureLoaded();
+    });
     return Scaffold(
       appBar: TabAppBar(
         controller: _tabController,
@@ -201,6 +212,7 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
     }
     final int generation = ++_generation;
     _initialLoadStarted = true;
+    _loadedRevision = ref.read(favoriteChangesProvider);
     setState(() {
       _loading = true;
       _error = null;
@@ -217,6 +229,8 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
       List<ForumCategory> categories = _categories;
       try {
         categories = await repository.loadCategories();
+      } on ForumSessionExpiredException {
+        rethrow;
       } on Object {
         // Cached source metadata still provides category choices offline.
       }
@@ -258,6 +272,10 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
         _usingCache = false;
         _cacheUpdatedAt = null;
       });
+    } on ForumSessionExpiredException {
+      if (_isCurrent(generation)) {
+        ref.read(authControllerProvider.notifier).markSessionExpired();
+      }
     } on Object catch (error) {
       if (!mounted || !_isCurrent(generation)) {
         return;
@@ -322,6 +340,10 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
         context,
       ).showSnackBar(const AppSnackBar(content: Text('已取消云端收藏')));
       await _load();
+    } on ForumSessionExpiredException {
+      if (_isCurrent(generation)) {
+        ref.read(authControllerProvider.notifier).markSessionExpired();
+      }
     } on Object catch (error) {
       if (!mounted || !_isCurrent(generation)) {
         return;
