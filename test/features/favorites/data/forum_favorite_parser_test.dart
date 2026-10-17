@@ -85,6 +85,16 @@ void main() {
     expect(thread!.board, ForumBoard.literature);
     expect(thread.views, 1200);
     expect(thread.replies, 8);
+    final SourceThread? classified = parser.parseThreadMetadata(
+      supported,
+      record,
+      categoryNames: const <ForumBoard, Map<int, String>>{
+        ForumBoard.literature: <int, String>{3: '原创小说'},
+        ForumBoard.lightNovel: <int, String>{3: '译文'},
+      },
+    );
+    expect(classified!.typeId, 3);
+    expect(classified.typeName, '原创小说');
     expect(parser.parseThreadMetadata(unsupported, record), isNull);
   });
 

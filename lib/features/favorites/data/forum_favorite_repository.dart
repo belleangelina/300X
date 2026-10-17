@@ -8,6 +8,7 @@ import 'package:x300/features/favorites/data/favorite_work_policy.dart';
 import 'package:x300/features/favorites/data/forum_favorite_parser.dart';
 import 'package:x300/features/favorites/domain/favorite_models.dart';
 import 'package:x300/features/library/data/work_aggregator.dart';
+import 'package:x300/features/library/data/forum_library_repository.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 
 final Provider<ForumFavoriteRepository> forumFavoriteRepositoryProvider =
@@ -27,6 +28,32 @@ class ForumFavoriteRepository {
   final ForumFavoriteParser _parser;
   final WorkAggregator _aggregator;
   final FavoriteWorkPolicy _workPolicy;
+  final Map<ForumBoard, Map<int, String>> _categoryNames =
+      <ForumBoard, Map<int, String>>{};
+
+  Future<List<ForumCategory>> loadCategories() async {
+    final ForumLibraryRepository library = ForumLibraryRepository(_client);
+    final List<ForumCategory> categories = <ForumCategory>[];
+    for (final LibraryKind kind in LibraryKind.values) {
+      try {
+        final WorkCatalogPage page = await library.loadCatalog(
+          kind: kind,
+          section: CatalogSection.updated,
+        );
+        categories.addAll(page.categories);
+      } on ForumSessionExpiredException {
+        rethrow;
+      } on Object {
+        // A missing category menu must not prevent reading cloud favorites.
+        continue;
+      }
+    }
+    for (final ForumCategory category in categories) {
+      (_categoryNames[category.board] ??= <int, String>{})[category.typeId] =
+          category.name;
+    }
+    return categories;
+  }
 
   Future<CloudFavoritePage> loadInitial() async {
     return _loadPage(_favoriteListUri());
@@ -174,6 +201,7 @@ class ForumFavoriteRepository {
           final SourceThread? sourceThread = _parser.parseThreadMetadata(
             metadataResponse.data ?? '',
             record,
+            categoryNames: _categoryNames,
           );
           if (sourceThread == null) {
             ignoredCount++;

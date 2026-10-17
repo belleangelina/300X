@@ -90,11 +90,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       children: <Widget>[
         ListTile(
           title: const Text('清除临时缓存'),
-          subtitle: Text(
-            '${_cacheSizeText(_cacheUsage?.temporaryBytes)}\n'
-            '清除搜索、云收藏和在线正文图片缓存，'
-            '保留作品索引、历史与离线下载',
-          ),
+          subtitle: Text(_cacheSizeText(_cacheUsage?.temporaryBytes)),
           trailing: OutlinedButton(
             onPressed: _clearing ? null : _clearCaches,
             child: Text(_clearing ? '清理中' : '清除'),
@@ -102,11 +98,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
         ListTile(
           title: const Text('清除封面缓存'),
-          subtitle: Text(
-            '${_cacheSizeText(_cacheUsage?.coverBytes)}\n'
-            '删除已缓存的漫画和小说封面，'
-            '不影响作品索引、历史与离线下载',
-          ),
+          subtitle: Text(_cacheSizeText(_cacheUsage?.coverBytes)),
           trailing: OutlinedButton(
             onPressed: _clearingCovers ? null : _clearCoverCaches,
             child: Text(_clearingCovers ? '清理中' : '清除'),
@@ -114,7 +106,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
         ListTile(
           title: const Text('清除作品索引'),
-          subtitle: const Text('删除已建立的漫画和小说目录索引，不删除历史与离线下载'),
           trailing: OutlinedButton(
             onPressed: _clearingIndex ? null : _clearWorkIndexes,
             child: Text(_clearingIndex ? '清理中' : '清除'),
@@ -125,14 +116,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           onChanged: (bool value) =>
               _update(settings.copyWith(useSystemTextScale: value)),
           title: const Text('字体大小跟随系统'),
-          subtitle: const Text('关闭后使用应用设计字号'),
         ),
         const Divider(),
         SwitchListTile(
           value: settings.automaticUpdateChecks,
           onChanged: (bool value) => _setAutomaticUpdateChecks(settings, value),
           title: const Text('自动检查更新'),
-          subtitle: const Text('关闭后永不自动提醒；开启时每 24 小时最多检查一次'),
         ),
         ListTile(
           title: const Text('国内下载源'),
@@ -583,12 +572,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   String _cacheSizeText(int? bytes) {
     if (_measuringCache) {
-      return '当前大小：正在计算';
+      return '大小：计算中';
     }
     if (bytes == null) {
-      return '当前大小：暂时无法统计';
+      return '大小：暂不可用';
     }
-    return '当前大小：约 ${_formatBytes(bytes)}';
+    return '大小：约 ${_formatBytes(bytes)}';
   }
 
   String _formatBytes(int bytes) {

@@ -11,7 +11,6 @@ import 'package:x300/core/network/forum_client.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/downloads/presentation/downloads_page.dart';
-import 'package:x300/features/favorites/presentation/cloud_favorites_page.dart';
 import 'package:x300/features/history/presentation/reading_history_page.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 import 'package:x300/features/profile/presentation/about_page.dart';
@@ -21,10 +20,8 @@ import 'package:x300/features/settings/domain/app_settings.dart';
 import 'package:x300/features/settings/presentation/settings_page.dart';
 
 enum ProfileDetailDestination {
-  novelFavorites,
   novelHistory,
   novelDownloads,
-  comicFavorites,
   comicHistory,
   comicDownloads,
   settings,
@@ -33,17 +30,11 @@ enum ProfileDetailDestination {
 
 Widget buildProfileDetailPage(ProfileDetailDestination destination) {
   return switch (destination) {
-    ProfileDetailDestination.novelFavorites => const CloudFavoritesPage(
-      kind: LibraryKind.novel,
-    ),
     ProfileDetailDestination.novelHistory => const ReadingHistoryPage(
       kind: LibraryKind.novel,
     ),
     ProfileDetailDestination.novelDownloads => const DownloadsPage(
       kind: LibraryKind.novel,
-    ),
-    ProfileDetailDestination.comicFavorites => const CloudFavoritesPage(
-      kind: LibraryKind.comic,
     ),
     ProfileDetailDestination.comicHistory => const ReadingHistoryPage(
       kind: LibraryKind.comic,
@@ -85,13 +76,12 @@ class ProfilePage extends ConsumerWidget {
           children: <Widget>[
             ListTile(
               leading: _ProfileAvatar(uri: avatarUri),
-              title: Text(authenticated ? authState.username : '未登录'),
-              subtitle: Text(
-                authState.sessionExpired
-                    ? '登录状态已失效，请重新登录'
-                    : authenticated
-                    ? '百合会论坛账号'
-                    : '点击头像登录百合会论坛',
+              title: Text(
+                authenticated
+                    ? authState.username
+                    : authState.sessionExpired
+                    ? '登录已失效'
+                    : '未登录',
               ),
               trailing: authenticated
                   ? IconButton(
@@ -103,18 +93,8 @@ class ProfilePage extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
             _ProfileCard(
-              key: const Key('profile-novel-card'),
+              key: const Key('profile-board'),
               children: <Widget>[
-                ListTile(
-                  leading: const Icon(Remix.heart_line),
-                  title: const Text('小说收藏'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _openDetail(
-                    context,
-                    ProfileDetailDestination.novelFavorites,
-                    requiresLogin: true,
-                  ),
-                ),
                 ListTile(
                   leading: const Icon(Remix.file_history_line),
                   title: const Text('小说记录'),
@@ -134,22 +114,6 @@ class ProfilePage extends ConsumerWidget {
                       ProfileDetailDestination.novelDownloads,
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _ProfileCard(
-              key: const Key('profile-comic-card'),
-              children: <Widget>[
-                ListTile(
-                  leading: const Icon(Remix.heart_line),
-                  title: const Text('漫画收藏'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _openDetail(
-                    context,
-                    ProfileDetailDestination.comicFavorites,
-                    requiresLogin: true,
-                  ),
-                ),
                 ListTile(
                   leading: const Icon(Remix.file_history_line),
                   title: const Text('漫画记录'),
@@ -169,12 +133,6 @@ class ProfilePage extends ConsumerWidget {
                       ProfileDetailDestination.comicDownloads,
                     ),
                   ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _ProfileCard(
-              key: const Key('profile-settings-card'),
-              children: <Widget>[
                 ListTile(
                   leading: Icon(
                     settings.theme == AppThemePreference.dark
@@ -213,15 +171,7 @@ class ProfilePage extends ConsumerWidget {
     );
   }
 
-  void _openDetail(
-    BuildContext context,
-    ProfileDetailDestination destination, {
-    bool requiresLogin = false,
-  }) {
-    if (requiresLogin && authState.status != AuthStatus.authenticated) {
-      onLogin();
-      return;
-    }
+  void _openDetail(BuildContext context, ProfileDetailDestination destination) {
     final ValueChanged<ProfileDetailDestination>? callback = onOpenDetail;
     if (callback != null) {
       callback(destination);

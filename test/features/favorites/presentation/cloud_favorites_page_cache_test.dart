@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:x300/core/storage/app_database.dart';
+import 'package:x300/features/auth/domain/auth_models.dart';
+import 'package:x300/shared/presentation/tab_app_bar.dart';
 import 'package:x300/features/favorites/data/favorite_cache_repository.dart';
 import 'package:x300/features/favorites/data/forum_favorite_repository.dart';
 import 'package:x300/features/favorites/domain/favorite_models.dart';
@@ -59,7 +61,12 @@ void main() {
           forumFavoriteRepositoryProvider.overrideWithValue(forum),
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
-        child: const MaterialApp(home: CloudFavoritesPage()),
+        child: const MaterialApp(
+          home: CloudFavoritesPage(
+            authState: AuthState.authenticated('测试账号'),
+            onLogin: _noop,
+          ),
+        ),
       ),
     );
     await tester.pump();
@@ -93,13 +100,18 @@ void main() {
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
         child: const MaterialApp(
-          home: CloudFavoritesPage(kind: LibraryKind.novel),
+          home: CloudFavoritesPage(
+            authState: AuthState.authenticated('测试账号'),
+            onLogin: _noop,
+          ),
         ),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
+    await tester.tap(find.text('小说收藏'));
+    await tester.pumpAndSettle();
     expect(find.text('小说收藏'), findsOneWidget);
     expect(find.text('缓存小说收藏'), findsWidgets);
     expect(find.text('缓存收藏'), findsNothing);
@@ -150,17 +162,61 @@ void main() {
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
         child: const MaterialApp(
-          home: CloudFavoritesPage(kind: LibraryKind.novel),
+          home: CloudFavoritesPage(
+            authState: AuthState.authenticated('测试账号'),
+            onLogin: _noop,
+          ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.widgetWithText(Tab, '小说收藏'));
+    await tester.pumpAndSettle();
     expect(find.text('第一页小说收藏'), findsWidgets);
     expect(find.text('一周一次买下同班同学的那些事'), findsWidgets);
     expect(find.textContaining('已隐藏'), findsNothing);
     verify(() => forum.loadNext(firstPage)).called(1);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await database.close();
+  });
+
+  testWidgets('后续分页失败时保留完整旧缓存，不展示部分同步页数', (tester) async {
+    final AppDatabase database = AppDatabase(NativeDatabase.memory());
+    final FavoriteCacheRepository cache = FavoriteCacheRepository(database);
+    await cache.save(<FavoriteWork>[_favorite()]);
+    final _MockForumFavoriteRepository forum = _MockForumFavoriteRepository();
+    final CloudFavoritePage page = CloudFavoritePage(
+      entries: <CloudFavoriteEntry>[_entry(tid: 600099, title: '部分同步条目')],
+      ignoredCount: 0,
+      currentPage: 1,
+      totalPages: 2,
+      nextPageUri: Uri.parse('https://example.invalid/favorites-page-2'),
+    );
+    when(() => forum.loadInitial()).thenAnswer((_) async => page);
+    when(() => forum.loadNext(any())).thenThrow(StateError('第二页失败'));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+          forumFavoriteRepositoryProvider.overrideWithValue(forum),
+          coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
+        ],
+        child: const MaterialApp(
+          home: CloudFavoritesPage(
+            authState: AuthState.authenticated('测试账号'),
+            onLogin: _noop,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('缓存收藏'), findsWidgets);
+    expect(find.text('部分同步条目'), findsNothing);
+    expect((await cache.load())!.works.single.work.title, '缓存收藏');
+    expect(find.byTooltip('取消收藏'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
     await database.close();
@@ -216,37 +272,29 @@ void main() {
           coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
         ],
         child: const MaterialApp(
-          home: CloudFavoritesPage(kind: LibraryKind.novel),
+          home: CloudFavoritesPage(
+            authState: AuthState.authenticated('测试账号'),
+            onLogin: _noop,
+          ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('智能聚合'), findsOneWidget);
-    expect(find.text('原始收藏'), findsOneWidget);
+    await tester.tap(find.text('小说收藏'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TabAppBar), findsOneWidget);
+    expect(find.widgetWithText(Tab, '全部'), findsNothing);
     expect(find.text('测试作品'), findsWidgets);
     expect(find.text('测试作品 第1章'), findsNothing);
-    final Finder bottomModes = find.byKey(
-      const Key('favorite-result-mode-bottom-bar'),
-    );
+    expect(find.text('漫画收藏'), findsOneWidget);
+    expect(find.text('小说收藏'), findsOneWidget);
     expect(
-      tester.getBottomRight(bottomModes).dy,
-      tester.getBottomRight(find.byType(Scaffold)).dy,
-    );
-    expect(
-      find.descendant(of: bottomModes, matching: find.byType(Icon)),
+      find.byKey(const Key('favorite-result-mode-bottom-bar')),
       findsNothing,
     );
-    final TabBar resultModes = tester.widget<TabBar>(
-      find.descendant(of: bottomModes, matching: find.byType(TabBar)),
-    );
-    expect(
-      resultModes.labelColor,
-      Theme.of(tester.element(bottomModes)).colorScheme.primary,
-    );
-    expect(resultModes.unselectedLabelColor, Colors.black87);
 
-    await tester.tap(find.text('原始收藏'));
+    await tester.tap(find.byKey(const Key('favorite-mode-toggle-1')));
     await tester.pumpAndSettle();
 
     expect(find.text('测试作品 第1章'), findsWidgets);
@@ -358,3 +406,5 @@ FavoriteWork _favorite({LibraryKind kind = LibraryKind.comic}) {
     ],
   );
 }
+
+void _noop() {}
