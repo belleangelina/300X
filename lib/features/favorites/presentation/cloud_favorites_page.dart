@@ -100,11 +100,8 @@ class _CloudFavoritesPageState extends ConsumerState<CloudFavoritesPage>
   }
 
   void _ensureLoaded() {
-    final bool changed =
-        ref.read(favoriteChangesProvider) != _loadedRevision;
-    if (widget.active &&
-        _authenticated &&
-        (!_initialLoadStarted || changed)) {
+    final bool changed = ref.read(favoriteChangesProvider) != _loadedRevision;
+    if (widget.active && _authenticated && (!_initialLoadStarted || changed)) {
       unawaited(_load());
     }
   }

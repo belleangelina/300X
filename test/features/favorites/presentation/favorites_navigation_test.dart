@@ -648,7 +648,10 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
 
   testWidgets('详情新增收藏后再次进入收藏同步并保留筛选布局', (tester) async {
     _setSize(tester, const Size(390, 844));
-    final List<CloudFavoriteEntry> comics = _entries(ForumBoard.comic, count: 3);
+    final List<CloudFavoriteEntry> comics = _entries(
+      ForumBoard.comic,
+      count: 3,
+    );
     favorites.entries
       ..clear()
       ..add(comics.first);
@@ -666,13 +669,15 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     await tester.tap(find.byIcon(Remix.home_2_line));
     await tester.pumpAndSettle();
 
-    final Work added = favorites.aggregateEntries(<CloudFavoriteEntry>[
-      comics.last,
-    ]).single.work;
+    final Work added = favorites
+        .aggregateEntries(<CloudFavoriteEntry>[comics.last])
+        .single
+        .work;
     unawaited(
       Navigator.of(tester.element(find.byType(HomeShell))).push<void>(
         MaterialPageRoute<void>(
-          builder: (context) => WorkDetailPage(work: added, rawSourceMode: true),
+          builder: (context) =>
+              WorkDetailPage(work: added, rawSourceMode: true),
         ),
       ),
     );
@@ -690,9 +695,9 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     expect(find.text('网格'), findsOneWidget);
     expect(find.text('原帖'), findsOneWidget);
     expect(
-      tester.widgetList<WorkGridCard>(find.byType(WorkGridCard)).map(
-        (card) => card.work.primarySourceTid,
-      ),
+      tester
+          .widgetList<WorkGridCard>(find.byType(WorkGridCard))
+          .map((card) => card.work.primarySourceTid),
       contains(comics.last.record.threadId),
     );
     expect(tester.takeException(), isNull);
@@ -725,9 +730,9 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
       }
       expect(favorites.initialLoads, 2);
       expect(
-        tester.widgetList<WorkListTile>(find.byType(WorkListTile)).map(
-          (tile) => tile.work.primarySourceTid,
-        ),
+        tester
+            .widgetList<WorkListTile>(find.byType(WorkListTile))
+            .map((tile) => tile.work.primarySourceTid),
         isNot(contains(removedTid)),
       );
       expect(find.byType(WorkListTile), findsOneWidget);
@@ -737,7 +742,12 @@ void registerFavoritesNavigationTests({bool captureScreenshots = false}) {
     });
   }
 
-  for (final String stage in <String>['categories', 'initial', 'next', 'remove']) {
+  for (final String stage in <String>[
+    'categories',
+    'initial',
+    'next',
+    'remove',
+  ]) {
     testWidgets('收藏会话失效显示重新登录且不回退缓存：$stage', (tester) async {
       _setSize(tester, const Size(390, 844));
       await FavoriteCacheRepository(
