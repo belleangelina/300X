@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -137,6 +138,49 @@ void main() {
     expect(find.text('登录失败：无法连接百合会论坛，请检查网络连接'), findsOneWidget);
     expect(find.byType(LoginPage), findsOneWidget);
     expect(find.widgetWithText(ElevatedButton, '登录'), findsOneWidget);
+  });
+
+  testWidgets('非论坛错误只提示通用原因而不显示英文异常', (WidgetTester tester) async {
+    final _MockAuthRepository repository = _MockAuthRepository();
+    when(
+      repository.restoreSession,
+    ).thenAnswer((_) async => const AuthState.unauthenticated());
+    // 例如 Linux 钥匙串未解锁时，保存凭据会抛出系统 PlatformException。
+    when(
+      () => repository.login(
+        username: any(named: 'username'),
+        password: any(named: 'password'),
+        captcha: any(named: 'captcha'),
+      ),
+    ).thenAnswer(
+      (_) async => throw PlatformException(
+        code: 'Libsecret error',
+        message: 'Failed to unlock the keyring',
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [authRepositoryProvider.overrideWithValue(repository)],
+        child: const MaterialApp(home: _LoginTestHome()),
+      ),
+    );
+    await tester.tap(find.text('打开登录'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, '用户名 / Email / UID'),
+      'test-user',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, '密码'),
+      'test-password',
+    );
+    await tester.tap(find.widgetWithText(ElevatedButton, '登录'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('登录失败：发生未知错误，请稍后重试'), findsOneWidget);
+    expect(find.textContaining('PlatformException'), findsNothing);
+    expect(find.byType(LoginPage), findsOneWidget);
   });
 
   testWidgets('刷新验证码失败时提示原因', (WidgetTester tester) async {
