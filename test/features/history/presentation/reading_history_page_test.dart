@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:x300/core/storage/app_database.dart';
 import 'package:x300/features/history/data/reading_history_repository.dart';
+import 'package:x300/features/history/domain/reading_history_models.dart';
 import 'package:x300/features/history/presentation/reading_history_page.dart';
 import 'package:x300/features/library/data/cover_repository.dart';
 import 'package:x300/features/library/domain/library_models.dart';
@@ -25,7 +26,54 @@ class _EmptyCoverRepository extends Fake implements CoverRepository {
   }) => _pending.future;
 }
 
+class _FlakyHistoryRepository extends ReadingHistoryRepository {
+  _FlakyHistoryRepository(super.database);
+
+  int watchCalls = 0;
+
+  @override
+  Stream<List<ReadingHistoryEntry>> watch({LibraryKind? kind}) {
+    watchCalls++;
+    if (watchCalls == 1) {
+      return Stream<List<ReadingHistoryEntry>>.error(StateError('数据库暂时不可用'));
+    }
+    return Stream<List<ReadingHistoryEntry>>.value(
+      const <ReadingHistoryEntry>[],
+    );
+  }
+}
+
 void main() {
+  testWidgets('读取本机记录失败后点击重试会重新读取', (WidgetTester tester) async {
+    final AppDatabase database = AppDatabase(NativeDatabase.memory());
+    final _FlakyHistoryRepository repository = _FlakyHistoryRepository(
+      database,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+          readingHistoryRepositoryProvider.overrideWithValue(repository),
+          coverRepositoryProvider.overrideWithValue(_EmptyCoverRepository()),
+        ],
+        child: const MaterialApp(home: ReadingHistoryPage()),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('读取本机记录失败'), findsOneWidget);
+    await tester.tap(find.text('点击重试'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(repository.watchCalls, 2);
+    expect(find.textContaining('读取本机记录失败'), findsNothing);
+    expect(find.text('还没有阅读记录'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await database.close();
+  });
+
   testWidgets('本机记录显示阅读进度', (WidgetTester tester) async {
     final AppDatabase database = AppDatabase(NativeDatabase.memory());
     final ReadingHistoryRepository repository = ReadingHistoryRepository(

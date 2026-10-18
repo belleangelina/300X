@@ -1,10 +1,65 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:x300/features/library/data/chapter_content_selector.dart';
 import 'package:x300/features/library/data/chapter_resolver.dart';
 import 'package:x300/features/library/domain/library_models.dart';
 import 'package:x300/features/library/domain/thread_models.dart';
 
 void main() {
   const ChapterResolver resolver = ChapterResolver();
+
+  test('倒序目录按楼层先后确定章节正文边界', () {
+    final Work work = _work(kind: LibraryKind.comic);
+    final ForumThreadPage page = _pageWithPosts(<SourcePost>[
+      _post(
+        pid: 100,
+        floor: 1,
+        text: '目录',
+        links: <ThreadLink>[
+          _link('第3话', 103),
+          _link('第2话', 102),
+          _link('第1话', 101),
+        ],
+      ),
+      _post(pid: 101, floor: 2, text: '第1话正文'),
+      _post(pid: 102, floor: 3, text: '第2话正文'),
+      _post(pid: 103, floor: 4, text: '第3话正文'),
+    ]);
+
+    final List<Chapter> chapters = resolver.resolve(work, page);
+    final Map<int?, int?> endPids = <int?, int?>{
+      for (final Chapter chapter in chapters)
+        chapter.sourcePid: chapter.sourceEndPid,
+    };
+
+    expect(endPids, <int?, int?>{101: 102, 102: 103, 103: null});
+    final Chapter second = chapters.singleWhere(
+      (Chapter chapter) => chapter.sourcePid == 102,
+    );
+    expect(
+      const ChapterContentSelector()
+          .select(page, second)
+          .whereType<PostTextBlock>()
+          .map((PostTextBlock block) => block.text),
+      <String>['第2话正文'],
+    );
+  });
+
+  test('乱序目录不会让前一章吞掉后面章节的楼层', () {
+    final Work work = _work(kind: LibraryKind.comic);
+    final ForumThreadPage page = _page(<ThreadLink>[
+      _link('第1话', 101),
+      _link('第3话', 105),
+      _link('第2话', 103),
+    ]);
+
+    final List<Chapter> chapters = resolver.resolve(work, page);
+    final Map<int?, int?> endPids = <int?, int?>{
+      for (final Chapter chapter in chapters)
+        chapter.sourcePid: chapter.sourceEndPid,
+    };
+
+    expect(endPids, <int?, int?>{101: 103, 103: 105, 105: null});
+  });
 
   test('明确目录有多个 pid 时以目录为准', () {
     final Work work = _work(kind: LibraryKind.comic);

@@ -463,7 +463,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
   }
 
   Future<void> _logout() async {
-    await ref.read(cacheMaintenanceRepositoryProvider).clearAccountCaches();
+    try {
+      await ref.read(cacheMaintenanceRepositoryProvider).clearAccountCaches();
+    } on Object {
+      // 缓存清理失败不能阻止退出，凭据和 Cookie 仍必须清除。
+    }
     PaintingBinding.instance.imageCache.clear();
     PaintingBinding.instance.imageCache.clearLiveImages();
     await ref.read(authControllerProvider.notifier).logout();

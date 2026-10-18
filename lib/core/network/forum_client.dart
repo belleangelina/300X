@@ -101,7 +101,7 @@ class ForumClient {
 
     for (int attempt = 0; attempt <= retryCount;) {
       try {
-        return await _dio.getUri<String>(
+        final Response<String> response = await _dio.getUri<String>(
           uri,
           options: Options(
             responseType: ResponseType.plain,
@@ -110,6 +110,8 @@ class ForumClient {
                 : <String, String>{HttpHeaders.refererHeader: referer},
           ),
         );
+        _resolveRedirects(response);
+        return response;
       } on DioException catch (error) {
         lastError = error;
         if (!wafRecoveryAttempted && _isWafChallenge(error)) {
@@ -127,7 +129,7 @@ class ForumClient {
       }
     }
 
-    throw ForumConnectionException(lastError?.message ?? '无法连接百合会论坛');
+    throw _failure(lastError, unreachable: '无法连接百合会论坛，请检查网络连接');
   }
 
   Future<Response<String>> postForm(
@@ -176,9 +178,12 @@ class ForumClient {
         throw const ForumConnectionException('论坛安全验证已更新，请重新提交');
       }
       final int? statusCode = error.response?.statusCode;
-      throw ForumConnectionException(
-        statusCode == null ? '提交论坛表单失败，请检查网络连接' : '论坛拒绝提交（HTTP $statusCode）',
-      );
+      final String message = statusCode == null
+          ? '提交论坛表单失败，请检查网络连接'
+          : '论坛拒绝提交（HTTP $statusCode）';
+      throw _isUnreachable(error)
+          ? ForumUnreachableException(message)
+          : ForumConnectionException(message);
     }
   }
 
@@ -205,7 +210,7 @@ class ForumClient {
           }
           continue;
         }
-        throw ForumConnectionException(error.message ?? '加载论坛图片失败');
+        throw _failure(error, unreachable: '加载论坛图片失败，请检查网络连接');
       }
     }
   }
@@ -312,6 +317,22 @@ class ForumClient {
     return resolve(location.toString());
   }
 
+  // dart:io 记录跳转时不补全相对 Location（论坛的 findpost 跳转就是相对地址），
+  // realUri 会变成没有协议和域名的地址，页面里的相对图片和链接都会解析失败。
+  // 按每一跳的上一个地址逐级补全，调用方拿到的 realUri 始终是绝对地址。
+  void _resolveRedirects(Response<Object?> response) {
+    if (response.redirects.isEmpty) {
+      return;
+    }
+    Uri current = response.requestOptions.uri;
+    final List<RedirectRecord> resolved = <RedirectRecord>[];
+    for (final RedirectRecord record in response.redirects) {
+      current = current.resolveUri(record.location);
+      resolved.add(RedirectRecord(record.statusCode, record.method, current));
+    }
+    response.redirects = resolved;
+  }
+
   Uri _withQueryParameters(Uri uri, Map<String, dynamic>? queryParameters) {
     if (queryParameters == null || queryParameters.isEmpty) {
       return uri;
@@ -322,6 +343,42 @@ class ForumClient {
         ...queryParameters,
       },
     );
+  }
+
+  ForumConnectionException _failure(
+    DioException? error, {
+    required String unreachable,
+  }) {
+    final String message = _failureMessage(error, unreachable: unreachable);
+    return _isUnreachable(error)
+        ? ForumUnreachableException(message)
+        : ForumConnectionException(message);
+  }
+
+  // 论坛给出了 HTTP 响应或请求被主动取消时网络是通的，调用方不能当作离线处理。
+  bool _isUnreachable(DioException? error) {
+    return switch (error?.type) {
+      DioExceptionType.badResponse || DioExceptionType.cancel => false,
+      _ => true,
+    };
+  }
+
+  // Dio 的 message 是面向开发者的英文长文本，界面只展示可理解的中文原因。
+  String _failureMessage(DioException? error, {required String unreachable}) {
+    if (error == null) {
+      return unreachable;
+    }
+    return switch (error.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.transformTimeout => '连接百合会论坛超时，请稍后重试',
+      DioExceptionType.badResponse =>
+        '论坛返回异常（HTTP ${error.response?.statusCode ?? '未知'}），请稍后重试',
+      DioExceptionType.badCertificate => '论坛证书校验失败，请检查网络环境',
+      DioExceptionType.cancel => '论坛请求已取消',
+      _ => unreachable,
+    };
   }
 
   bool _canRetry(DioException error) {

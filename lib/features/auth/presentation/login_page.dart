@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:remixicon/remixicon.dart';
+import 'package:x300/core/network/forum_exceptions.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
 import 'package:x300/features/auth/presentation/web_login_page.dart';
@@ -212,8 +213,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         ),
         const SizedBox(width: 8),
         InkWell(
-          onTap: () =>
-              ref.read(authControllerProvider.notifier).refreshCaptcha(),
+          onTap: _refreshCaptcha,
           borderRadius: BorderRadius.circular(4),
           child: Container(
             width: 118,
@@ -267,11 +267,37 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (!mounted) {
       return;
     }
-    final AuthState? state = ref.read(authControllerProvider).value;
+    final AsyncValue<AuthState> result = ref.read(authControllerProvider);
+    if (result.hasError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        AppSnackBar(content: Text('登录失败：${_errorReason(result.error)}')),
+      );
+      return;
+    }
+    final AuthState? state = result.value;
     if (state?.status == AuthStatus.authenticated &&
         ModalRoute.of(context)?.isCurrent == true) {
       Navigator.of(context).pop();
     }
+  }
+
+  Future<void> _refreshCaptcha() async {
+    await ref.read(authControllerProvider.notifier).refreshCaptcha();
+    if (!mounted) {
+      return;
+    }
+    final AsyncValue<AuthState> result = ref.read(authControllerProvider);
+    if (result.hasError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        AppSnackBar(content: Text('刷新验证码失败：${_errorReason(result.error)}')),
+      );
+    }
+  }
+
+  // 论坛异常本身就是中文原因；其它异常（如系统安全存储的 PlatformException）
+  // 只显示通用提示，不把英文技术细节显示给用户。
+  String _errorReason(Object? error) {
+    return error is ForumException ? error.message : '发生未知错误，请稍后重试';
   }
 
   Future<void> _openWebLogin() async {

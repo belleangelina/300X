@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:x300/features/library/domain/thread_models.dart';
@@ -40,6 +41,40 @@ void main() {
       expect(_startsWithLowSurrogate(block.text), isFalse);
       expect(_endsWithHighSurrogate(block.text), isFalse);
     }
+  });
+
+  test('分页测量完成后释放全部 TextPainter', () {
+    int created = 0;
+    int disposed = 0;
+    void listener(ObjectEvent event) {
+      if (event.object is! TextPainter) {
+        return;
+      }
+      if (event is ObjectCreated) {
+        created++;
+      } else if (event is ObjectDisposed) {
+        disposed++;
+      }
+    }
+
+    FlutterMemoryAllocations.instance.addListener(listener);
+    addTearDown(
+      () => FlutterMemoryAllocations.instance.removeListener(listener),
+    );
+
+    paginator.paginate(
+      blocks: <PostContentBlock>[
+        PostTextBlock(text: List<String>.filled(1600, '丙').join()),
+      ],
+      width: 320,
+      height: 480,
+      fontSize: 18,
+      lineHeight: 1.8,
+      textDirection: TextDirection.ltr,
+    );
+
+    expect(created, greaterThan(1));
+    expect(disposed, created);
   });
 
   test('窗口变窄或字号变大时会重新排成更多页', () {

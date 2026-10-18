@@ -269,7 +269,12 @@ class ForumLibraryRepository {
       _invalidateFullThread(chapter.sourceTid);
     }
     final ForumThreadPage? completed = _completedFullThreads[chapter.sourceTid];
-    if (!forceReload && completed != null) {
+    final int? sourcePid = chapter.sourcePid;
+    // 完整帖子缓存只有楼主楼层；目录指向其他用户的楼层时仍需按 pid 跳转读取。
+    if (!forceReload &&
+        completed != null &&
+        (sourcePid == null ||
+            completed.posts.any((SourcePost post) => post.pid == sourcePid))) {
       return completed;
     }
     final Future<ForumThreadPage>? existing =

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:x300/core/network/forum_exceptions.dart';
 import 'package:x300/core/storage/app_database.dart';
 import 'package:x300/features/library/application/work_index_coordinator.dart';
 import 'package:x300/features/library/data/forum_library_repository.dart';
@@ -1054,6 +1055,100 @@ void main() {
     verify(() => searchRepository.loadNext(firstPage)).called(1);
   });
 
+  test('论坛已接受的整作搜索即使随后取消也计入搜索冷却', () async {
+    final SearchCooldown cooldown = SearchCooldown(
+      interval: const Duration(seconds: 10),
+    );
+    final WorkIndexCoordinator cooldownCoordinator = WorkIndexCoordinator(
+      indexRepository,
+      libraryRepository,
+      searchRepository,
+      cooldown,
+    );
+    final SourceThread thread = _longComicThread(105, '冷却长篇 第1话');
+    final Work work = _standalone(thread);
+    final WorkIndexCancellation cancellation = WorkIndexCancellation();
+    when(
+      () => libraryRepository.loadThread(
+        any(),
+        includeAllOriginalPosterPosts: true,
+        forceReload: false,
+      ),
+    ).thenAnswer((_) async => _emptyPage(work));
+    when(
+      () => searchRepository.search(keyword: '冷却长篇', kind: LibraryKind.comic),
+    ).thenAnswer((_) async {
+      cancellation.cancel();
+      return ForumSearchPage(
+        kind: LibraryKind.comic,
+        keyword: '冷却长篇',
+        searchId: '89',
+        sourceThreads: <SourceThread>[thread],
+        currentPage: 1,
+        totalPages: 1,
+      );
+    });
+
+    await expectLater(
+      cooldownCoordinator.ensure(work, cancellation: cancellation),
+      throwsA(isA<WorkIndexCancelledException>()),
+    );
+
+    expect(cooldown.inFlight, isFalse);
+    expect(cooldown.lastAcceptedAt, isNotNull);
+    expect(cooldown.tryBegin(), isFalse);
+  });
+
+  test('等待搜索名额期间取消后搜索冷却不会停在进行中', () async {
+    final SearchCooldown cooldown = SearchCooldown(
+      interval: const Duration(seconds: 10),
+    );
+    final WorkIndexCoordinator cooldownCoordinator = WorkIndexCoordinator(
+      indexRepository,
+      libraryRepository,
+      searchRepository,
+      cooldown,
+    );
+    final SourceThread thread = _longComicThread(106, '等待长篇 第1话');
+    final Work work = _standalone(thread);
+    final WorkIndexCancellation cancellation = WorkIndexCancellation();
+    final Completer<void> waiting = Completer<void>();
+    when(
+      () => libraryRepository.loadThread(
+        any(),
+        includeAllOriginalPosterPosts: true,
+        forceReload: false,
+      ),
+    ).thenAnswer((_) async => _emptyPage(work));
+    // 搜索页的另一次搜索正在进行，协调器只能等待名额。
+    expect(cooldown.tryBegin(), isTrue);
+
+    final Future<WorkIndexResult> pending = cooldownCoordinator.ensure(
+      work,
+      onProgress: (String message) {
+        if (message == '正在等待当前论坛搜索完成' && !waiting.isCompleted) {
+          waiting.complete();
+        }
+      },
+      cancellation: cancellation,
+    );
+    await waiting.future;
+    // 用户退出详情页的同时那次搜索结束：协调器下一轮先抢到名额，随后才发现已取消。
+    cancellation.cancel();
+    cooldown.failed();
+
+    await expectLater(pending, throwsA(isA<WorkIndexCancelledException>()));
+
+    expect(cooldown.inFlight, isFalse);
+    expect(cooldown.tryBegin(), isTrue);
+    verifyNever(
+      () => searchRepository.search(
+        keyword: any(named: 'keyword'),
+        kind: any(named: 'kind'),
+      ),
+    );
+  });
+
   test('主页分类与方括号上下文一致的章节漫画会搜索完整作品', () async {
     final SourceThread entry = _thread(
       571728,
@@ -1963,6 +2058,46 @@ void main() {
       <int>{551, 542, 553},
     );
   });
+
+  for (final ForumBoard board in <ForumBoard>[
+    ForumBoard.comic,
+    ForumBoard.lightNovel,
+  ]) {
+    test('${board.label}首次读取主题失败时不保存降级索引，下次打开重新解析', () async {
+      final Work seed = _standalone(_thread(40, '读取失败作品', board: board));
+      int loads = 0;
+      when(
+        () => libraryRepository.loadDirectoryThread(
+          any(),
+          forceReload: any(named: 'forceReload'),
+          onPageProgress: any(named: 'onPageProgress'),
+        ),
+      ).thenAnswer((Invocation invocation) async {
+        loads++;
+        if (loads == 1) {
+          throw const ForumConnectionException('无法连接百合会论坛，请检查网络连接');
+        }
+        return _directoryPageForThread(
+          invocation.positionalArguments.first as SourceThread,
+        );
+      });
+
+      final WorkIndexResult failed = await coordinator.ensure(seed);
+
+      expect(failed.warning, contains('本次未保存作品索引'));
+      expect(await indexRepository.loadBySourceTid(40, board.kind), isNull);
+
+      final WorkIndexResult retried = await coordinator.ensure(seed);
+
+      expect(loads, 2);
+      expect(retried.warning, isNull);
+      expect(
+        retried.work.chapters.map((Chapter chapter) => chapter.sourcePid),
+        <int?>[401, 402],
+      );
+      expect(await indexRepository.loadBySourceTid(40, board.kind), isNotNull);
+    });
+  }
 }
 
 SourceThread _thread(

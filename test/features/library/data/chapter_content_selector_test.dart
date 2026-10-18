@@ -20,6 +20,35 @@ void main() {
     );
   });
 
+  test('下一章楼层不在当前页时按 pid 先后截断', () {
+    // 完整楼主缓存只有楼主楼层；接力翻译目录里第2话（102）是其他用户的回复楼。
+    final ForumThreadPage page = ForumThreadPage(
+      tid: 10,
+      board: ForumBoard.comic,
+      title: '测试作品',
+      uri: Uri.parse('https://bbs.yamibo.com/forum.php?mod=viewthread&tid=10'),
+      posts: <SourcePost>[
+        _post(101, '第1话'),
+        _post(103, '第3话'),
+        _post(105, '第4话'),
+      ],
+      currentPage: 1,
+      totalPages: 1,
+    );
+
+    final List<PostContentBlock> blocks = selector.select(
+      page,
+      _chapter(sourcePid: 101, sourceEndPid: 102),
+    );
+
+    expect(
+      blocks.whereType<PostTextBlock>().map(
+        (PostTextBlock value) => value.text,
+      ),
+      <String>['第1话'],
+    );
+  });
+
   test('按 pid 打开的章节使用目标作者而不依赖当前分页的楼主标记', () {
     final ForumThreadPage page = ForumThreadPage(
       tid: 10,

@@ -212,12 +212,21 @@ class ForumThreadParser {
         }
         continue;
       }
+      // 站外地址里的 tid/pid 属于其它网站，不能当作本论坛主题或楼层。
+      if (uri.host != pageUri.host) {
+        continue;
+      }
+      // 旧帖常写死 http 的论坛地址，统一改走与页面相同的 HTTPS。
+      final Uri forumUri = uri.scheme == pageUri.scheme
+          ? uri
+          : uri.replace(scheme: pageUri.scheme);
 
       final int? tid =
-          queryInt(uri, 'tid') ??
-          queryInt(uri, 'ptid') ??
-          _friendlyThreadId(uri.path);
-      final int? pid = queryInt(uri, 'pid') ?? _fragmentPostId(uri.fragment);
+          queryInt(forumUri, 'tid') ??
+          queryInt(forumUri, 'ptid') ??
+          _friendlyThreadId(forumUri.path);
+      final int? pid =
+          queryInt(forumUri, 'pid') ?? _fragmentPostId(forumUri.fragment);
       if (tid == null && pid == null) {
         continue;
       }
@@ -235,7 +244,7 @@ class ForumThreadParser {
       result.add(
         ThreadLink(
           label: label.isEmpty ? '原帖链接' : label,
-          uri: uri,
+          uri: forumUri,
           kind: kind,
           tid: tid ?? currentTid,
           pid: pid,
@@ -388,8 +397,10 @@ class ForumThreadParser {
   }
 
   int? _friendlyThreadId(String path) {
+    // forum-{fid}-{page}.html 是版块列表，其中的数字是 fid 而不是 tid。
     return int.tryParse(
-      RegExp(r'(?:thread|forum)-(\d+)').firstMatch(path)?.group(1) ?? '',
+      RegExp(r'(?:^|/)thread-(\d+)(?:-|\.html|$)').firstMatch(path)?.group(1) ??
+          '',
     );
   }
 
@@ -577,7 +588,11 @@ class _PostContentCollector {
       return;
     }
 
-    final Uri uri = pageUri.resolve(normalizedSource);
+    Uri uri = pageUri.resolve(normalizedSource);
+    if (uri.scheme == 'http' && uri.host == pageUri.host) {
+      // 论坛附件只走 HTTPS；移动端默认禁止明文请求，旧帖的 http 地址会加载失败。
+      uri = uri.replace(scheme: pageUri.scheme);
+    }
     if ((uri.scheme != 'https' && uri.scheme != 'http') ||
         !_seenImages.add(uri)) {
       return;

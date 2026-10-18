@@ -339,4 +339,70 @@ void main() {
       Uri.parse('https://bbs.yamibo.com/data/attachment/forum/real.jpg'),
     ]);
   });
+
+  test('站外链接和版块列表链接不会被当作论坛章节', () {
+    const String html = '''
+                        <html>
+                        <body id="forum" class="pg_viewthread">
+                                <div class="view_tit">测试作品</div>
+                                <div class="plc cl" id="pid100">
+                                        <ul class="authi">
+                                                <li class="mtit"><span class="y">1楼</span><span class="z"><a>楼主</a></span></li>
+                                        </ul>
+                                        <div class="message">
+                                                <a href="https://other.example.com/forum.php?mod=viewthread&amp;tid=999">第2话</a>
+                                                <a href="https://other.example.com/thread-998-1-1.html">第3话</a>
+                                                <a href="forum-30-1.html">第4话</a>
+                                                <a href="thread-456-1-1.html">第5话</a>
+                                        </div>
+                                </div>
+                        </body>
+                        </html>
+                ''';
+
+    final ForumThreadPage page = parser.parse(
+      html,
+      pageUri,
+      ForumBoard.comic,
+      expectedTid: 123,
+    );
+
+    expect(page.originalPost!.links.map((ThreadLink link) => link.tid), <int?>[
+      456,
+    ]);
+  });
+
+  test('旧帖写死的 http 论坛链接和附件统一改用 HTTPS', () {
+    const String html = '''
+                        <html>
+                        <body id="forum" class="pg_viewthread">
+                                <div class="view_tit">测试作品</div>
+                                <div class="plc cl" id="pid100">
+                                        <ul class="authi">
+                                                <li class="mtit"><span class="y">1楼</span><span class="z"><a>楼主</a></span></li>
+                                        </ul>
+                                        <div class="message">
+                                                <a href="http://bbs.yamibo.com/thread-457-1-1.html">第2话</a>
+                                                <img src="http://bbs.yamibo.com/data/attachment/forum/old.jpg" />
+                                                <img src="https://bbs.yamibo.com/data/attachment/forum/old.jpg" />
+                                        </div>
+                                </div>
+                        </body>
+                        </html>
+                ''';
+
+    final ForumThreadPage page = parser.parse(
+      html,
+      pageUri,
+      ForumBoard.comic,
+      expectedTid: 123,
+    );
+    final ThreadLink link = page.originalPost!.links.single;
+
+    expect(link.tid, 457);
+    expect(link.uri, Uri.parse('https://bbs.yamibo.com/thread-457-1-1.html'));
+    expect(page.originalPost!.imageUris, <Uri>[
+      Uri.parse('https://bbs.yamibo.com/data/attachment/forum/old.jpg'),
+    ]);
+  });
 }

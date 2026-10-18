@@ -44,10 +44,18 @@ class AuthRepository {
     if (credentials == null) {
       return const AuthState.unauthenticated();
     }
-    return login(
-      username: credentials.username,
-      password: credentials.password,
-    );
+    try {
+      return await login(
+        username: credentials.username,
+        password: credentials.password,
+      );
+    } on ForumUnreachableException {
+      // 重新登录也属于启动校验，连接失败时同样按已保存凭据进入本地界面。
+      return AuthState.authenticated(credentials.username);
+    } on ForumConnectionException catch (error) {
+      // 校验页刚确认会话失效且论坛可达；被拒绝或安全验证失败时显示原因并提示重新登录。
+      return AuthState.unauthenticated(message: error.message);
+    }
   }
 
   Future<AuthState> login({

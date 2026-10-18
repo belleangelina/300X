@@ -51,6 +51,16 @@ class ChapterContentSelector {
         );
         if (candidate > start) {
           end = candidate;
+        } else if (candidate < 0 && sourceEndPid > sourcePid) {
+          // 完整楼主缓存不含其他用户的楼层，下一章是回复楼时这里找不到它；
+          // pid 随发帖时间递增，改在第一个不早于下一章的楼层处截断。
+          final int later = page.posts.indexWhere(
+            (SourcePost post) => post.pid >= sourceEndPid,
+            start + 1,
+          );
+          if (later >= 0) {
+            end = later;
+          }
         }
       }
       final SourcePost target = page.posts[start];
