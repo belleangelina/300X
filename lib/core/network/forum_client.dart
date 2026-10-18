@@ -127,7 +127,9 @@ class ForumClient {
       }
     }
 
-    throw ForumConnectionException(lastError?.message ?? '无法连接百合会论坛');
+    throw ForumConnectionException(
+      _failureMessage(lastError, unreachable: '无法连接百合会论坛，请检查网络连接'),
+    );
   }
 
   Future<Response<String>> postForm(
@@ -205,7 +207,9 @@ class ForumClient {
           }
           continue;
         }
-        throw ForumConnectionException(error.message ?? '加载论坛图片失败');
+        throw ForumConnectionException(
+          _failureMessage(error, unreachable: '加载论坛图片失败，请检查网络连接'),
+        );
       }
     }
   }
@@ -322,6 +326,24 @@ class ForumClient {
         ...queryParameters,
       },
     );
+  }
+
+  // Dio 的 message 是面向开发者的英文长文本，界面只展示可理解的中文原因。
+  String _failureMessage(DioException? error, {required String unreachable}) {
+    if (error == null) {
+      return unreachable;
+    }
+    return switch (error.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.transformTimeout => '连接百合会论坛超时，请稍后重试',
+      DioExceptionType.badResponse =>
+        '论坛返回异常（HTTP ${error.response?.statusCode ?? '未知'}），请稍后重试',
+      DioExceptionType.badCertificate => '论坛证书校验失败，请检查网络环境',
+      DioExceptionType.cancel => '论坛请求已取消',
+      _ => unreachable,
+    };
   }
 
   bool _canRetry(DioException error) {
