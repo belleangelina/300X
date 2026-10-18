@@ -1,0 +1,76 @@
+name: Temporary PR9 test APK
+
+on:
+  push:
+    branches: [tmp/pr9-test-apk-b20]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: stable
+          cache: true
+      - run: mkdir -p .artifacts/validation/logs
+      - name: Configure existing Android signing
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$KEYSTORE"; test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"; test -n "$STORE_PASSWORD"
+          printf '%s' "$KEYSTORE" | base64 --decode > android/app/x300-release.jks
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=x300-release.jks\n' \
+            "$STORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
+      - name: Build and verify arm64 APK (1.0.11+20)
+        env:
+          EXPECTED_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
+        run: |
+          set -Eeuo pipefail
+          flutter pub get > .artifacts/validation/logs/pub-get.log 2>&1
+          if ! bash build_release.sh --platform android --keep-version --build-number 20 \
+            > .artifacts/validation/logs/android-build.log 2>&1; then
+            tail -40 .artifacts/validation/logs/android-build.log
+            exit 1
+          fi
+          grep -q '^version: 1.0.11+20$' pubspec.yaml
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          apk=$(ls build/releases/*-android-arm64-v8a-release.apk)
+          test -n "$EXPECTED_CERT_SHA256"
+          actual=$("$apksigner" verify --print-certs-pem "$apk" | openssl x509 -outform DER | sha256sum | awk '{ print $1 }')
+          test "${actual,,}" = "${EXPECTED_CERT_SHA256,,}"
+          mkdir -p out
+          cp "$apk" out/
+          (cd out && sha256sum *.apk > SHA256SUMS.txt)
+          printf 'Source commit: %s\nVersion: 1.0.11+20\n' "$GITHUB_SHA" > out/BUILD.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: X300-pr9-test-1.0.11-b20-arm64-v8a
+          path: out/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr9-test-apk-logs
+          path: .artifacts/validation/logs/
+          retention-days: 7
+      - name: Remove signing material
+        if: always()
+        run: rm -f android/key.properties android/app/x300-release.jks
