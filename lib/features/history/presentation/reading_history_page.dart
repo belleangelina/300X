@@ -112,7 +112,12 @@ class _ReadingHistoryPageState extends ConsumerState<ReadingHistoryPage> {
                     if (snapshot.hasError) {
                       return AppErrorView(
                         message: '读取本机记录失败：${snapshot.error}',
-                        onRetry: () => setState(() {}),
+                        // 出错的流不会再产出数据，重试必须重新订阅。
+                        onRetry: () => setState(() {
+                          _stream = _repository.watch(
+                            kind: widget.kind ?? _filter.kind,
+                          );
+                        }),
                       );
                     }
                     if (!snapshot.hasData) {
