@@ -101,7 +101,7 @@ class ForumClient {
 
     for (int attempt = 0; attempt <= retryCount;) {
       try {
-        return await _dio.getUri<String>(
+        final Response<String> response = await _dio.getUri<String>(
           uri,
           options: Options(
             responseType: ResponseType.plain,
@@ -110,6 +110,8 @@ class ForumClient {
                 : <String, String>{HttpHeaders.refererHeader: referer},
           ),
         );
+        _resolveRedirects(response);
+        return response;
       } on DioException catch (error) {
         lastError = error;
         if (!wafRecoveryAttempted && _isWafChallenge(error)) {
@@ -314,6 +316,22 @@ class ForumClient {
       return location;
     }
     return resolve(location.toString());
+  }
+
+  // dart:io 记录跳转时不补全相对 Location（论坛的 findpost 跳转就是相对地址），
+  // realUri 会变成没有协议和域名的地址，页面里的相对图片和链接都会解析失败。
+  // 按每一跳的上一个地址逐级补全，调用方拿到的 realUri 始终是绝对地址。
+  void _resolveRedirects(Response<Object?> response) {
+    if (response.redirects.isEmpty) {
+      return;
+    }
+    Uri current = response.requestOptions.uri;
+    final List<RedirectRecord> resolved = <RedirectRecord>[];
+    for (final RedirectRecord record in response.redirects) {
+      current = current.resolveUri(record.location);
+      resolved.add(RedirectRecord(record.statusCode, record.method, current));
+    }
+    response.redirects = resolved;
   }
 
   Uri _withQueryParameters(Uri uri, Map<String, dynamic>? queryParameters) {

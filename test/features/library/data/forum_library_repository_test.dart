@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:isolate';
+import 'dart:typed_data';
 
+import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:x300/core/network/forum_client.dart';
+import 'package:x300/features/library/data/chapter_content_selector.dart';
 import 'package:x300/features/library/data/forum_catalog_parser.dart';
 import 'package:x300/features/library/data/forum_library_repository.dart';
 import 'package:x300/features/library/data/forum_thread_parser.dart';
@@ -360,6 +363,46 @@ void main() {
     expect(requestedUris.single.queryParameters['pid'], '105');
   });
 
+  test('楼层跳转页按补全后的地址解析相对图片', () async {
+    final Dio dio = Dio(BaseOptions(baseUrl: ForumClient.baseUri.toString()))
+      ..httpClientAdapter = _JumpAdapter();
+    final ForumLibraryRepository jumpRepository = ForumLibraryRepository(
+      ForumClient.forTesting(dio, CookieJar()),
+    );
+    final Chapter chapter = Chapter(
+      id: 'forum-post:10:105',
+      title: '第二话',
+      sourceUri: Uri.parse(
+        'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost'
+        '&ptid=10&pid=105&mobile=2',
+      ),
+      sourceTid: 10,
+      sourcePid: 105,
+    );
+
+    final ForumThreadPage page = await jumpRepository.loadChapterPage(
+      chapter,
+      ForumBoard.comic,
+    );
+
+    expect(
+      page.uri,
+      Uri.parse(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=10&page=1&mobile=2#pid105',
+      ),
+    );
+    expect(
+      const ChapterContentSelector()
+          .select(page, chapter)
+          .whereType<PostImageBlock>()
+          .map((PostImageBlock block) => block.uri),
+      <Uri>[
+        Uri.parse('https://bbs.yamibo.com/data/attachment/forum/p105.jpg'),
+        Uri.parse('https://bbs.yamibo.com/data/attachment/forum/legacy.jpg'),
+      ],
+    );
+  });
+
   test('帖子 DOM 解析期间主 isolate 仍可处理事件', () async {
     final ForumLibraryRepository backgroundRepository = ForumLibraryRepository(
       client,
@@ -577,6 +620,46 @@ final String _tagPageTwo = '''
         </body>
         </html>
 ''';
+
+final String _jumpPage =
+    '''
+        <html>
+        <body id="forum" class="pg_viewthread">
+                <div class="view_tit">测试长篇</div>
+                ${_post(105, 6, '<img src="data/attachment/forum/p105.jpg" />'
+    '<img src="http://bbs.yamibo.com/data/attachment/forum/legacy.jpg" />')}
+        </body>
+        </html>
+''';
+
+// 模拟 dart:io 跟随 findpost 跳转后的结果：跳转记录里是论坛原样返回的相对 Location。
+class _JumpAdapter implements HttpClientAdapter {
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    return ResponseBody.fromString(
+        _jumpPage,
+        200,
+        isRedirect: true,
+        headers: <String, List<String>>{
+          Headers.contentTypeHeader: <String>['text/html; charset=utf-8'],
+        },
+      )
+      ..redirects = <RedirectRecord>[
+        RedirectRecord(
+          301,
+          'GET',
+          Uri.parse('forum.php?mod=viewthread&tid=10&page=1&mobile=2#pid105'),
+        ),
+      ];
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
 
 String _post(int pid, int floor, String text) {
   return '''
