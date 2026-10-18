@@ -86,6 +86,50 @@ void main() {
     await database.close();
   });
 
+  testWidgets('空闲时冷却计时器不重复重建搜索页，倒计时仍会刷新', (WidgetTester tester) async {
+    final AppDatabase database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    DateTime now = DateTime(2026, 10, 18, 12);
+    final SearchCooldown cooldown = SearchCooldown(now: () => now);
+    int pageBuilds = 0;
+    debugOnRebuildDirtyWidget = (Element element, bool builtOnce) {
+      if (element.widget is SearchPage) {
+        pageBuilds++;
+      }
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = null);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+          forumSearchRepositoryProvider.overrideWithValue(
+            _MockForumSearchRepository(),
+          ),
+          searchCooldownProvider.overrideWithValue(cooldown),
+        ],
+        child: const MaterialApp(home: SearchPage(kind: LibraryKind.comic)),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    pageBuilds = 0;
+
+    for (int frame = 0; frame < 8; frame++) {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+    expect(pageBuilds, 0);
+
+    expect(cooldown.tryBegin(), isTrue);
+    cooldown.accepted();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('10s'), findsOneWidget);
+    now = now.add(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('7s'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('搜索框加载指示器保持正圆', (WidgetTester tester) async {
     final AppDatabase database = AppDatabase(NativeDatabase.memory());
     final _MockForumSearchRepository forum = _MockForumSearchRepository();

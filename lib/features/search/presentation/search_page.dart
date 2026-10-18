@@ -44,6 +44,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   final List<SourceThread> _sourceThreads = <SourceThread>[];
 
   late final Timer _cooldownTimer;
+  (int, bool)? _cooldownView;
   ForumSearchPage? _cursor;
   List<Work> _works = <Work>[];
   Object? _error;
@@ -403,6 +404,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       unawaited(_submit());
       return;
     }
+    // 只在倒计时或进行中状态变化时刷新，空闲时不再每 250 ms 重建整页。
+    final (int, bool) view = (cooldown.remainingSeconds, cooldown.inFlight);
+    if (view == _cooldownView) {
+      return;
+    }
+    _cooldownView = view;
     setState(() {});
   }
 
