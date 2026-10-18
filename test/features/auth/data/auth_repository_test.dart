@@ -323,12 +323,53 @@ void main() {
     );
     when(
       () => client.getText(AuthRepository.loginUri, retryCount: 1),
-    ).thenThrow(const ForumConnectionException('离线'));
+    ).thenThrow(const ForumUnreachableException('离线'));
 
     final AuthState state = await repository.restoreSession();
 
     expect(state.status, AuthStatus.authenticated);
     expect(state.username, 'saved-user');
+    verifyNever(() => credentials.write(any()));
+  });
+
+  test('Cookie 失效后重登被论坛拒绝时显示原因并进入登录页', () async {
+    final Uri action = ForumClient.baseUri.resolve(
+      'member.php?mod=logging&action=login&loginsubmit=yes&mobile=2',
+    );
+    when(credentials.read).thenAnswer(
+      (_) async => const StoredCredentials(
+        username: 'saved-user',
+        password: 'saved-password',
+      ),
+    );
+    when(
+      () => client.getText(AuthRepository.verificationUri, retryCount: 1),
+    ).thenAnswer(
+      (_) async => _response(
+        '<html><body><form id="loginform"></form></body></html>',
+        AuthRepository.verificationUri,
+      ),
+    );
+    when(
+      () => client.getText(AuthRepository.loginUri, retryCount: 1),
+    ).thenAnswer(
+      (_) async => _response(
+        _loginForm(action: action, formHash: 'restored-hash'),
+        AuthRepository.loginUri,
+      ),
+    );
+    when(
+      () => client.postForm(
+        action,
+        fields: any(named: 'fields'),
+        referer: AuthRepository.loginUri.toString(),
+      ),
+    ).thenThrow(const ForumConnectionException('论坛安全验证已更新，请重新提交'));
+
+    final AuthState state = await repository.restoreSession();
+
+    expect(state.status, AuthStatus.unauthenticated);
+    expect(state.message, '论坛安全验证已更新，请重新提交');
     verifyNever(() => credentials.write(any()));
   });
 

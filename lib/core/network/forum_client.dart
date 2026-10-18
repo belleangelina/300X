@@ -129,9 +129,7 @@ class ForumClient {
       }
     }
 
-    throw ForumConnectionException(
-      _failureMessage(lastError, unreachable: '无法连接百合会论坛，请检查网络连接'),
-    );
+    throw _failure(lastError, unreachable: '无法连接百合会论坛，请检查网络连接');
   }
 
   Future<Response<String>> postForm(
@@ -180,9 +178,12 @@ class ForumClient {
         throw const ForumConnectionException('论坛安全验证已更新，请重新提交');
       }
       final int? statusCode = error.response?.statusCode;
-      throw ForumConnectionException(
-        statusCode == null ? '提交论坛表单失败，请检查网络连接' : '论坛拒绝提交（HTTP $statusCode）',
-      );
+      final String message = statusCode == null
+          ? '提交论坛表单失败，请检查网络连接'
+          : '论坛拒绝提交（HTTP $statusCode）';
+      throw _isUnreachable(error)
+          ? ForumUnreachableException(message)
+          : ForumConnectionException(message);
     }
   }
 
@@ -209,9 +210,7 @@ class ForumClient {
           }
           continue;
         }
-        throw ForumConnectionException(
-          _failureMessage(error, unreachable: '加载论坛图片失败，请检查网络连接'),
-        );
+        throw _failure(error, unreachable: '加载论坛图片失败，请检查网络连接');
       }
     }
   }
@@ -344,6 +343,24 @@ class ForumClient {
         ...queryParameters,
       },
     );
+  }
+
+  ForumConnectionException _failure(
+    DioException? error, {
+    required String unreachable,
+  }) {
+    final String message = _failureMessage(error, unreachable: unreachable);
+    return _isUnreachable(error)
+        ? ForumUnreachableException(message)
+        : ForumConnectionException(message);
+  }
+
+  // 论坛给出了 HTTP 响应或请求被主动取消时网络是通的，调用方不能当作离线处理。
+  bool _isUnreachable(DioException? error) {
+    return switch (error?.type) {
+      DioExceptionType.badResponse || DioExceptionType.cancel => false,
+      _ => true,
+    };
   }
 
   // Dio 的 message 是面向开发者的英文长文本，界面只展示可理解的中文原因。

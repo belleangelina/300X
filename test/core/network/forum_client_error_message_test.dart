@@ -59,6 +59,45 @@ void main() {
       ),
     );
   });
+
+  test('只有没得到论坛响应的失败才归为无法连接', () async {
+    final ForumClient offlineClient = _client(
+      (RequestOptions options) => throw DioException.connectionError(
+        requestOptions: options,
+        reason: 'Connection refused',
+      ),
+    );
+    final ForumClient rejectingClient = _client(
+      (RequestOptions options) => ResponseBody.fromString('busy', 503),
+    );
+    final Matcher answered = allOf(
+      isA<ForumConnectionException>(),
+      isNot(isA<ForumUnreachableException>()),
+    );
+
+    await expectLater(
+      offlineClient.getText('forum.php', retryCount: 0),
+      throwsA(isA<ForumUnreachableException>()),
+    );
+    await expectLater(
+      offlineClient.postForm(
+        'member.php?mod=logging',
+        fields: const <String, dynamic>{},
+      ),
+      throwsA(isA<ForumUnreachableException>()),
+    );
+    await expectLater(
+      rejectingClient.getText('forum.php', retryCount: 0),
+      throwsA(answered),
+    );
+    await expectLater(
+      rejectingClient.postForm(
+        'member.php?mod=logging',
+        fields: const <String, dynamic>{},
+      ),
+      throwsA(answered),
+    );
+  });
 }
 
 ForumClient _client(ResponseBody Function(RequestOptions options) respond) {
