@@ -306,6 +306,32 @@ void main() {
     ).called(1);
   });
 
+  test('Cookie 失效后重登遇到连接失败时按已保存凭据进入本地界面', () async {
+    when(credentials.read).thenAnswer(
+      (_) async => const StoredCredentials(
+        username: 'saved-user',
+        password: 'saved-password',
+      ),
+    );
+    when(
+      () => client.getText(AuthRepository.verificationUri, retryCount: 1),
+    ).thenAnswer(
+      (_) async => _response(
+        '<html><body><form id="loginform"></form></body></html>',
+        AuthRepository.verificationUri,
+      ),
+    );
+    when(
+      () => client.getText(AuthRepository.loginUri, retryCount: 1),
+    ).thenThrow(const ForumConnectionException('离线'));
+
+    final AuthState state = await repository.restoreSession();
+
+    expect(state.status, AuthStatus.authenticated);
+    expect(state.username, 'saved-user');
+    verifyNever(() => credentials.write(any()));
+  });
+
   test('退出依次清理凭据和论坛 Cookie', () async {
     when(credentials.clear).thenAnswer((_) async {});
     when(client.clearSession).thenAnswer((_) async {});

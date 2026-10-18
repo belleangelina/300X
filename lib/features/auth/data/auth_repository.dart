@@ -44,10 +44,15 @@ class AuthRepository {
     if (credentials == null) {
       return const AuthState.unauthenticated();
     }
-    return login(
-      username: credentials.username,
-      password: credentials.password,
-    );
+    try {
+      return await login(
+        username: credentials.username,
+        password: credentials.password,
+      );
+    } on ForumConnectionException {
+      // 重新登录也属于启动校验，连接失败时同样按已保存凭据进入本地界面。
+      return AuthState.authenticated(credentials.username);
+    }
   }
 
   Future<AuthState> login({
