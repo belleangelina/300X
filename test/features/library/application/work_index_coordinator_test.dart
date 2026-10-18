@@ -1055,6 +1055,50 @@ void main() {
     verify(() => searchRepository.loadNext(firstPage)).called(1);
   });
 
+  test('论坛已接受的整作搜索即使随后取消也计入搜索冷却', () async {
+    final SearchCooldown cooldown = SearchCooldown(
+      interval: const Duration(seconds: 10),
+    );
+    final WorkIndexCoordinator cooldownCoordinator = WorkIndexCoordinator(
+      indexRepository,
+      libraryRepository,
+      searchRepository,
+      cooldown,
+    );
+    final SourceThread thread = _longComicThread(105, '冷却长篇 第1话');
+    final Work work = _standalone(thread);
+    final WorkIndexCancellation cancellation = WorkIndexCancellation();
+    when(
+      () => libraryRepository.loadThread(
+        any(),
+        includeAllOriginalPosterPosts: true,
+        forceReload: false,
+      ),
+    ).thenAnswer((_) async => _emptyPage(work));
+    when(
+      () => searchRepository.search(keyword: '冷却长篇', kind: LibraryKind.comic),
+    ).thenAnswer((_) async {
+      cancellation.cancel();
+      return ForumSearchPage(
+        kind: LibraryKind.comic,
+        keyword: '冷却长篇',
+        searchId: '89',
+        sourceThreads: <SourceThread>[thread],
+        currentPage: 1,
+        totalPages: 1,
+      );
+    });
+
+    await expectLater(
+      cooldownCoordinator.ensure(work, cancellation: cancellation),
+      throwsA(isA<WorkIndexCancelledException>()),
+    );
+
+    expect(cooldown.inFlight, isFalse);
+    expect(cooldown.lastAcceptedAt, isNotNull);
+    expect(cooldown.tryBegin(), isFalse);
+  });
+
   test('主页分类与方括号上下文一致的章节漫画会搜索完整作品', () async {
     final SourceThread entry = _thread(
       571728,

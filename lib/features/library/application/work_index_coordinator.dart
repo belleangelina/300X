@@ -1641,9 +1641,10 @@ class WorkIndexCoordinator {
         keyword: keyword,
         kind: seed.kind,
       );
-      cancellation?.throwIfCancelled();
+      // 论坛已接受这次搜索，即使随后取消也要计入冷却。
       _searchCooldown.accepted();
       accepted = true;
+      cancellation?.throwIfCancelled();
       final List<SourceThread> sourceThreads = <SourceThread>[
         ...cursor.sourceThreads,
       ];
