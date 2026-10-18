@@ -130,6 +130,94 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('新搜索开始后旧关键词的下一页结果不会混入新结果和缓存', (WidgetTester tester) async {
+    final AppDatabase database = AppDatabase(NativeDatabase.memory());
+    final _MockForumSearchRepository forum = _MockForumSearchRepository();
+    final _MockCoverRepository cover = _MockCoverRepository();
+    when(() => cover.resolve(any())).thenAnswer((_) async => null);
+    final ForumSearchPage oldFirst = ForumSearchPage(
+      kind: LibraryKind.comic,
+      keyword: '旧词',
+      searchId: 'old',
+      sourceThreads: <SourceThread>[
+        for (int index = 0; index < 30; index++)
+          _plainThread(300 + index, '旧词结果$index'),
+      ],
+      currentPage: 1,
+      totalPages: 2,
+      nextPageUri: Uri.parse(
+        'https://bbs.yamibo.com/search.php?searchid=old&page=2',
+      ),
+    );
+    final Completer<ForumSearchPage> oldSecond = Completer<ForumSearchPage>();
+    when(
+      () => forum.search(keyword: '旧词', kind: LibraryKind.comic),
+    ).thenAnswer((_) async => oldFirst);
+    when(() => forum.loadNext(oldFirst)).thenAnswer((_) => oldSecond.future);
+    when(() => forum.search(keyword: '新词', kind: LibraryKind.comic)).thenAnswer(
+      (_) async => ForumSearchPage(
+        kind: LibraryKind.comic,
+        keyword: '新词',
+        searchId: 'new',
+        sourceThreads: <SourceThread>[_plainThread(400, '新词结果')],
+        currentPage: 1,
+        totalPages: 1,
+      ),
+    );
+    when(() => forum.aggregateThreads(any())).thenAnswer(
+      (Invocation invocation) =>
+          (invocation.positionalArguments.first as List<SourceThread>)
+              .map(_standaloneWork)
+              .toList(),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+          forumSearchRepositoryProvider.overrideWithValue(forum),
+          coverRepositoryProvider.overrideWithValue(cover),
+          searchCooldownProvider.overrideWithValue(
+            SearchCooldown(interval: Duration.zero),
+          ),
+        ],
+        child: const MaterialApp(home: SearchPage(kind: LibraryKind.comic)),
+      ),
+    );
+    await tester.enterText(find.byType(TextField), '旧词');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('旧词结果0'), findsWidgets);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -6000));
+    await tester.pump();
+    verify(() => forum.loadNext(oldFirst)).called(1);
+
+    await tester.enterText(find.byType(TextField), '新词');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    oldSecond.complete(
+      ForumSearchPage(
+        kind: LibraryKind.comic,
+        keyword: '旧词',
+        searchId: 'old',
+        sourceThreads: <SourceThread>[_plainThread(399, '旧词第二页')],
+        currentPage: 2,
+        totalPages: 2,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('新词结果'), findsWidgets);
+    expect(find.text('旧词第二页'), findsNothing);
+    final SearchCacheSnapshot? cached = await SearchCacheRepository(
+      database,
+    ).load(kind: LibraryKind.comic, keyword: '新词');
+    expect(cached?.works.map((Work work) => work.title), <String>['新词结果']);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await database.close();
+  });
+
   testWidgets('搜索框加载指示器保持正圆', (WidgetTester tester) async {
     final AppDatabase database = AppDatabase(NativeDatabase.memory());
     final _MockForumSearchRepository forum = _MockForumSearchRepository();
@@ -589,6 +677,34 @@ Work _work() {
     ],
     chapters: <Chapter>[
       Chapter(id: 'comic:101:1', title: '正文', sourceUri: uri, sourceTid: 101),
+    ],
+  );
+}
+
+SourceThread _plainThread(int tid, String title) {
+  return SourceThread(
+    tid: tid,
+    board: ForumBoard.comic,
+    title: title,
+    uri: Uri.parse(
+      'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=$tid&mobile=2',
+    ),
+  );
+}
+
+Work _standaloneWork(SourceThread thread) {
+  return Work(
+    id: 'forum-thread:${thread.tid}',
+    kind: LibraryKind.comic,
+    title: thread.title,
+    sourceThreads: <SourceThread>[thread],
+    chapters: <Chapter>[
+      Chapter(
+        id: 'forum-thread:${thread.tid}',
+        title: '正文',
+        sourceUri: thread.uri,
+        sourceTid: thread.tid,
+      ),
     ],
   );
 }

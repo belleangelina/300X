@@ -51,6 +51,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   bool _searched = false;
   bool _loading = false;
   bool _loadingMore = false;
+  int _loadMoreGeneration = 0;
   bool _usingCache = false;
   bool _cacheFromFailure = false;
   bool _waitingForCooldown = false;
@@ -451,6 +452,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       _loading = true;
       _loadingMessage = '正在搜索论坛';
       _loadingMore = false;
+      _loadMoreGeneration++;
       _searched = true;
       _error = null;
       _cursor = null;
@@ -512,6 +514,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     if (_loadingMore || cursor == null || !cursor.hasMore) {
       return;
     }
+    final int generation = _loadMoreGeneration;
     setState(() {
       _loadingMore = true;
     });
@@ -520,7 +523,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         forumSearchRepositoryProvider,
       );
       final ForumSearchPage page = await repository.loadNext(cursor);
-      if (!mounted) {
+      // 期间已开始新搜索：这一页属于旧关键词，不能混入新结果和缓存。
+      if (!mounted || generation != _loadMoreGeneration) {
+        return;
+      }
+      // 期间整作补全已把游标推进到更后面，这一页已包含在内，不能回退游标。
+      if (!identical(_cursor, cursor)) {
+        setState(() {
+          _loadingMore = false;
+        });
         return;
       }
       final Set<int> knownThreads = _sourceThreads
@@ -538,7 +549,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       });
       await _saveSearchCache(_activeKeyword, _works);
     } on Object catch (error) {
-      if (!mounted) {
+      if (!mounted || generation != _loadMoreGeneration) {
         return;
       }
       setState(() {
