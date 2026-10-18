@@ -544,9 +544,6 @@ class ChapterResolver {
       if (tid == null) {
         continue;
       }
-      final ThreadLink? next = index + 1 < links.length
-          ? links[index + 1]
-          : null;
       final SourcePost? targetPost = link.pid == null
           ? null
           : postsByPid[link.pid];
@@ -588,8 +585,8 @@ class ChapterResolver {
           sourceUri: link.uri,
           sourceTid: tid,
           sourcePid: link.pid,
-          sourceEndPid: blockSection == null && next?.tid == tid
-              ? next?.pid
+          sourceEndPid: blockSection == null
+              ? _nextDirectoryPid(links, tid, link.pid)
               : null,
           sourceStartBlock: blockSection?.start,
           sourceEndBlock: blockSection?.end,
@@ -600,6 +597,25 @@ class ChapterResolver {
       );
     }
     return _deduplicate(result);
+  }
+
+  // 目录可能倒序或乱序排列，而楼层 pid 随发帖时间递增，所以正文边界取同帖
+  // 目录中下一个更大的 pid，不能直接用目录里的下一项。
+  int? _nextDirectoryPid(List<ThreadLink> links, int tid, int? pid) {
+    if (pid == null) {
+      return null;
+    }
+    int? result;
+    for (final ThreadLink link in links) {
+      final int? candidate = link.pid;
+      if (link.tid == tid &&
+          candidate != null &&
+          candidate > pid &&
+          (result == null || candidate < result)) {
+        result = candidate;
+      }
+    }
+    return result;
   }
 
   Map<int, _NovelDirectoryBlockSection> _novelDirectoryBlockSections(
