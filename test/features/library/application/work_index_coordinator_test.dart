@@ -1099,6 +1099,56 @@ void main() {
     expect(cooldown.tryBegin(), isFalse);
   });
 
+  test('等待搜索名额期间取消后搜索冷却不会停在进行中', () async {
+    final SearchCooldown cooldown = SearchCooldown(
+      interval: const Duration(seconds: 10),
+    );
+    final WorkIndexCoordinator cooldownCoordinator = WorkIndexCoordinator(
+      indexRepository,
+      libraryRepository,
+      searchRepository,
+      cooldown,
+    );
+    final SourceThread thread = _longComicThread(106, '等待长篇 第1话');
+    final Work work = _standalone(thread);
+    final WorkIndexCancellation cancellation = WorkIndexCancellation();
+    final Completer<void> waiting = Completer<void>();
+    when(
+      () => libraryRepository.loadThread(
+        any(),
+        includeAllOriginalPosterPosts: true,
+        forceReload: false,
+      ),
+    ).thenAnswer((_) async => _emptyPage(work));
+    // 搜索页的另一次搜索正在进行，协调器只能等待名额。
+    expect(cooldown.tryBegin(), isTrue);
+
+    final Future<WorkIndexResult> pending = cooldownCoordinator.ensure(
+      work,
+      onProgress: (String message) {
+        if (message == '正在等待当前论坛搜索完成' && !waiting.isCompleted) {
+          waiting.complete();
+        }
+      },
+      cancellation: cancellation,
+    );
+    await waiting.future;
+    // 用户退出详情页的同时那次搜索结束：协调器下一轮先抢到名额，随后才发现已取消。
+    cancellation.cancel();
+    cooldown.failed();
+
+    await expectLater(pending, throwsA(isA<WorkIndexCancelledException>()));
+
+    expect(cooldown.inFlight, isFalse);
+    expect(cooldown.tryBegin(), isTrue);
+    verifyNever(
+      () => searchRepository.search(
+        keyword: any(named: 'keyword'),
+        kind: any(named: 'kind'),
+      ),
+    );
+  });
+
   test('主页分类与方括号上下文一致的章节漫画会搜索完整作品', () async {
     final SourceThread entry = _thread(
       571728,

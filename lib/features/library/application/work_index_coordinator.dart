@@ -1622,9 +1622,10 @@ class WorkIndexCoordinator {
     WorkIndexCancellation? cancellation,
   }) async {
     await _waitForSearchSlot(onProgress, cancellation);
-    cancellation?.throwIfCancelled();
     bool accepted = false;
     try {
+      // 已占用搜索名额，此后的取消也要经 failed() 释放，否则冷却会一直停在进行中。
+      cancellation?.throwIfCancelled();
       final SourceThread anchor = _anchorThread(seed);
       final StructuredTitle structuredTitle = _titleNormalizer.analyze(
         anchor.title,
@@ -1697,7 +1698,6 @@ class WorkIndexCoordinator {
       onProgress?.call(message);
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
-    cancellation?.throwIfCancelled();
   }
 
   SourceThread _anchorThread(Work work) {
