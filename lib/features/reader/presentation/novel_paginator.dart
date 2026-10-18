@@ -164,7 +164,9 @@ class NovelPaginator {
       textDirection: textDirection,
       textScaler: textScaler,
     )..layout(maxWidth: width);
-    return painter.height;
+    final double height = painter.height;
+    painter.dispose();
+    return height;
   }
 
   int _safeBoundary(String text, int proposed) {
