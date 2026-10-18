@@ -337,6 +337,7 @@ class WorkIndexCoordinator {
     Work? searchCandidate;
     Object? searchError;
     Object? threadError;
+    bool threadLoaded = false;
     bool explicitShort = _longFormClassifier.isExplicitShortComic(seed);
     final bool completeComic = _shouldUseCompleteComicPipeline(
       seed,
@@ -382,6 +383,7 @@ class WorkIndexCoordinator {
       cancellation?.throwIfCancelled();
       current = resolution.work;
       threadError = resolution.error;
+      threadLoaded = resolution.loaded;
       explicitShort = resolution.explicitShort;
     } else {
       onProgress?.call('正在解析楼主帖子和帖内目录');
@@ -394,6 +396,7 @@ class WorkIndexCoordinator {
       cancellation?.throwIfCancelled();
       current = threadResolution.work;
       threadError = threadResolution.error;
+      threadLoaded = threadResolution.loaded;
       explicitShort = threadResolution.explicitShort;
       final bool needsSearch =
           allowNewSearch &&
@@ -439,6 +442,7 @@ class WorkIndexCoordinator {
         cancellation?.throwIfCancelled();
         current = resolution.work;
         threadError ??= resolution.error;
+        threadLoaded = threadLoaded || resolution.loaded;
       } else if (searchCandidate != null) {
         current = _mergeWorks(<Work>[current, searchCandidate]);
       }
@@ -464,6 +468,18 @@ class WorkIndexCoordinator {
     final String workId = oldRecord?.work.id ?? seed.id;
     final Work merged = _mergeWorks(versions, workId: workId);
     cancellation?.throwIfCancelled();
+    if (_isUnloadedFirstBuild(
+      oldRecord: oldRecord,
+      loaded: threadLoaded,
+      error: threadError,
+      searchCandidate: searchCandidate,
+      trustSeedUpdate: trustSeedUpdate,
+    )) {
+      return WorkIndexResult(
+        work: merged,
+        warning: '暂时无法读取帖子目录，本次未保存作品索引：$threadError',
+      );
+    }
     onProgress?.call('正在保存作品索引');
     await _indexRepository.save(canonicalKey: canonicalKey, work: merged);
     cancellation?.throwIfCancelled();
@@ -559,6 +575,18 @@ class WorkIndexCoordinator {
         _workAggregator.canonicalKeyForWork(searchCandidate ?? seed) ??
         _fallbackCanonicalKey(seed);
     cancellation?.throwIfCancelled();
+    if (_isUnloadedFirstBuild(
+      oldRecord: oldRecord,
+      loaded: resolution.loaded,
+      error: resolution.error,
+      searchCandidate: searchCandidate,
+      trustSeedUpdate: trustSeedUpdate,
+    )) {
+      return WorkIndexResult(
+        work: merged,
+        warning: '暂时无法读取帖子目录，本次未保存作品索引：${resolution.error}',
+      );
+    }
     onProgress?.call('正在保存作品索引');
     await _indexRepository.save(canonicalKey: canonicalKey, work: merged);
     cancellation?.throwIfCancelled();
@@ -570,6 +598,22 @@ class WorkIndexCoordinator {
           ? null
           : '部分关联主题暂时无法解析，已保存现有目录',
     );
+  }
+
+  // 首次建立索引时一个主题都没读到（断网、会话失效、安全验证失败等），合并结果
+  // 只是入口种子。若写入索引，以后打开会直接命中这份降级目录而不再重试。
+  bool _isUnloadedFirstBuild({
+    required WorkIndexRecord? oldRecord,
+    required bool loaded,
+    required Object? error,
+    required Work? searchCandidate,
+    required bool trustSeedUpdate,
+  }) {
+    return oldRecord == null &&
+        !loaded &&
+        error != null &&
+        searchCandidate == null &&
+        !trustSeedUpdate;
   }
 
   bool _hasExplicitNovelVolumes(Work work, List<ThreadLink> relations) {
@@ -656,6 +700,7 @@ class WorkIndexCoordinator {
         <String, List<List<Chapter>>>{};
     final Set<int> attemptedBatchTids = <int>{};
     Object? firstError;
+    bool loaded = false;
     int cursor = 0;
     while (cursor < queue.length) {
       cancellation?.throwIfCancelled();
@@ -671,6 +716,7 @@ class WorkIndexCoordinator {
           );
       cancellation?.throwIfCancelled();
       firstError ??= threadResolution.error;
+      loaded = loaded || threadResolution.loaded;
       final SourceThread actual = threadResolution.sourceThread ?? source;
       final Work actualWork = _workAggregator.aggregate(<SourceThread>[
         actual,
@@ -811,6 +857,7 @@ class WorkIndexCoordinator {
         directories: directories,
       ),
       error: firstError,
+      loaded: loaded,
     );
   }
 
@@ -1114,6 +1161,7 @@ class WorkIndexCoordinator {
     bool confirmedLong = _longFormClassifier.isExplicitLongComic(work);
     final int anchorTid = _anchorThread(work).tid;
     Object? firstError;
+    bool loaded = false;
     for (int index = 0; index < directories.length; index++) {
       cancellation?.throwIfCancelled();
       onProgress?.call('正在解析来源目录（${index + 1}/${directories.length}）');
@@ -1144,6 +1192,7 @@ class WorkIndexCoordinator {
       );
       cancellation?.throwIfCancelled();
       firstError ??= resolution.error;
+      loaded = loaded || resolution.loaded;
       if (resolution.explicitShort) {
         shortDirectories.add(directoryWork);
         if (shortFallback == null || directory.sourceTids.contains(anchorTid)) {
@@ -1228,11 +1277,13 @@ class WorkIndexCoordinator {
         work: shortFallback,
         error: firstError,
         explicitShort: true,
+        loaded: loaded,
       );
     }
     return _LongComicResolution(
       work: resolved.isEmpty ? work : _mergeWorks(resolved, workId: work.id),
       error: firstError,
+      loaded: loaded,
     );
   }
 
@@ -1344,6 +1395,7 @@ class WorkIndexCoordinator {
         evidence: ChapterResolutionEvidence.none,
         sourceThread: _anchorThread(work),
         error: error,
+        loaded: false,
       );
     }
   }
@@ -2070,6 +2122,7 @@ class _ThreadResolution {
     this.batchThreads = const <ThreadLink>[],
     this.sourceThread,
     this.error,
+    this.loaded = true,
   });
 
   final Work work;
@@ -2080,6 +2133,9 @@ class _ThreadResolution {
   final List<ThreadLink> batchThreads;
   final SourceThread? sourceThread;
   final Object? error;
+
+  /// 是否实际从论坛读到了主题页面；为 false 时 [work] 只是传入的种子。
+  final bool loaded;
 }
 
 class _BatchExpansion {
@@ -2090,20 +2146,27 @@ class _BatchExpansion {
 }
 
 class _NovelWorkResolution {
-  const _NovelWorkResolution({required this.work, this.error});
+  const _NovelWorkResolution({
+    required this.work,
+    required this.loaded,
+    this.error,
+  });
 
   final Work work;
+  final bool loaded;
   final Object? error;
 }
 
 class _LongComicResolution {
   const _LongComicResolution({
     required this.work,
+    required this.loaded,
     this.explicitShort = false,
     this.error,
   });
 
   final Work work;
+  final bool loaded;
   final bool explicitShort;
   final Object? error;
 }

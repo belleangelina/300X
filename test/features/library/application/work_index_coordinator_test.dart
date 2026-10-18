@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:x300/core/network/forum_exceptions.dart';
 import 'package:x300/core/storage/app_database.dart';
 import 'package:x300/features/library/application/work_index_coordinator.dart';
 import 'package:x300/features/library/data/forum_library_repository.dart';
@@ -1963,6 +1964,46 @@ void main() {
       <int>{551, 542, 553},
     );
   });
+
+  for (final ForumBoard board in <ForumBoard>[
+    ForumBoard.comic,
+    ForumBoard.lightNovel,
+  ]) {
+    test('${board.label}首次读取主题失败时不保存降级索引，下次打开重新解析', () async {
+      final Work seed = _standalone(_thread(40, '读取失败作品', board: board));
+      int loads = 0;
+      when(
+        () => libraryRepository.loadDirectoryThread(
+          any(),
+          forceReload: any(named: 'forceReload'),
+          onPageProgress: any(named: 'onPageProgress'),
+        ),
+      ).thenAnswer((Invocation invocation) async {
+        loads++;
+        if (loads == 1) {
+          throw const ForumConnectionException('无法连接百合会论坛，请检查网络连接');
+        }
+        return _directoryPageForThread(
+          invocation.positionalArguments.first as SourceThread,
+        );
+      });
+
+      final WorkIndexResult failed = await coordinator.ensure(seed);
+
+      expect(failed.warning, contains('本次未保存作品索引'));
+      expect(await indexRepository.loadBySourceTid(40, board.kind), isNull);
+
+      final WorkIndexResult retried = await coordinator.ensure(seed);
+
+      expect(loads, 2);
+      expect(retried.warning, isNull);
+      expect(
+        retried.work.chapters.map((Chapter chapter) => chapter.sourcePid),
+        <int?>[401, 402],
+      );
+      expect(await indexRepository.loadBySourceTid(40, board.kind), isNotNull);
+    });
+  }
 }
 
 SourceThread _thread(
