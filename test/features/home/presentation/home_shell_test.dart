@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -129,6 +130,37 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('清理账号缓存失败时仍清除凭据和 Cookie 退出登录', (WidgetTester tester) async {
+    _setSurfaceSize(tester, const Size(1280, 800));
+    final _MockAuthRepository authRepository = _MockAuthRepository();
+    when(
+      authRepository.restoreSession,
+    ).thenAnswer((_) async => const AuthState.authenticated('测试账号'));
+    when(authRepository.logout).thenAnswer((_) async {});
+    when(
+      () => cacheMaintenanceRepository.clearAccountCaches(),
+    ).thenAnswer((_) async => throw const FileSystemException('封面文件已被删除'));
+    await tester.pumpWidget(
+      _homeApp(
+        settingsRepository,
+        downloadManager,
+        libraryRepository,
+        cacheMaintenanceRepository,
+        authRepository: authRepository,
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.text('我的'));
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Remix.logout_box_r_line));
+    await tester.pump();
+
+    verify(() => cacheMaintenanceRepository.clearAccountCaches()).called(1);
+    verify(authRepository.logout).called(1);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('横屏个人页在右侧打开二级页面', (WidgetTester tester) async {
     _setSurfaceSize(tester, const Size(1280, 800));
     await tester.pumpWidget(
@@ -193,10 +225,13 @@ Widget _homeApp(
   AppSettingsRepository settingsRepository,
   DownloadManager downloadManager,
   ForumLibraryRepository libraryRepository,
-  CacheMaintenanceRepository cacheMaintenanceRepository,
-) {
+  CacheMaintenanceRepository cacheMaintenanceRepository, {
+  AuthRepository? authRepository,
+}) {
   return ProviderScope(
     overrides: [
+      if (authRepository != null)
+        authRepositoryProvider.overrideWithValue(authRepository),
       appSettingsRepositoryProvider.overrideWithValue(settingsRepository),
       downloadManagerProvider.overrideWithValue(downloadManager),
       forumLibraryRepositoryProvider.overrideWithValue(libraryRepository),
