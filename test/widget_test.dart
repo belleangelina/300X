@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:x300/core/network/forum_exceptions.dart';
 import 'package:x300/features/auth/application/auth_controller.dart';
 import 'package:x300/features/auth/data/auth_repository.dart';
 import 'package:x300/features/auth/domain/auth_models.dart';
@@ -97,7 +99,78 @@ void main() {
     expect(find.text('首页'), findsOneWidget);
     expect(find.byType(LoginPage), findsNothing);
   });
+
+  testWidgets('登录请求失败时提示原因并停留在登录页', (WidgetTester tester) async {
+    final _MockAuthRepository repository = _MockAuthRepository();
+    when(
+      repository.restoreSession,
+    ).thenAnswer((_) async => const AuthState.unauthenticated());
+    when(
+      () => repository.login(
+        username: any(named: 'username'),
+        password: any(named: 'password'),
+        captcha: any(named: 'captcha'),
+      ),
+    ).thenAnswer(
+      (_) async => throw const ForumConnectionException('无法连接百合会论坛，请检查网络连接'),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [authRepositoryProvider.overrideWithValue(repository)],
+        child: const MaterialApp(home: _LoginTestHome()),
+      ),
+    );
+    await tester.tap(find.text('打开登录'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, '用户名 / Email / UID'),
+      'test-user',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, '密码'),
+      'test-password',
+    );
+    await tester.tap(find.widgetWithText(ElevatedButton, '登录'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('登录失败：无法连接百合会论坛，请检查网络连接'), findsOneWidget);
+    expect(find.byType(LoginPage), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, '登录'), findsOneWidget);
+  });
+
+  testWidgets('刷新验证码失败时提示原因', (WidgetTester tester) async {
+    final _MockAuthRepository repository = _MockAuthRepository();
+    when(repository.restoreSession).thenAnswer(
+      (_) async => AuthState.captchaRequired(
+        captcha: CaptchaChallenge(imageBytes: base64Decode(_pixelPng)),
+      ),
+    );
+    when(repository.refreshCaptcha).thenAnswer(
+      (_) async => throw const ForumConnectionException('连接百合会论坛超时，请稍后重试'),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [authRepositoryProvider.overrideWithValue(repository)],
+        child: const MaterialApp(
+          home: LoginPage(authState: AuthState.unauthenticated()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.ancestor(of: find.byType(Image), matching: find.byType(InkWell)),
+    );
+    await tester.pumpAndSettle();
+
+    verify(repository.refreshCaptcha).called(1);
+    expect(find.text('刷新验证码失败：连接百合会论坛超时，请稍后重试'), findsOneWidget);
+  });
 }
+
+const String _pixelPng =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aCWQAAAAASUVORK5CYII=';
 
 class _LoginTestHome extends StatelessWidget {
   const _LoginTestHome();

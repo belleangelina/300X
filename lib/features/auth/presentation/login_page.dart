@@ -212,8 +212,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         ),
         const SizedBox(width: 8),
         InkWell(
-          onTap: () =>
-              ref.read(authControllerProvider.notifier).refreshCaptcha(),
+          onTap: _refreshCaptcha,
           borderRadius: BorderRadius.circular(4),
           child: Container(
             width: 118,
@@ -267,10 +266,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (!mounted) {
       return;
     }
-    final AuthState? state = ref.read(authControllerProvider).value;
+    final AsyncValue<AuthState> result = ref.read(authControllerProvider);
+    if (result.hasError) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(AppSnackBar(content: Text('登录失败：${result.error}')));
+      return;
+    }
+    final AuthState? state = result.value;
     if (state?.status == AuthStatus.authenticated &&
         ModalRoute.of(context)?.isCurrent == true) {
       Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _refreshCaptcha() async {
+    await ref.read(authControllerProvider.notifier).refreshCaptcha();
+    if (!mounted) {
+      return;
+    }
+    final AsyncValue<AuthState> result = ref.read(authControllerProvider);
+    if (result.hasError) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(AppSnackBar(content: Text('刷新验证码失败：${result.error}')));
     }
   }
 
