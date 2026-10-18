@@ -318,6 +318,48 @@ void main() {
     expect(requestedUris.single.queryParameters['mod'], 'redirect');
   });
 
+  test('完整楼主缓存缺少目录 pid 时仍按 pid 跳转加载章节', () async {
+    final SourceThread thread = SourceThread(
+      tid: 10,
+      board: ForumBoard.lightNovel,
+      title: '测试长篇',
+      uri: Uri.parse(
+        'https://bbs.yamibo.com/forum.php?mod=viewthread&tid=10&mobile=2',
+      ),
+    );
+    Chapter chapter(int pid) => Chapter(
+      id: 'forum-post:10:$pid',
+      title: '第$pid章',
+      sourceUri: Uri.parse(
+        'https://bbs.yamibo.com/forum.php?mod=redirect&goto=findpost'
+        '&ptid=10&pid=$pid&mobile=2',
+      ),
+      sourceTid: 10,
+      sourcePid: pid,
+    );
+    final ForumThreadPage full = await repository.loadThread(
+      thread,
+      includeAllOriginalPosterPosts: true,
+    );
+    requestedUris.clear();
+
+    final ForumThreadPage reused = await repository.loadChapterPage(
+      chapter(101),
+      ForumBoard.lightNovel,
+    );
+    expect(identical(reused, full), isTrue);
+    expect(requestedUris, isEmpty);
+
+    // 105 不是楼主楼层，完整楼主缓存里没有它。
+    final ForumThreadPage jumped = await repository.loadChapterPage(
+      chapter(105),
+      ForumBoard.lightNovel,
+    );
+    expect(identical(jumped, full), isFalse);
+    expect(requestedUris.single.queryParameters['mod'], 'redirect');
+    expect(requestedUris.single.queryParameters['pid'], '105');
+  });
+
   test('帖子 DOM 解析期间主 isolate 仍可处理事件', () async {
     final ForumLibraryRepository backgroundRepository = ForumLibraryRepository(
       client,
